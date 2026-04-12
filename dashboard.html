@@ -595,7 +595,7 @@ input:checked + .slider:before { transform: translateX(14px); }
       <button class="btn btn-blue btn-sm" onclick="applyAiCustomDate()">套用</button>
     </div>
     <div class="topbar-sep"></div>
-    <button class="btn btn-blue btn-sm" onclick="loadAiAnalysis()">重新分析</button>
+    <button class="btn btn-blue btn-sm" onclick="aiCampData={};loadAiAnalysis()">重新分析</button>
   </div>
   <div style="padding:20px 24px;overflow-y:auto;flex:1">
 
@@ -1666,7 +1666,8 @@ async function loadAiAnalysis() {
   const totalMsg = allCamps.reduce((s,c)=>s+getMsgCount(c), 0);
   const avgCostPerMsg = totalMsg > 0 ? totalSpend / totalMsg : 0;
 
-  document.getElementById('kpi-spend').innerHTML = `<div class="ai-kpi-label">總花費</div><div class="ai-kpi-value">$${fM(totalSpend)}</div><div class="ai-kpi-sub">${visible.length} 個帳戶</div>`;
+  const aiPresetLabel = document.getElementById('aiDatePreset')?.options[document.getElementById('aiDatePreset')?.selectedIndex]?.text || '';
+  document.getElementById('kpi-spend').innerHTML = `<div class="ai-kpi-label">總花費</div><div class="ai-kpi-value">$${fM(totalSpend)}</div><div class="ai-kpi-sub">${visible.length} 個帳戶・${aiPresetLabel}</div>`;
   document.getElementById('kpi-active').innerHTML = `<div class="ai-kpi-label">執行中活動</div><div class="ai-kpi-value">${active.length}</div><div class="ai-kpi-sub">共 ${allCamps.length} 個</div>`;
   document.getElementById('kpi-ctr').innerHTML = `<div class="ai-kpi-label">平均 CTR</div><div class="ai-kpi-value">${avgCtr.toFixed(2)}%</div><div class="ai-kpi-sub">有數據活動 ${ctrVals.length} 個</div>`;
   document.getElementById('kpi-cpc').innerHTML = `<div class="ai-kpi-label">平均 CPC</div><div class="ai-kpi-value">$${fM(avgCpc)}</div><div class="ai-kpi-sub">TWD</div>`;
