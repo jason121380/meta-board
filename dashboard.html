@@ -2253,7 +2253,7 @@ function finSelectAcct(id) {
 
 function getFinanceDateRange() {
   const today = new Date();
-  const fmt = d => d.toISOString().slice(0,10);
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   if(finDateConfig.preset === 'custom' && finDateConfig.from && finDateConfig.to)
     return { start: finDateConfig.from, end: finDateConfig.to };
   const p = finDateConfig.preset;
