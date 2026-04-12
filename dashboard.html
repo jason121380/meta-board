@@ -2501,6 +2501,57 @@ async function loadAiAnalysis() {
 let alertCampData = {};
 let alertDateConfig = { preset: 'last_month', from: null, to: null };
 let alertSelectedAcctId = null; // null = all accounts
+let _alertRows = {}; // {msg:[], cpc:[], freq:[]}
+let _alertSort = {msg:{col:null,dir:-1}, cpc:{col:null,dir:-1}, freq:{col:null,dir:-1}};
+let _alertCols = {};
+
+function alertSortBy(cardKey, colLabel) {
+  const s = _alertSort[cardKey];
+  if(s.col === colLabel) s.dir *= -1;
+  else { s.col = colLabel; s.dir = -1; }
+  _renderAlertCardRows(cardKey);
+  _renderAlertCardHead(cardKey);
+}
+
+function _alertRowCtx(item) {
+  const c = item.camp; const ci = getIns(c);
+  const spend = +ci.spend||0; const msgs = getMsgCount(c);
+  return {c, ci, spend, msgs, msgCost: msgs>0 ? spend/msgs : 0, item};
+}
+
+function _renderAlertCardRows(cardKey) {
+  const tbody = document.getElementById('alert-tbody-'+cardKey);
+  if(!tbody) return;
+  const cols = _alertCols[cardKey] || [];
+  const s = _alertSort[cardKey];
+  let rows = [...(_alertRows[cardKey]||[])];
+  if(s.col) {
+    const col = cols.find(c=>c.label===s.col);
+    if(col && col.val) rows.sort((a,b)=>(col.val(_alertRowCtx(a))-col.val(_alertRowCtx(b)))*s.dir);
+  }
+  if(!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="${cols.length}" style="padding:20px;text-align:center;color:var(--gray-300);font-size:12px">無異常項目</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(item => {
+    const ctx = _alertRowCtx(item);
+    return `<tr style="border-bottom:1px solid var(--border)">${cols.map(col=>`<td style="padding:8px 10px;text-align:${col.right?'right':'left'};font-size:12px;${col.extra||''}">${col.fn(ctx)}</td>`).join('')}</tr>`;
+  }).join('');
+}
+
+function _renderAlertCardHead(cardKey) {
+  const thead = document.getElementById('alert-thead-'+cardKey);
+  if(!thead) return;
+  const cols = _alertCols[cardKey] || [];
+  const s = _alertSort[cardKey];
+  thead.innerHTML = `<tr style="background:var(--warm-white);border-bottom:1px solid var(--border)">${cols.map(col => {
+    const isSort = s.col === col.label;
+    const arrow = isSort ? (s.dir === -1 ? ' ▼' : ' ▲') : '';
+    const cursor = col.val ? 'cursor:pointer;user-select:none;' : '';
+    const onclick = col.val ? `onclick="alertSortBy('${cardKey}','${col.label}')"` : '';
+    return `<th ${onclick} style="padding:8px 10px;text-align:${col.right?'right':'left'};font-weight:700;color:${isSort?'var(--orange)':'var(--gray-500)'};white-space:nowrap;font-size:11px;${cursor}">${col.label}${arrow}</th>`;
+  }).join('')}</tr>`;
+}
 
 function onAlertDateChange() {
   const val = document.getElementById('alertDatePreset').value;
@@ -2688,56 +2739,48 @@ async function loadAiAlerts() {
     const cpcRows  = allRows.filter(r => r.tag.includes('CPC'));
     const freqRows = allRows.filter(r => r.tag.includes('頻次'));
 
-    // cols: array of {label, right, fn}
-    function buildAlertCard(title, titleColor, rows, cols) {
-      const th = (c) => `<th style="padding:8px 10px;text-align:${c.right?'right':'left'};font-weight:700;color:var(--gray-500);white-space:nowrap;font-size:11px">${c.label}</th>`;
-      const colCount = cols.length;
-      const rows_html = rows.map((item) => {
-        const c = item.camp;
-        const ci = getIns(c);
-        const spend = +ci.spend||0;
-        const msgs = getMsgCount(c);
-        const msgCost = msgs>0 ? spend/msgs : 0;
-        const ctx = {c, ci, spend, msgs, msgCost, item};
-        return `<tr style="border-bottom:1px solid var(--border)">
-          ${cols.map(col => `<td style="padding:8px 10px;text-align:${col.right?'right':'left'};font-size:12px;${col.extra||''}">${col.fn(ctx)}</td>`).join('')}
-        </tr>`;
-      }).join('');
-      const emptyRow = `<tr><td colspan="${colCount}" style="padding:20px;text-align:center;color:var(--gray-300);font-size:12px">無異常項目</td></tr>`;
+    const campCol = {label:'行銷活動', right:false, extra:'font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', fn:({c})=>`<span title="${c.name}">${c.name}</span>`};
+
+    _alertCols.msg = [
+      campCol,
+      {label:'花費', right:true, val:({spend})=>spend, fn:({spend})=>`$${fM(spend)}`},
+      {label:'私訊數', right:true, val:({msgs})=>msgs, fn:({msgs})=>msgs>0?fN(msgs):'—'},
+      {label:'私訊成本', right:true, val:({msgCost})=>msgCost, fn:({msgCost})=>msgCost>0?'$'+fM(msgCost):'—'},
+    ];
+    _alertCols.cpc = [
+      campCol,
+      {label:'CPC', right:true, val:({ci})=>+ci.cpc||0, fn:({ci})=>+ci.cpc>0?'$'+fM(ci.cpc):'—'},
+    ];
+    _alertCols.freq = [
+      campCol,
+      {label:'頻次', right:true, val:({ci})=>+ci.frequency||0, fn:({ci})=>+ci.frequency>0?`<span style="${+ci.frequency>5?'color:var(--orange);font-weight:600':''}">${(+ci.frequency).toFixed(1)}</span>`:'—'},
+    ];
+
+    _alertRows.msg = msgRows;
+    _alertRows.cpc = cpcRows;
+    _alertRows.freq = freqRows;
+    // Reset sort state
+    _alertSort = {msg:{col:null,dir:-1}, cpc:{col:null,dir:-1}, freq:{col:null,dir:-1}};
+
+    function cardShell(key, title, titleColor) {
       return `<div style="flex:1;min-width:0;border-radius:8px;border:1px solid var(--border);background:var(--white);overflow:hidden;display:flex;flex-direction:column">
         <div style="padding:10px 14px;border-bottom:2px solid ${titleColor};background:${titleColor}10;font-weight:700;font-size:13px;color:${titleColor}">${title}</div>
         <div style="overflow-x:auto;flex:1">
           <table style="width:100%;border-collapse:collapse">
-            <thead><tr style="background:var(--warm-white);border-bottom:1px solid var(--border)">${cols.map(th).join('')}</tr></thead>
-            <tbody>${rows.length ? rows_html : emptyRow}</tbody>
+            <thead id="alert-thead-${key}"></thead>
+            <tbody id="alert-tbody-${key}"></tbody>
           </table>
         </div>
       </div>`;
     }
 
-    const campCol = {label:'行銷活動', right:false, extra:'font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', fn:({c})=>`<span title="${c.name}">${c.name}</span>`};
-    const acctCol = {label:'帳戶', right:false, extra:'color:var(--gray-500);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', fn:({c})=>c._accountName};
-
-    const msgCols = [
-      campCol,
-      {label:'花費', right:true, fn:({spend})=>`$${fM(spend)}`},
-      {label:'私訊數', right:true, fn:({msgs})=>msgs>0?fN(msgs):'—'},
-      {label:'私訊成本', right:true, fn:({msgCost})=>msgCost>0?'$'+fM(msgCost):'—'},
-    ];
-    const cpcCols = [
-      campCol,
-      {label:'CPC', right:true, fn:({ci})=>+ci.cpc>0?'$'+fM(ci.cpc):'—'},
-    ];
-    const freqCols = [
-      campCol,
-      {label:'頻次', right:true, extra:'', fn:({ci})=>+ci.frequency>0?`<span style="${+ci.frequency>5?'color:var(--orange);font-weight:600':''}">${(+ci.frequency).toFixed(1)}</span>`:'—'},
-    ];
-
     tcEl.innerHTML = `<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
-      ${buildAlertCard('私訊成本過高', '#FF6B2C', msgRows, msgCols)}
-      ${buildAlertCard('CPC 過高', '#F59E0B', cpcRows, cpcCols)}
-      ${buildAlertCard('頻次過高', '#6366F1', freqRows, freqCols)}
+      ${cardShell('msg','私訊成本過高','#FF6B2C')}
+      ${cardShell('cpc','CPC 過高','#F59E0B')}
+      ${cardShell('freq','頻次過高','#6366F1')}
     </div>`;
+
+    ['msg','cpc','freq'].forEach(k => { _renderAlertCardHead(k); _renderAlertCardRows(k); });
   }
 
   showEl('alertTextCards', 'block');
