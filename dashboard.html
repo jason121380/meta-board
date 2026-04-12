@@ -1971,6 +1971,12 @@ function sortTree(key) {
 // ── Toggle Status ───────────────────────────────────────────
 async function toggleStatus(endpoint, id, checkbox, isCampaign) {
   const status = checkbox.checked ? 'ACTIVE' : 'PAUSED';
+  const action = status === 'ACTIVE' ? '開啟' : '暫停';
+  const entityType = isCampaign ? '行銷活動' : endpoint === 'adsets' ? '廣告組合' : '廣告';
+  // Revert UI while confirming
+  checkbox.checked = !checkbox.checked;
+  if(!confirm(`確定要${action}此${entityType}？`)) return;
+  checkbox.checked = status === 'ACTIVE';
   try {
     const r = await fetch(`${API}/api/${endpoint}/${id}/status?status=${status}`, { method: 'POST' });
     if(!r.ok) throw new Error();
@@ -2012,6 +2018,7 @@ function closeBudget() {
 async function saveBudget() {
   const val = parseInt(document.getElementById('budgetInput').value);
   if(!val||val<=0) return alert('請輸入有效金額');
+  if(!confirm(`確定將每日預算更改為 $${val.toLocaleString()}？`)) return;
   const ep = budgetTarget.type==='campaign'?'campaigns':'adsets';
   await fetch(`${API}/api/${ep}/${budgetTarget.id}/budget?daily_budget=${val}`,{method:'POST'});
   closeBudget();
