@@ -2661,17 +2661,17 @@ async function loadAiAlerts() {
     .sort((a,b)=>+getIns(b).spend-+getIns(a).spend)
     .forEach(c=>issues.priority.push({ label: `CTR 僅 ${fP(getIns(c).ctr)}，花費 $${fM(getIns(c).spend)}，素材效益差，建議立即換素材或關閉`, camp: c, tag:'高花費低CTR' }));
 
-  // P2: High msg cost (> 3x average) — spending a lot per conversion
-  if(hasMsgData && avgCostPerMsg>0) {
-    allCamps.filter(c=>getMsgCount(c)>0&&+getIns(c).spend>3000&&(+getIns(c).spend/getMsgCount(c))>avgCostPerMsg*3)
+  // P2: High msg cost (> $200 fixed threshold)
+  if(hasMsgData) {
+    allCamps.filter(c=>getMsgCount(c)>0&&(+getIns(c).spend/getMsgCount(c))>200)
       .sort((a,b)=>+getIns(b).spend-+getIns(a).spend)
-      .forEach(c=>{ const cpm=+getIns(c).spend/getMsgCount(c); issues.priority.push({ label: `私訊成本 $${fM(cpm)}（均值 $${fM(avgCostPerMsg)} 的 ${(cpm/avgCostPerMsg).toFixed(1)}x），建議優化受眾或素材`, camp: c, tag:'私訊成本過高' }); });
+      .forEach(c=>{ const cpm=+getIns(c).spend/getMsgCount(c); issues.priority.push({ label: `私訊成本 $${fM(cpm)}，超過 $200 門檻，建議優化受眾或素材`, camp: c, tag:'私訊成本過高' }); });
   }
 
-  // P3: High CPC (> 4x average) with meaningful spend
-  if(avgCpc>0) allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).cpc>avgCpc*4&&+getIns(c).spend>2000)
-    .sort((a,b)=>+getIns(b).spend-+getIns(a).spend)
-    .forEach(c=>issues.priority.push({ label: `CPC $${fM(getIns(c).cpc)}（均值 $${fM(avgCpc)} 的 ${(+getIns(c).cpc/avgCpc).toFixed(1)}x），點擊成本異常偏高`, camp: c, tag:'CPC 過高' }));
+  // P3: High CPC (> $5 fixed threshold)
+  allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).cpc>5)
+    .sort((a,b)=>+getIns(b).cpc-+getIns(a).cpc)
+    .forEach(c=>issues.priority.push({ label: `CPC $${fM(getIns(c).cpc)}，超過 $5 門檻，點擊成本過高`, camp: c, tag:'CPC 過高' }));
 
   // P4: High frequency (> 5) — audience fatigue
   allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).frequency>5&&+getIns(c).spend>1000)
@@ -2692,21 +2692,21 @@ async function loadAiAlerts() {
     .sort((a,b)=>+getIns(a).ctr-+getIns(b).ctr)
     .forEach(c=>issues.warning.push({ label: `CTR ${fP(getIns(c).ctr)} 偏低，花費 $${fM(getIns(c).spend)}，建議測試新素材`, camp: c, tag:'低CTR' }));
 
-  // W3: High CPC (2-4x average)
-  if(avgCpc>0) allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).cpc>avgCpc*2&&+getIns(c).cpc<=avgCpc*4&&+getIns(c).clicks>10)
+  // W3: CPC $4-5
+  allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).cpc>4&&+getIns(c).cpc<=5)
     .sort((a,b)=>+getIns(b).cpc-+getIns(a).cpc)
-    .forEach(c=>issues.warning.push({ label: `CPC $${fM(getIns(c).cpc)}（均值 $${fM(avgCpc)} 的 ${(+getIns(c).cpc/avgCpc).toFixed(1)}x），競價或受眾需調整`, camp: c, tag:'CPC 偏高' }));
+    .forEach(c=>issues.warning.push({ label: `CPC $${fM(getIns(c).cpc)}，接近 $5 警戒線，競價或受眾需調整`, camp: c, tag:'CPC 偏高' }));
 
   // W4: Frequency 3-5
   allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).frequency>=3&&+getIns(c).frequency<=5&&+getIns(c).spend>500)
     .sort((a,b)=>+getIns(b).frequency-+getIns(a).frequency)
     .forEach(c=>issues.warning.push({ label: `頻次 ${(+getIns(c).frequency).toFixed(1)} 次，受眾有飽和風險，建議更新素材`, camp: c, tag:'頻次偏高' }));
 
-  // W5: High msg cost (2-3x avg)
-  if(hasMsgData && avgCostPerMsg>0) {
-    allCamps.filter(c=>getMsgCount(c)>0&&(+getIns(c).spend/getMsgCount(c))>avgCostPerMsg*2&&(+getIns(c).spend/getMsgCount(c))<=avgCostPerMsg*3)
+  // W5: Msg cost $150-200
+  if(hasMsgData) {
+    allCamps.filter(c=>getMsgCount(c)>0&&(+getIns(c).spend/getMsgCount(c))>150&&(+getIns(c).spend/getMsgCount(c))<=200)
       .sort((a,b)=>(+getIns(b).spend/getMsgCount(b))-(+getIns(a).spend/getMsgCount(a)))
-      .forEach(c=>{ const cpm=+getIns(c).spend/getMsgCount(c); issues.warning.push({ label: `私訊成本 $${fM(cpm)}（均值 $${fM(avgCostPerMsg)} 的 ${(cpm/avgCostPerMsg).toFixed(1)}x），可優化受眾縮小範圍`, camp: c, tag:'私訊成本偏高' }); });
+      .forEach(c=>{ const cpm=+getIns(c).spend/getMsgCount(c); issues.warning.push({ label: `私訊成本 $${fM(cpm)}，接近 $200 警戒線，可優化受眾縮小範圍`, camp: c, tag:'私訊成本偏高' }); });
   }
 
   // ── 表現優秀 ───────────────────────────────────────────────────
