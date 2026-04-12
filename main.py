@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import Optional, List
 import httpx
+import asyncpg
+import json
 import os
 from dotenv import load_dotenv
 from pathlib import Path
@@ -19,11 +21,14 @@ API_VERSION = os.getenv("FB_API_VERSION", "v21.0")
 BASE_URL = f"https://graph.facebook.com/{API_VERSION}"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 # Runtime token override (from FB Login)
 _runtime_token: Optional[str] = None
 # Shared httpx client (created in lifespan)
 _http_client: Optional[httpx.AsyncClient] = None
+# PostgreSQL connection pool
+_db_pool: Optional[asyncpg.Pool] = None
 
 
 def get_token() -> str:
@@ -36,9 +41,27 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _http_client
+    global _http_client, _db_pool
     _http_client = httpx.AsyncClient(timeout=30)
+    # Connect to PostgreSQL if configured
+    if DATABASE_URL:
+        try:
+            _db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
+            async with _db_pool.acquire() as conn:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS user_settings (
+                        user_id TEXT PRIMARY KEY,
+                        settings JSONB NOT NULL DEFAULT '{}',
+                        updated_at TIMESTAMP DEFAULT NOW()
+                    )
+                """)
+        except Exception as e:
+            print(f"[DB] Connection failed: {e}")
+            _db_pool = None
     yield
+    if _db_pool:
+        await _db_pool.close()
+        _db_pool = None
     await _http_client.aclose()
     _http_client = None
 
@@ -268,6 +291,43 @@ async def get_account_insights(account_id: str, date_preset: str = "last_30d", t
         params["date_preset"] = date_preset
     data = await fb_get(f"{account_id}/insights", params)
     return data
+
+
+# ── 用戶設定（PostgreSQL 雲端同步）─────────────────────────────
+
+class UserSettings(BaseModel):
+    selected_accounts: List[str] = []
+    active_accounts: List[str] = []
+    acct_order: List[str] = []
+    filter_active_only: bool = True
+    fin_row_markups: dict = {}
+    fin_markup_default: float = 5
+
+@app.get("/api/settings/{user_id}")
+async def get_settings(user_id: str):
+    if not _db_pool:
+        return {"settings": None}
+    async with _db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT settings FROM user_settings WHERE user_id = $1", user_id
+        )
+    if row:
+        return {"settings": json.loads(row["settings"]) if isinstance(row["settings"], str) else row["settings"]}
+    return {"settings": None}
+
+@app.post("/api/settings/{user_id}")
+async def save_settings(user_id: str, payload: UserSettings):
+    if not _db_pool:
+        raise HTTPException(status_code=503, detail="Database not configured")
+    data = json.dumps(payload.dict())
+    async with _db_pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO user_settings (user_id, settings, updated_at)
+            VALUES ($1, $2::jsonb, NOW())
+            ON CONFLICT (user_id)
+            DO UPDATE SET settings = $2::jsonb, updated_at = NOW()
+        """, user_id, data)
+    return {"ok": True}
 
 
 # ── AI Chat (Gemini) ──────────────────────────────────────────
