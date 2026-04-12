@@ -2533,7 +2533,7 @@ function _renderAlertCardRows(cardKey) {
   const s = _alertSort[cardKey];
   let rows = [...(_alertRows[cardKey]||[])];
   // Apply keyword filters
-  if(_alertFilter.msg && cardKey === 'msg') rows = rows.filter(r => !r.camp.name.includes('流量'));
+  if(_alertFilter.msg && cardKey === 'msg') rows = rows.filter(r => r.camp.name.includes('私訊'));
   if(_alertFilter.cpc && cardKey === 'cpc') rows = rows.filter(r => !r.camp.name.includes('私訊'));
   if(s.col) {
     const col = cols.find(c=>c.label===s.col);
@@ -2768,17 +2768,17 @@ async function loadAiAlerts() {
     _alertFilter = {msg: true, cpc: true};
 
     const filterBadges = {
-      msg: `<label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:400;color:inherit;cursor:pointer;opacity:0.85">
-              <input type="checkbox" class="custom-cb" id="alertFilter-msg" checked onchange="alertFilterToggle('msg')" style="width:13px;height:13px">隱藏標題含流量
+      msg: `<label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:400;color:inherit;cursor:pointer;opacity:0.85;margin-left:auto">
+              只顯示標題含私訊<input type="checkbox" class="custom-cb" id="alertFilter-msg" checked onchange="alertFilterToggle('msg')" style="width:13px;height:13px">
             </label>`,
-      cpc: `<label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:400;color:inherit;cursor:pointer;opacity:0.85">
-              <input type="checkbox" class="custom-cb" id="alertFilter-cpc" checked onchange="alertFilterToggle('cpc')" style="width:13px;height:13px">隱藏標題含私訊
+      cpc: `<label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:400;color:inherit;cursor:pointer;opacity:0.85;margin-left:auto">
+              隱藏標題含私訊<input type="checkbox" class="custom-cb" id="alertFilter-cpc" checked onchange="alertFilterToggle('cpc')" style="width:13px;height:13px">
             </label>`,
       freq: '',
     };
     function cardShell(key, title, titleColor) {
       return `<div style="flex:1;min-width:0;border-radius:8px;border:1px solid var(--border);background:var(--white);overflow:hidden;display:flex;flex-direction:column">
-        <div style="padding:10px 14px;border-bottom:2px solid ${titleColor};background:${titleColor}10;font-weight:700;font-size:13px;color:${titleColor};display:flex;align-items:center;gap:12px">
+        <div style="padding:10px 14px;border-bottom:2px solid ${titleColor};background:${titleColor}10;font-weight:700;font-size:13px;color:${titleColor};display:flex;align-items:center">
           <span>${title}</span>${filterBadges[key]||''}
         </div>
         <div style="overflow-x:auto;flex:1">
