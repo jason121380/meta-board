@@ -526,12 +526,6 @@ input:checked + .slider:before { transform: translateX(14px); }
   </div>
 </div>
 
-<!-- Account Picker Dropdown -->
-<div class="acct-dropdown" id="acctDropdown">
-  <input class="acct-search" id="acctSearch" placeholder="搜尋帳戶..." oninput="filterAcctList()">
-  <div id="acctList"></div>
-</div>
-
 <!-- ── Login Page ───────────────────────────────────────────── -->
 <div id="loginPage">
   <div class="login-card">
@@ -1548,8 +1542,12 @@ async function toggleAdset(e, id) {
   renderTree();
   if(!adData[id]) {
     const dp = getDateParams();
-    const res = await fetch(`${API}/api/adsets/${id}/ads?${dp}`).then(r=>r.json());
-    adData[id] = res.data || [];
+    try {
+      const res = await fetch(`${API}/api/adsets/${id}/ads?${dp}`).then(r=>r.json());
+      adData[id] = res.data || [];
+    } catch(e) {
+      adData[id] = [];
+    }
     renderTree();
   }
 }

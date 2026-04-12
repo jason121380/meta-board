@@ -266,10 +266,17 @@ async def update_adset_budget(adset_id: str, daily_budget: int = Query(None)):
 @app.get("/api/adsets/{adset_id}/ads")
 async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None):
     ins = _insights_clause("spend,impressions,clicks,ctr,cpc,cpm,actions", date_preset, time_range)
-    data = await fb_get(f"{adset_id}/ads", {
-        "fields": f"id,name,status,creative{{thumbnail_url,title,body}},{ins}",
-        "limit": "100"
-    })
+    try:
+        data = await fb_get(f"{adset_id}/ads", {
+            "fields": f"id,name,status,creative{{thumbnail_url,title,body}},{ins}",
+            "limit": "100"
+        })
+    except Exception:
+        # Fallback: query without creative sub-fields if it fails
+        data = await fb_get(f"{adset_id}/ads", {
+            "fields": f"id,name,status,{ins}",
+            "limit": "100"
+        })
     return data
 
 
