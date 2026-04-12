@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FB Ads Manager</title>
+<style>
+/* ── Notion Design System ─────────────────────────────────── */
+:root {
+  --blue: #0075de;
+  --blue-dark: #005bab;
+  --blue-bg: #f2f9ff;
+  --navy: #213183;
+  --black: rgba(0,0,0,0.9);
+  --gray-500: #615d59;
+  --gray-300: #a39e98;
+  --warm-white: #f6f5f4;
+  --white: #fff;
+  --border: rgba(0,0,0,0.09);
+  --border-strong: rgba(0,0,0,0.15);
+  --green: #1aae39;
+  --green-bg: rgba(26,174,57,0.1);
+  --red: #e03e2d;
+  --red-bg: rgba(224,62,45,0.1);
+  --yellow: #dd5b00;
+  --yellow-bg: rgba(221,91,0,0.1);
+  --shadow-sm: rgba(0,0,0,0.04) 0px 4px 18px, rgba(0,0,0,0.025) 0px 2px 8px;
+  --shadow-md: rgba(0,0,0,0.01) 0px 1px 3px, rgba(0,0,0,0.02) 0px 3px 7px, rgba(0,0,0,0.02) 0px 7px 15px, rgba(0,0,0,0.04) 0px 14px 28px;
+  --sidebar-w: 220px;
+  --radius: 6px;
+  --radius-sm: 4px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--white); color: var(--black); font-size: 14px; line-height: 1.5;
+}
+a { color: var(--blue); text-decoration: none; }
+
+/* ── Layout ────────────────────────────────────────────────── */
+.layout { display: flex; min-height: 100vh; }
+.sidebar {
+  width: var(--sidebar-w); background: var(--warm-white); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh;
+  overflow-y: auto; z-index: 100; transition: transform 0.2s;
+}
+.main { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; background: var(--white); }
+
+/* ── Sidebar ───────────────────────────────────────────────── */
+.sidebar-top {
+  padding: 16px 14px 10px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+}
+.sidebar-logo { font-size: 14px; font-weight: 700; color: var(--black); letter-spacing: -0.2px; }
+.sidebar-logo .dot { color: var(--blue); }
+.sidebar-user {
+  padding: 10px 14px 8px; display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.user-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--blue-bg); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--blue); overflow: hidden; flex-shrink: 0; }
+.user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.user-info { flex: 1; min-width: 0; }
+.user-name { font-size: 12px; font-weight: 600; color: var(--black); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-meta { font-size: 11px; color: var(--gray-300); }
+.fb-login-btn {
+  width: calc(100% - 28px); margin: 8px 14px; height: 30px; border-radius: var(--radius-sm);
+  background: #1877f2; color: #fff; border: none; font-size: 12px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.fb-login-btn:hover { background: #1464cc; }
+.fb-logout-btn {
+  width: calc(100% - 28px); margin: 4px 14px 8px; height: 28px; border-radius: var(--radius-sm);
+  background: transparent; color: var(--gray-500); border: 1px solid var(--border); font-size: 11px; cursor: pointer;
+}
+.fb-logout-btn:hover { background: var(--white); color: var(--red); border-color: var(--red); }
+nav { padding: 8px 8px; flex: 1; }
+.nav-section { font-size: 10px; font-weight: 600; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.8px; padding: 8px 8px 4px; }
+.nav-item {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--radius-sm);
+  cursor: pointer; font-size: 13px; font-weight: 500; color: var(--gray-500); margin-bottom: 1px;
+  transition: all 0.1s; user-select: none;
+}
+.nav-item:hover { background: var(--white); color: var(--black); }
+.nav-item.active { background: var(--white); color: var(--black); font-weight: 600; box-shadow: var(--shadow-sm); }
+.nav-icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+
+/* ── Top Bar ───────────────────────────────────────────────── */
+.topbar {
+  height: 52px; padding: 0 24px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 12px; position: sticky; top: 0; background: var(--white); z-index: 50;
+}
+.page-title { font-size: 15px; font-weight: 700; color: var(--black); letter-spacing: -0.2px; }
+.topbar-spacer { flex: 1; }
+.topbar select, .topbar input[type=date] {
+  height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 13px; color: var(--black); background: var(--white); cursor: pointer;
+}
+.topbar select:focus, .topbar input:focus { outline: none; border-color: var(--blue); }
+#datePreset { width: 130px; }
+.date-range-wrap { display: none; align-items: center; gap: 6px; }
+.date-range-wrap.show { display: flex; }
+.topbar-sep { width: 1px; height: 20px; background: var(--border); }
+
+/* ── Button ────────────────────────────────────────────────── */
+.btn { height: 32px; padding: 0 14px; border-radius: var(--radius-sm); border: 1px solid transparent; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.1s; }
+.btn-blue { background: var(--blue); color: #fff; border-color: var(--blue); }
+.btn-blue:hover { background: var(--blue-dark); }
+.btn-ghost { background: transparent; color: var(--black); border-color: var(--border); }
+.btn-ghost:hover { background: var(--warm-white); }
+.btn-sm { height: 26px; padding: 0 10px; font-size: 12px; }
+.btn-red { background: var(--red-bg); color: var(--red); border-color: transparent; }
+.btn-red:hover { background: rgba(224,62,45,0.18); }
+
+/* ── View ──────────────────────────────────────────────────── */
+.view { display: none; padding: 0; }
+.view.active { display: block; }
+
+/* ── Stats ─────────────────────────────────────────────────── */
+.stats-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap: 1px;
+  background: var(--border); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; margin: 20px 24px 0;
+}
+.stat { background: var(--white); padding: 14px 16px; }
+.stat-label { font-size: 11px; font-weight: 600; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-value { font-size: 20px; font-weight: 700; color: var(--black); margin-top: 3px; letter-spacing: -0.3px; font-variant-numeric: tabular-nums; }
+.stat-sub { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
+
+/* ── Account Selector ──────────────────────────────────────── */
+.account-bar {
+  margin: 14px 24px 0; padding: 10px 14px; background: var(--warm-white);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.account-bar-label { font-size: 12px; font-weight: 600; color: var(--gray-500); white-space: nowrap; }
+.account-tags { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-height: 28px; align-items: center; }
+.account-tag {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 9999px;
+  background: var(--blue-bg); color: var(--blue); font-size: 12px; font-weight: 600; border: 1px solid rgba(0,117,222,0.2);
+}
+.account-tag .remove { cursor: pointer; color: var(--gray-300); font-size: 14px; line-height: 1; }
+.account-tag .remove:hover { color: var(--red); }
+.account-add-btn { font-size: 12px; color: var(--blue); cursor: pointer; font-weight: 500; white-space: nowrap; }
+.account-add-btn:hover { text-decoration: underline; }
+
+/* ── Account Picker Dropdown ───────────────────────────────── */
+.acct-dropdown {
+  display: none; position: fixed; background: var(--white); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-md); width: 280px; max-height: 320px;
+  overflow-y: auto; z-index: 999; padding: 6px;
+}
+.acct-dropdown.open { display: block; }
+.acct-search { width: 100%; height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; margin-bottom: 6px; }
+.acct-search:focus { outline: none; border-color: var(--blue); }
+.acct-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; }
+.acct-item:hover { background: var(--warm-white); }
+.acct-item input[type=checkbox] { accent-color: var(--blue); width: 14px; height: 14px; flex-shrink: 0; }
+.acct-item-name { flex: 1; font-size: 12px; }
+.acct-status-1 { } .acct-status-2 { color: var(--gray-300); text-decoration: line-through; }
+
+/* ── Tree Table ────────────────────────────────────────────── */
+.tree-wrap { margin: 14px 24px 24px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.tree-toolbar { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; background: var(--warm-white); }
+.tree-search { flex: 1; max-width: 260px; height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; background: var(--white); }
+.tree-search:focus { outline: none; border-color: var(--blue); }
+.tree-count { font-size: 12px; color: var(--gray-500); }
+.tree-actions { display: flex; gap: 6px; margin-left: auto; }
+
+table.tree { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.tree th {
+  padding: 9px 12px; text-align: left; font-size: 11px; font-weight: 600; color: var(--gray-300);
+  text-transform: uppercase; letter-spacing: 0.5px; background: var(--warm-white);
+  border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none;
+  position: sticky; top: 0;
+}
+table.tree th:hover { color: var(--blue); }
+table.tree th.sorted-asc::after { content: ' ↑'; }
+table.tree th.sorted-desc::after { content: ' ↓'; }
+table.tree td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+table.tree tr:last-child td { border-bottom: none; }
+table.tree tr.campaign-row { background: var(--white); }
+table.tree tr.campaign-row:hover td { background: #fafaf9; }
+table.tree tr.adset-row td { background: #fdfdfc; }
+table.tree tr.adset-row:hover td { background: #f9f8f7; }
+table.tree tr.ad-row td { background: #fefefe; }
+table.tree tr.ad-row:hover td { background: #fafaf9; }
+table.tree tr { cursor: pointer; }
+table.tree tr.disabled-row { opacity: 0.5; }
+
+/* Expand icon */
+.expand-btn { width: 20px; height: 20px; border: none; background: none; cursor: pointer; color: var(--gray-300); font-size: 10px; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.1s; }
+.expand-btn:hover { background: var(--border); color: var(--black); }
+.expand-btn.open { color: var(--black); }
+.level-indent { display: inline-flex; align-items: center; gap: 4px; }
+.indent-0 { padding-left: 0px; }
+.indent-1 { padding-left: 24px; }
+.indent-2 { padding-left: 48px; }
+
+.name-cell { display: flex; align-items: center; gap: 6px; max-width: 240px; }
+.name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.campaign-row .name-text { font-weight: 600; }
+
+.num { font-variant-numeric: tabular-nums; color: var(--black); }
+.muted { color: var(--gray-300); }
+
+/* Status badge */
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+.badge-active { background: var(--green-bg); color: var(--green); }
+.badge-paused { background: var(--yellow-bg); color: var(--yellow); }
+.badge-other { background: var(--red-bg); color: var(--red); }
+
+/* Toggle */
+.toggle { position: relative; display: inline-block; width: 32px; height: 18px; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; inset: 0; background: #d0d0c8; border-radius: 18px; transition: 0.2s; }
+.slider:before { position: absolute; content: ""; height: 12px; width: 12px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s; }
+input:checked + .slider { background: var(--blue); }
+input:checked + .slider:before { transform: translateX(14px); }
+
+/* Thumb */
+.thumb { width: 30px; height: 30px; object-fit: cover; border-radius: 3px; border: 1px solid var(--border); }
+
+/* ── Loading / Empty ───────────────────────────────────────── */
+.loading { display: flex; align-items: center; justify-content: center; padding: 60px; color: var(--gray-300); gap: 10px; }
+.spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty-state { padding: 60px; text-align: center; color: var(--gray-300); }
+.empty-icon { font-size: 36px; margin-bottom: 10px; }
+
+/* ── Settings View ─────────────────────────────────────────── */
+.settings-wrap { padding: 24px; max-width: 600px; }
+.settings-section { margin-bottom: 28px; }
+.settings-section h3 { font-size: 14px; font-weight: 700; color: var(--black); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.account-list { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.account-list-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.account-list-item:last-child { border-bottom: none; }
+.account-list-item:hover { background: var(--warm-white); }
+.account-list-item input[type=checkbox] { accent-color: var(--blue); width: 15px; height: 15px; }
+.account-list-name { flex: 1; font-size: 13px; font-weight: 500; }
+.account-list-id { font-size: 11px; color: var(--gray-300); }
+.account-list-status { font-size: 11px; padding: 2px 6px; border-radius: 9999px; font-weight: 600; }
+
+/* ── Quick Launch View ─────────────────────────────────────── */
+.launch-wrap { padding: 24px; max-width: 560px; }
+.launch-wrap h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.3px; }
+.launch-wrap .sub { font-size: 13px; color: var(--gray-500); margin-bottom: 24px; }
+.steps { display: flex; gap: 0; margin-bottom: 28px; }
+.step { flex: 1; padding: 8px 12px; text-align: center; font-size: 12px; font-weight: 600; border-bottom: 2px solid var(--border); color: var(--gray-300); }
+.step.active { color: var(--blue); border-bottom-color: var(--blue); }
+.step.done { color: var(--green); border-bottom-color: var(--green); }
+.launch-step { display: none; }
+.launch-step.active { display: block; }
+.form-group { margin-bottom: 16px; }
+.form-label { font-size: 13px; font-weight: 600; color: var(--black); display: block; margin-bottom: 6px; }
+.form-input { width: 100%; height: 38px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; }
+.form-input:focus { outline: none; border-color: var(--blue); }
+.form-select { width: 100%; height: 38px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; background: var(--white); }
+.form-hint { font-size: 11px; color: var(--gray-300); margin-top: 4px; }
+.launch-actions { display: flex; gap: 10px; margin-top: 20px; }
+
+/* ── AI View ───────────────────────────────────────────────── */
+.ai-wrap { padding: 24px; max-width: 800px; }
+.ai-wrap h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.3px; }
+.ai-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 12px; background: var(--white); }
+.ai-card h4 { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.ai-card p { font-size: 13px; color: var(--gray-500); line-height: 1.6; }
+.ai-card.warn { border-left: 3px solid var(--yellow); }
+.ai-card.good { border-left: 3px solid var(--green); }
+.ai-card.info { border-left: 3px solid var(--blue); }
+
+/* ── Modal ─────────────────────────────────────────────────── */
+.overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 900; align-items: center; justify-content: center; }
+.overlay.open { display: flex; }
+.modal { background: var(--white); border-radius: var(--radius); padding: 24px; width: 360px; box-shadow: var(--shadow-md); }
+.modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.modal-sub { font-size: 12px; color: var(--gray-500); margin-bottom: 16px; }
+.modal label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; }
+.modal input { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; margin-bottom: 14px; }
+.modal input:focus { outline: none; border-color: var(--blue); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  .main { margin-left: 0; }
+  .hamburger { display: flex !important; }
+}
+.hamburger { display: none; position: fixed; top: 12px; left: 12px; z-index: 200; background: var(--blue); color: #fff; border: none; border-radius: var(--radius-sm); padding: 6px 10px; cursor: pointer; font-size: 16px; }
+</style>
+</head>
+<body>
+
+<!-- Budget Modal -->
+<div class="overlay" id="budgetModal">
+  <div class="modal">
+    <h3>調整預算</h3>
+    <div class="modal-sub" id="budgetSub"></div>
+    <label>日預算（TWD）</label>
+    <input type="number" id="budgetInput" placeholder="例：500">
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeBudget()">取消</button>
+      <button class="btn btn-blue btn-sm" onclick="saveBudget()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Account Picker Dropdown -->
+<div class="acct-dropdown" id="acctDropdown">
+  <input class="acct-search" id="acctSearch" placeholder="搜尋帳戶..." oninput="filterAcctList()">
+  <div id="acctList"></div>
+</div>
+
+<button class="hamburger" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+
+<div class="layout">
+<!-- ── Sidebar ─────────────────────────────────────────────── -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-top">
+    <div class="sidebar-logo">📊 FB Ads<span class="dot">.</span></div>
+  </div>
+
+  <!-- User / Login -->
+  <div class="sidebar-user" id="userSection">
+    <div class="user-avatar" id="userAvatar">?</div>
+    <div class="user-info">
+      <div class="user-name" id="userName">未登入</div>
+      <div class="user-meta" id="userMeta">使用預設 Token</div>
+    </div>
+  </div>
+  <button class="fb-login-btn" id="fbLoginBtn" onclick="fbLogin()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+    使用 Facebook 登入
+  </button>
+  <button class="fb-logout-btn" id="fbLogoutBtn" onclick="fbLogout()" style="display:none">登出 Facebook</button>
+
+  <nav>
+    <div class="nav-section">主選單</div>
+    <div class="nav-item active" id="nav-dashboard" onclick="showView('dashboard')">
+      <span class="nav-icon">🏠</span> 儀表板
+    </div>
+    <div class="nav-item" id="nav-ai" onclick="showView('ai')">
+      <span class="nav-icon">🤖</span> AI 廣告分析
+    </div>
+    <div class="nav-section" style="margin-top:8px">工具</div>
+    <div class="nav-item" id="nav-launch" onclick="showView('launch')">
+      <span class="nav-icon">🚀</span> 快速上架
+    </div>
+    <div class="nav-item" id="nav-settings" onclick="showView('settings')">
+      <span class="nav-icon">⚙️</span> 設定
+    </div>
+  </nav>
+</aside>
+
+<!-- ── Main ────────────────────────────────────────────────── -->
+<main class="main">
+
+<!-- ═══════════════════════════════════════════════════════════
+     VIEW: Dashboard
+═══════════════════════════════════════════════════════════ -->
+<div class="view active" id="view-dashboard">
+  <div class="topbar">
+    <div class="page-title">儀表板</div>
+    <div class="topbar-spacer"></div>
+    <select id="datePreset" onchange="onDateChange()">
+      <option value="today">今天</option>
+      <option value="yesterday">昨天</option>
+      <option value="last_7d">近 7 天</option>
+      <option value="last_30d" selected>近 30 天</option>
+      <option value="last_90d">近 90 天</option>
+      <option value="this_month">本月</option>
+      <option value="last_month">上個月</option>
+      <option value="custom">自訂區間...</option>
+    </select>
+    <div class="date-range-wrap" id="dateRangeWrap">
+      <input type="date" id="dateFrom">
+      <span style="color:var(--gray-300)">—</span>
+      <input type="date" id="dateTo">
+      <button class="btn btn-blue btn-sm" onclick="applyCustomDate()">套用</button>
+    </div>
+    <div class="topbar-sep"></div>
+    <button class="btn btn-ghost btn-sm" onclick="refreshDashboard()">↻ 重新整理</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat"><div class="stat-label">花費</div><div class="stat-value" id="st-spend">—</div></div>
+    <div class="stat"><div class="stat-label">曝光</div><div class="stat-value" id="st-imp">—</div></div>
+    <div class="stat"><div class="stat-label">觸及</div><div class="stat-value" id="st-reach">—</div></div>
+    <div class="stat"><div class="stat-label">點擊</div><div class="stat-value" id="st-clicks">—</div></div>
+    <div class="stat"><div class="stat-label">CTR</div><div class="stat-value" id="st-ctr">—</div></div>
+    <div class="stat"><div class="stat-label">CPC</div><div class="stat-value" id="st-cpc">—</div></div>
+    <div class="stat"><div class="stat-label">CPM</div><div class="stat-value" id="st-cpm">—</div></div>
+    <div class="stat"><div class="stat-label">頻率</div><div class="stat-value" id="st-freq">—</div></div>
+    <div class="stat"><div class="stat-label">購買數</div><div class="stat-value" id="st-purchase">—</div></div>
+    <div class="stat"><div class="stat-label">名單數</div><div class="stat-value" id="st-lead">—</div></div>
+  </div>
+
+  <!-- Account Bar -->
+  <div class="account-bar">
+    <span class="account-bar-label">廣告帳戶</span>
+    <div class="account-tags" id="accountTags">
+      <span style="color:var(--gray-300);font-size:12px">尚未選擇帳戶</span>
+    </div>
+    <span class="account-add-btn" id="addAccountBtn" onclick="toggleAcctDropdown(event)">+ 新增帳戶</span>
+  </div>
+
+  <!-- Tree Table -->
+  <div class="tree-wrap">
+    <div class="tree-toolbar">
+      <input class="tree-search" id="treeSearch" placeholder="🔍 搜尋行銷活動..." oninput="renderTree()">
+      <span class="tree-count" id="treeCount"></span>
+      <div class="tree-actions">
+        <button class="btn btn-ghost btn-sm" onclick="expandAll()">展開全部</button>
+        <button class="btn btn-ghost btn-sm" onclick="collapseAll()">收合全部</button>
+      </div>
+    </div>
+    <div id="treeContainer">
+      <div class="empty-state"><div class="empty-icon">📢</div>請新增廣告帳戶</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     VIEW: AI 分析
+═══════════════════════════════════════════════════════════ -->
+<div class="view" id="view-ai">
+  <div class="topbar">
+    <div class="page-title">AI 廣告分析</div>
+  </div>
+  <div class="ai-wrap">
+    <h2>智慧洞察</h2>
+    <p class="sub" style="color:var(--gray-500);font-size:13px;margin-bottom:20px">基於您的廣告數據自動分析，提供優化建議</p>
+    <div id="aiContent">
+      <div class="empty-state"><div class="empty-icon">🤖</div>請先在儀表板選擇廣告帳戶以載入分析</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     VIEW: 快速上架
+═══════════════════════════════════════════════════════════ -->
+<div class="view" id="view-launch">
+  <div class="topbar">
+    <div class="page-title">快速上架</div>
+  </div>
+  <div class="launch-wrap">
+    <h2>快速建立廣告</h2>
+    <p class="sub">三步驟完成廣告上架</p>
+    <div class="steps">
+      <div class="step active" id="step1-tab">① 選擇帳戶</div>
+      <div class="step" id="step2-tab">② 廣告設定</div>
+      <div class="step" id="step3-tab">③ 完成</div>
+    </div>
+
+    <!-- Step 1 -->
+    <div class="launch-step active" id="launch-step1">
+      <div class="form-group">
+        <label class="form-label">廣告帳戶</label>
+        <select class="form-select" id="launchAccount">
+          <option value="">— 選擇廣告帳戶 —</option>
+        </select>
+        <div class="form-hint">選擇要上架廣告的帳戶</div>
+      </div>
+      <div class="launch-actions">
+        <button class="btn btn-blue" onclick="launchStep(2)" id="step1Next" disabled>下一步 →</button>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="launch-step" id="launch-step2">
+      <div class="form-group">
+        <label class="form-label">行銷活動名稱</label>
+        <input class="form-input" id="launchName" placeholder="例：2026 春季活動">
+      </div>
+      <div class="form-group">
+        <label class="form-label">廣告目標</label>
+        <select class="form-select" id="launchObjective">
+          <option value="OUTCOME_TRAFFIC">流量</option>
+          <option value="OUTCOME_AWARENESS">品牌知名度</option>
+          <option value="OUTCOME_ENGAGEMENT">互動</option>
+          <option value="OUTCOME_LEADS">開發潛在顧客</option>
+          <option value="OUTCOME_SALES">銷售</option>
+          <option value="OUTCOME_APP_PROMOTION">推廣應用程式</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">日預算（TWD）</label>
+        <input class="form-input" id="launchBudget" type="number" placeholder="500" value="500">
+        <div class="form-hint">最低 NT$1，建議 NT$300 以上</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">初始狀態</label>
+        <select class="form-select" id="launchStatus">
+          <option value="PAUSED">暫停（建議先暫停，確認後再開啟）</option>
+          <option value="ACTIVE">立即執行</option>
+        </select>
+      </div>
+      <div class="launch-actions">
+        <button class="btn btn-ghost" onclick="launchStep(1)">← 返回</button>
+        <button class="btn btn-blue" onclick="doLaunch()">🚀 立即上架</button>
+      </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div class="launch-step" id="launch-step3">
+      <div style="text-align:center;padding:40px 0">
+        <div style="font-size:48px;margin-bottom:16px">🎉</div>
+        <div style="font-size:20px;font-weight:700;margin-bottom:8px">上架成功！</div>
+        <div id="launchResult" style="font-size:13px;color:var(--gray-500);margin-bottom:24px"></div>
+        <button class="btn btn-blue" onclick="launchStep(1);document.getElementById('launchName').value=''">再次上架</button>
+        <button class="btn btn-ghost" onclick="showView('dashboard')" style="margin-left:8px">返回儀表板</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     VIEW: 設定
+═══════════════════════════════════════════════════════════ -->
+<div class="view" id="view-settings">
+  <div class="topbar">
+    <div class="page-title">設定</div>
+  </div>
+  <div class="settings-wrap">
+    <div class="settings-section">
+      <h3>顯示的廣告帳戶</h3>
+      <p style="font-size:13px;color:var(--gray-500);margin-bottom:12px">勾選要在儀表板顯示的帳戶</p>
+      <div class="account-list" id="settingsAccountList">
+        <div class="loading"><div class="spinner"></div>載入中</div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn btn-blue btn-sm" onclick="saveSettings()">儲存設定</button>
+        <button class="btn btn-ghost btn-sm" onclick="selectAllAccounts()">全選</button>
+        <button class="btn btn-ghost btn-sm" onclick="deselectAllAccounts()">全消</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<!-- FB SDK -->
+<div id="fb-root"></div>
+<script>
+window.fbAsyncInit = function() {
+  FB.init({ appId: '2780372365654462', cookie: true, xfbml: true, version: 'v21.0' });
+  FB.getLoginStatus(function(resp) { handleFBStatus(resp); });
+};
+(function(d,s,id){ var js,fjs=d.getElementsByTagName(s)[0]; if(d.getElementById(id)) return;
+  js=d.createElement(s); js.id=id; js.src="https://connect.facebook.net/zh_TW/sdk.js";
+  fjs.parentNode.insertBefore(js,fjs); }(document,'script','facebook-jssdk'));
+</script>
+
+<script>
+const API = '';
+// ── State ──────────────────────────────────────────────────
+let allAccounts = [];           // All FB ad accounts
+let selectedAccounts = [];      // Currently selected account IDs
+let savedSelectedIds = JSON.parse(localStorage.getItem('fb_selected_accounts') || '[]');
+let campData = {};              // { accountId: [campaigns] }
+let adsetData = {};             // { campaignId: [adsets] }
+let adData = {};                // { adsetId: [ads] }
+let expandedCamps = new Set();  // expanded campaign IDs
+let expandedAdsets = new Set(); // expanded adset IDs
+let treeSort = { key: null, dir: 'desc' };
+let budgetTarget = null;
+let dateConfig = { preset: 'last_30d', from: null, to: null };
+let currentLaunchStep = 1;
+
+// ── Format ─────────────────────────────────────────────────
+const fN = (n,d=0) => n == null || n==='' ? '—' : Number(n).toLocaleString('zh-TW',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fM = n => fN(n,0);
+const fP = n => n==null||n==='' ? '—' : `${Number(n).toFixed(2)}%`;
+const fF = n => n==null||n==='' ? '—' : Number(n).toFixed(2);
+const getIns = item => item.insights?.data?.[0] || {};
+const getAct = (item,type) => getIns(item).actions?.find(a=>a.action_type===type)?.value||null;
+const statusBadge = s => {
+  if(s==='ACTIVE') return '<span class="badge badge-active">執行中</span>';
+  if(s==='PAUSED') return '<span class="badge badge-paused">已暫停</span>';
+  return `<span class="badge badge-other">${s}</span>`;
+};
+const budgetStr = item => {
+  if(item.daily_budget) return `日 ${fM(item.daily_budget/100)}`;
+  if(item.lifetime_budget) return `總 ${fM(item.lifetime_budget/100)}`;
+  return '—';
+};
+const getDateParams = () => {
+  if(dateConfig.preset === 'custom' && dateConfig.from && dateConfig.to)
+    return `time_range={"since":"${dateConfig.from}","until":"${dateConfig.to}"}`;
+  return `date_preset=${dateConfig.preset}`;
+};
+
+// ── FB Auth ─────────────────────────────────────────────────
+async function handleFBStatus(resp) {
+  if(resp.status === 'connected') {
+    const token = resp.authResponse.accessToken;
+    await setToken(token);
+  }
+}
+async function fbLogin() {
+  FB.login(async resp => {
+    if(resp.authResponse) {
+      await setToken(resp.authResponse.accessToken);
+    }
+  }, { scope: 'ads_read,ads_management,business_management' });
+}
+async function fbLogout() {
+  FB.logout();
+  await fetch(`${API}/api/auth/token`, { method: 'DELETE' });
+  document.getElementById('userName').textContent = '未登入';
+  document.getElementById('userMeta').textContent = '使用預設 Token';
+  document.getElementById('userAvatar').innerHTML = '?';
+  document.getElementById('fbLoginBtn').style.display = '';
+  document.getElementById('fbLogoutBtn').style.display = 'none';
+}
+async function setToken(token) {
+  const r = await fetch(`${API}/api/auth/token`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({token}) }).then(r=>r.json());
+  if(r.ok) {
+    document.getElementById('userName').textContent = r.name;
+    document.getElementById('userMeta').textContent = 'Facebook 帳號';
+    document.getElementById('fbLoginBtn').style.display = 'none';
+    document.getElementById('fbLogoutBtn').style.display = '';
+    // Reload accounts
+    await loadAllAccounts();
+  }
+}
+
+// ── Init ───────────────────────────────────────────────────
+async function init() {
+  await loadAllAccounts();
+}
+
+async function loadAllAccounts() {
+  const res = await fetch(`${API}/api/accounts`).then(r=>r.json());
+  allAccounts = res.data || [];
+  renderAccountDropdown();
+  renderSettingsAccountList();
+  renderLaunchAccountSelect();
+  // Restore saved selection
+  if(savedSelectedIds.length) {
+    selectedAccounts = allAccounts.filter(a => savedSelectedIds.includes(a.id));
+    renderAccountTags();
+    await loadDashboard();
+  }
+}
+
+// ── Date ───────────────────────────────────────────────────
+function onDateChange() {
+  const val = document.getElementById('datePreset').value;
+  const wrap = document.getElementById('dateRangeWrap');
+  if(val === 'custom') {
+    wrap.classList.add('show');
+    return;
+  }
+  wrap.classList.remove('show');
+  dateConfig = { preset: val, from: null, to: null };
+  refreshDashboard();
+}
+function applyCustomDate() {
+  dateConfig.preset = 'custom';
+  dateConfig.from = document.getElementById('dateFrom').value;
+  dateConfig.to = document.getElementById('dateTo').value;
+  if(!dateConfig.from || !dateConfig.to) return alert('請選擇日期區間');
+  refreshDashboard();
+}
+
+// ── Account Picker ──────────────────────────────────────────
+function renderAccountDropdown() {
+  const list = document.getElementById('acctList');
+  list.innerHTML = allAccounts.map(a => {
+    const checked = selectedAccounts.some(s=>s.id===a.id);
+    const cls = a.account_status===1?'':'acct-status-2';
+    return `<div class="acct-item" onclick="toggleAccount('${a.id}')">
+      <input type="checkbox" ${checked?'checked':''} id="acct-chk-${a.id}" onchange="toggleAccount('${a.id}')">
+      <div class="acct-item-name ${cls}">${a.name}</div>
+    </div>`;
+  }).join('');
+}
+function filterAcctList() {
+  const q = document.getElementById('acctSearch').value.toLowerCase();
+  document.querySelectorAll('.acct-item').forEach(el => {
+    el.style.display = el.querySelector('.acct-item-name').textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+function toggleAcctDropdown(e) {
+  e.stopPropagation();
+  const d = document.getElementById('acctDropdown');
+  const btn = document.getElementById('addAccountBtn');
+  const rect = btn.getBoundingClientRect();
+  d.style.top = (rect.bottom + 6) + 'px';
+  d.style.left = rect.left + 'px';
+  d.classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  if(!e.target.closest('#acctDropdown') && !e.target.closest('#addAccountBtn'))
+    document.getElementById('acctDropdown').classList.remove('open');
+});
+async function toggleAccount(id) {
+  const acc = allAccounts.find(a=>a.id===id);
+  if(!acc) return;
+  const idx = selectedAccounts.findIndex(a=>a.id===id);
+  if(idx >= 0) {
+    selectedAccounts.splice(idx,1);
+    delete campData[id];
+  } else {
+    selectedAccounts.push(acc);
+  }
+  renderAccountDropdown();
+  renderAccountTags();
+  saveSelectedIds();
+  await loadDashboard();
+}
+function renderAccountTags() {
+  const el = document.getElementById('accountTags');
+  if(!selectedAccounts.length) {
+    el.innerHTML = '<span style="color:var(--gray-300);font-size:12px">尚未選擇帳戶</span>';
+    return;
+  }
+  el.innerHTML = selectedAccounts.map(a =>
+    `<span class="account-tag">${a.name}<span class="remove" onclick="toggleAccount('${a.id}')">×</span></span>`
+  ).join('');
+}
+function saveSelectedIds() {
+  savedSelectedIds = selectedAccounts.map(a=>a.id);
+  localStorage.setItem('fb_selected_accounts', JSON.stringify(savedSelectedIds));
+}
+
+// ── Dashboard ───────────────────────────────────────────────
+async function loadDashboard() {
+  if(!selectedAccounts.length) {
+    document.getElementById('treeContainer').innerHTML = '<div class="empty-state"><div class="empty-icon">📢</div>請新增廣告帳戶</div>';
+    clearStats();
+    return;
+  }
+  document.getElementById('treeContainer').innerHTML = '<div class="loading"><div class="spinner"></div>載入中...</div>';
+  // Load campaigns for all selected accounts in parallel
+  const dp = getDateParams();
+  await Promise.all(selectedAccounts.map(async acc => {
+    const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
+    campData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+  }));
+  await loadOverviewStats();
+  renderTree();
+}
+
+async function loadOverviewStats() {
+  const dp = getDateParams();
+  let totals = { spend:0, impressions:0, reach:0, clicks:0, purchase:0, lead:0 };
+  let ctrVals=[], cpcVals=[], cpmVals=[], freqVals=[];
+  await Promise.all(selectedAccounts.map(async acc => {
+    const res = await fetch(`${API}/api/accounts/${acc.id}/insights?${dp}`).then(r=>r.json());
+    const i = res.data?.[0]||{};
+    if(i.spend) totals.spend += +i.spend;
+    if(i.impressions) totals.impressions += +i.impressions;
+    if(i.reach) totals.reach += +i.reach;
+    if(i.clicks) totals.clicks += +i.clicks;
+    if(i.ctr) ctrVals.push(+i.ctr);
+    if(i.cpc) cpcVals.push(+i.cpc);
+    if(i.cpm) cpmVals.push(+i.cpm);
+    if(i.frequency) freqVals.push(+i.frequency);
+    (i.actions||[]).forEach(a=>{
+      if(a.action_type==='purchase') totals.purchase += +a.value;
+      if(a.action_type==='lead') totals.lead += +a.value;
+    });
+  }));
+  const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+  document.getElementById('st-spend').textContent = fM(totals.spend);
+  document.getElementById('st-imp').textContent = fN(totals.impressions);
+  document.getElementById('st-reach').textContent = fN(totals.reach);
+  document.getElementById('st-clicks').textContent = fN(totals.clicks);
+  document.getElementById('st-ctr').textContent = fP(avg(ctrVals));
+  document.getElementById('st-cpc').textContent = fM(avg(cpcVals));
+  document.getElementById('st-cpm').textContent = fM(avg(cpmVals));
+  document.getElementById('st-freq').textContent = fF(avg(freqVals));
+  document.getElementById('st-purchase').textContent = fN(totals.purchase);
+  document.getElementById('st-lead').textContent = fN(totals.lead);
+}
+
+function clearStats() {
+  ['spend','imp','reach','clicks','ctr','cpc','cpm','freq','purchase','lead'].forEach(k => {
+    document.getElementById('st-'+k).textContent = '—';
+  });
+}
+
+function refreshDashboard() {
+  campData = {}; adsetData = {}; adData = {};
+  expandedCamps = new Set(); expandedAdsets = new Set();
+  loadDashboard();
+}
+
+// ── Tree Render ─────────────────────────────────────────────
+const showCols = [
+  { key:'name', label:'名稱', w:'240px' },
+  ...(selectedAccounts.length > 1 ? [{ key:'account', label:'帳戶', w:'120px' }] : []),
+  { key:'status', label:'狀態', w:'90px' },
+  { key:'spend', label:'花費', w:'80px', sortKey: i=>+getIns(i).spend||0 },
+  { key:'impressions', label:'曝光', w:'80px', sortKey: i=>+getIns(i).impressions||0 },
+  { key:'clicks', label:'點擊', w:'70px', sortKey: i=>+getIns(i).clicks||0 },
+  { key:'ctr', label:'CTR', w:'70px', sortKey: i=>+getIns(i).ctr||0 },
+  { key:'cpc', label:'CPC', w:'70px', sortKey: i=>+getIns(i).cpc||0 },
+  { key:'budget', label:'預算', w:'90px' },
+  { key:'actions', label:'', w:'90px' },
+];
+
+function renderTree() {
+  const search = document.getElementById('treeSearch').value.toLowerCase();
+  const container = document.getElementById('treeContainer');
+  const multiAcct = selectedAccounts.length > 1;
+
+  // Flatten all campaigns from all selected accounts
+  let allCamps = selectedAccounts.flatMap(acc => campData[acc.id] || []);
+
+  // Filter
+  if(search) allCamps = allCamps.filter(c => c.name.toLowerCase().includes(search));
+
+  // Sort campaigns
+  if(treeSort.key) {
+    const col = showCols.find(c=>c.key===treeSort.key);
+    if(col?.sortKey) {
+      allCamps.sort((a,b)=>{
+        const va=col.sortKey(a), vb=col.sortKey(b);
+        return treeSort.dir==='asc'?(va>vb?1:-1):(va<vb?1:-1);
+      });
+    }
+  }
+
+  document.getElementById('treeCount').textContent = `${allCamps.length} 個活動`;
+
+  if(!allCamps.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div>無符合條件的行銷活動</div>';
+    return;
+  }
+
+  const cols = [
+    { key:'name', label:'名稱' },
+    ...(multiAcct ? [{ key:'account', label:'帳戶' }] : []),
+    { key:'status', label:'狀態' },
+    { key:'spend', label:'花費', sortKey: i=>+getIns(i).spend||0 },
+    { key:'impressions', label:'曝光', sortKey: i=>+getIns(i).impressions||0 },
+    { key:'clicks', label:'點擊', sortKey: i=>+getIns(i).clicks||0 },
+    { key:'ctr', label:'CTR', sortKey: i=>+getIns(i).ctr||0 },
+    { key:'cpc', label:'CPC', sortKey: i=>+getIns(i).cpc||0 },
+    { key:'budget', label:'預算' },
+    { key:'actions', label:'' },
+  ];
+
+  const thead = `<thead><tr>${cols.map(c=>{
+    const sc = treeSort.key===c.key?` sorted-${treeSort.dir}`:'';
+    const oc = c.sortKey ? `onclick="sortTree('${c.key}')"` : '';
+    return `<th class="${sc}" ${oc}>${c.label}</th>`;
+  }).join('')}</tr></thead>`;
+
+  let rows = '';
+
+  allCamps.forEach(camp => {
+    const ins = getIns(camp);
+    const isOpen = expandedCamps.has(camp.id);
+    const adsets = adsetData[camp.id];
+
+    rows += `<tr class="campaign-row" data-camp="${camp.id}">
+      <td>
+        <div class="name-cell indent-0">
+          <button class="expand-btn ${isOpen?'open':''}" onclick="toggleCamp(event,'${camp.id}')" title="${isOpen?'收合':'展開'}">
+            ${isOpen?'▼':'▶'}
+          </button>
+          <span class="name-text" title="${camp.name}">${camp.name}</span>
+        </div>
+      </td>
+      ${multiAcct ? `<td><span style="font-size:11px;color:var(--gray-500)">${camp._accountName}</span></td>` : ''}
+      <td>${statusBadge(camp.status)}</td>
+      <td class="num">${fM(ins.spend)}</td>
+      <td class="num">${fN(ins.impressions)}</td>
+      <td class="num">${fN(ins.clicks)}</td>
+      <td class="num">${fP(ins.ctr)}</td>
+      <td class="num">${fM(ins.cpc)}</td>
+      <td class="num">${budgetStr(camp)}</td>
+      <td onclick="event.stopPropagation()">
+        <div style="display:flex;align-items:center;gap:6px">
+          <label class="toggle"><input type="checkbox" ${camp.status==='ACTIVE'?'checked':''} onchange="toggleStatus('campaigns','${camp.id}',this,true)"><span class="slider"></span></label>
+          <button class="btn btn-ghost btn-sm" onclick="openBudget('campaign','${camp.id}','${camp.name.replace(/'/g,"\\'")}')">💰</button>
+        </div>
+      </td>
+    </tr>`;
+
+    if(isOpen) {
+      if(!adsets) {
+        rows += `<tr class="adset-row"><td colspan="${cols.length}"><div style="padding:12px 24px;color:var(--gray-300);font-size:12px;display:flex;align-items:center;gap:8px"><div class="spinner" style="width:14px;height:14px;border-width:2px"></div>載入廣告組合...</div></td></tr>`;
+      } else if(!adsets.length) {
+        rows += `<tr class="adset-row"><td colspan="${cols.length}"><div style="padding:12px 48px;color:var(--gray-300);font-size:12px">無廣告組合</div></td></tr>`;
+      } else {
+        adsets.forEach(adset => {
+          const ai = getIns(adset);
+          const adsetOpen = expandedAdsets.has(adset.id);
+          const ads = adData[adset.id];
+
+          rows += `<tr class="adset-row" data-adset="${adset.id}">
+            <td>
+              <div class="name-cell indent-1">
+                <button class="expand-btn ${adsetOpen?'open':''}" onclick="toggleAdset(event,'${adset.id}')" title="${adsetOpen?'收合':'展開'}">
+                  ${adsetOpen?'▼':'▶'}
+                </button>
+                <span class="name-text" title="${adset.name}" style="font-weight:500">${adset.name}</span>
+              </div>
+            </td>
+            ${multiAcct ? `<td></td>` : ''}
+            <td>${statusBadge(adset.status)}</td>
+            <td class="num">${fM(ai.spend)}</td>
+            <td class="num">${fN(ai.impressions)}</td>
+            <td class="num">${fN(ai.clicks)}</td>
+            <td class="num">${fP(ai.ctr)}</td>
+            <td class="num">${fM(ai.cpc)}</td>
+            <td class="num">${budgetStr(adset)}</td>
+            <td onclick="event.stopPropagation()">
+              <div style="display:flex;align-items:center;gap:6px">
+                <label class="toggle"><input type="checkbox" ${adset.status==='ACTIVE'?'checked':''} onchange="toggleStatus('adsets','${adset.id}',this,false)"><span class="slider"></span></label>
+                <button class="btn btn-ghost btn-sm" onclick="openBudget('adset','${adset.id}','${adset.name.replace(/'/g,"\\'")}')">💰</button>
+              </div>
+            </td>
+          </tr>`;
+
+          if(adsetOpen) {
+            if(!ads) {
+              rows += `<tr class="ad-row"><td colspan="${cols.length}"><div style="padding:10px 72px;color:var(--gray-300);font-size:12px;display:flex;align-items:center;gap:8px"><div class="spinner" style="width:14px;height:14px;border-width:2px"></div>載入廣告...</div></td></tr>`;
+            } else if(!ads.length) {
+              rows += `<tr class="ad-row"><td colspan="${cols.length}"><div style="padding:10px 72px;color:var(--gray-300);font-size:12px">無廣告</div></td></tr>`;
+            } else {
+              ads.forEach(ad => {
+                const adi = getIns(ad);
+                const thumb = ad.creative?.thumbnail_url;
+                rows += `<tr class="ad-row">
+                  <td>
+                    <div class="name-cell indent-2" style="padding-left:72px">
+                      ${thumb ? `<img class="thumb" src="${thumb}" alt="">` : '<div style="width:30px;height:30px;background:var(--warm-white);border-radius:3px;flex-shrink:0"></div>'}
+                      <span class="name-text" title="${ad.name}" style="font-weight:400;color:var(--gray-500)">${ad.name}</span>
+                    </div>
+                  </td>
+                  ${multiAcct ? `<td></td>` : ''}
+                  <td>${statusBadge(ad.status)}</td>
+                  <td class="num">${fM(adi.spend)}</td>
+                  <td class="num">${fN(adi.impressions)}</td>
+                  <td class="num">${fN(adi.clicks)}</td>
+                  <td class="num">${fP(adi.ctr)}</td>
+                  <td class="num">${fM(adi.cpc)}</td>
+                  <td class="muted">—</td>
+                  <td onclick="event.stopPropagation()">
+                    <label class="toggle"><input type="checkbox" ${ad.status==='ACTIVE'?'checked':''} onchange="toggleStatus('ads','${ad.id}',this,false)"><span class="slider"></span></label>
+                  </td>
+                </tr>`;
+              });
+            }
+          }
+        });
+      }
+    }
+  });
+
+  container.innerHTML = `<table class="tree">${thead}<tbody>${rows}</tbody></table>`;
+}
+
+async function toggleCamp(e, id) {
+  e.stopPropagation();
+  if(expandedCamps.has(id)) {
+    expandedCamps.delete(id);
+    renderTree();
+    return;
+  }
+  expandedCamps.add(id);
+  renderTree();
+  // Load adsets if not cached
+  if(!adsetData[id]) {
+    const dp = getDateParams();
+    const res = await fetch(`${API}/api/campaigns/${id}/adsets?${dp}`).then(r=>r.json());
+    adsetData[id] = res.data || [];
+    renderTree();
+  }
+}
+
+async function toggleAdset(e, id) {
+  e.stopPropagation();
+  if(expandedAdsets.has(id)) {
+    expandedAdsets.delete(id);
+    renderTree();
+    return;
+  }
+  expandedAdsets.add(id);
+  renderTree();
+  if(!adData[id]) {
+    const dp = getDateParams();
+    const res = await fetch(`${API}/api/adsets/${id}/ads?${dp}`).then(r=>r.json());
+    adData[id] = res.data || [];
+    renderTree();
+  }
+}
+
+function expandAll() {
+  selectedAccounts.forEach(acc => {
+    (campData[acc.id]||[]).forEach(c => expandedCamps.add(c.id));
+  });
+  renderTree();
+  // Lazy-load all adsets
+  selectedAccounts.forEach(acc => {
+    (campData[acc.id]||[]).forEach(async c => {
+      if(!adsetData[c.id]) {
+        const dp = getDateParams();
+        const res = await fetch(`${API}/api/campaigns/${c.id}/adsets?${dp}`).then(r=>r.json());
+        adsetData[c.id] = res.data||[];
+        renderTree();
+      }
+    });
+  });
+}
+
+function collapseAll() {
+  expandedCamps.clear();
+  expandedAdsets.clear();
+  renderTree();
+}
+
+function sortTree(key) {
+  if(treeSort.key === key) treeSort.dir = treeSort.dir==='asc'?'desc':'asc';
+  else { treeSort.key = key; treeSort.dir = 'desc'; }
+  renderTree();
+}
+
+// ── Toggle Status ───────────────────────────────────────────
+async function toggleStatus(endpoint, id, checkbox, isCampaign) {
+  const status = checkbox.checked ? 'ACTIVE' : 'PAUSED';
+  try {
+    const r = await fetch(`${API}/api/${endpoint}/${id}/status?status=${status}`, { method: 'POST' });
+    if(!r.ok) throw new Error();
+    // Update local data
+    if(isCampaign) {
+      for(const acc of selectedAccounts) {
+        const c = (campData[acc.id]||[]).find(c=>c.id===id);
+        if(c) c.status = status;
+      }
+    }
+  } catch {
+    checkbox.checked = !checkbox.checked;
+    alert('更新失敗');
+  }
+}
+
+// ── Budget ──────────────────────────────────────────────────
+function openBudget(type, id, name) {
+  budgetTarget = { type, id };
+  document.getElementById('budgetSub').textContent = name;
+  document.getElementById('budgetInput').value = '';
+  document.getElementById('budgetModal').classList.add('open');
+}
+function closeBudget() {
+  document.getElementById('budgetModal').classList.remove('open');
+  budgetTarget = null;
+}
+async function saveBudget() {
+  const val = parseInt(document.getElementById('budgetInput').value);
+  if(!val||val<=0) return alert('請輸入有效金額');
+  const ep = budgetTarget.type==='campaign'?'campaigns':'adsets';
+  await fetch(`${API}/api/${ep}/${budgetTarget.id}/budget?daily_budget=${val}`,{method:'POST'});
+  closeBudget();
+  // Refresh
+  if(budgetTarget.type==='campaign') {
+    campData = {}; adsetData = {}; adData = {};
+    loadDashboard();
+  } else {
+    adsetData = {}; adData = {};
+    loadDashboard();
+  }
+}
+
+// ── Settings ────────────────────────────────────────────────
+function renderSettingsAccountList() {
+  const el = document.getElementById('settingsAccountList');
+  if(!allAccounts.length) { el.innerHTML = '<div style="padding:16px;color:var(--gray-300);font-size:13px">無廣告帳戶</div>'; return; }
+  el.innerHTML = allAccounts.map(a => {
+    const checked = savedSelectedIds.includes(a.id);
+    const statusLabel = a.account_status===1?'<span class="account-list-status" style="background:var(--green-bg);color:var(--green)">啟用</span>':
+      a.account_status===2?'<span class="account-list-status" style="background:var(--red-bg);color:var(--red)">停用</span>':
+      `<span class="account-list-status" style="background:var(--yellow-bg);color:var(--yellow)">${a.account_status}</span>`;
+    return `<div class="account-list-item">
+      <input type="checkbox" ${checked?'checked':''} id="set-${a.id}" data-id="${a.id}">
+      <div style="flex:1">
+        <div class="account-list-name">${a.name}</div>
+        <div class="account-list-id">${a.id}</div>
+      </div>
+      ${statusLabel}
+    </div>`;
+  }).join('');
+}
+
+function saveSettings() {
+  const checked = [...document.querySelectorAll('[data-id]:checked')].map(el=>el.dataset.id);
+  savedSelectedIds = checked;
+  localStorage.setItem('fb_selected_accounts', JSON.stringify(savedSelectedIds));
+  selectedAccounts = allAccounts.filter(a=>checked.includes(a.id));
+  campData={}; adsetData={}; adData={};
+  renderAccountTags();
+  renderAccountDropdown();
+  loadDashboard();
+  showView('dashboard');
+  alert('✅ 設定已儲存');
+}
+
+function selectAllAccounts() {
+  document.querySelectorAll('[data-id]').forEach(el => el.checked = true);
+}
+function deselectAllAccounts() {
+  document.querySelectorAll('[data-id]').forEach(el => el.checked = false);
+}
+
+// ── Launch Account Select ───────────────────────────────────
+function renderLaunchAccountSelect() {
+  const sel = document.getElementById('launchAccount');
+  sel.innerHTML = '<option value="">— 選擇廣告帳戶 —</option>';
+  allAccounts.filter(a=>a.account_status===1).forEach(a => {
+    const opt = document.createElement('option');
+    opt.value = a.id;
+    opt.textContent = a.name;
+    sel.appendChild(opt);
+  });
+  sel.onchange = () => {
+    document.getElementById('step1Next').disabled = !sel.value;
+  };
+}
+
+function launchStep(n) {
+  currentLaunchStep = n;
+  [1,2,3].forEach(i => {
+    document.getElementById(`launch-step${i}`).classList.toggle('active', i===n);
+    const tab = document.getElementById(`step${i}-tab`);
+    tab.classList.remove('active','done');
+    if(i < n) tab.classList.add('done');
+    else if(i === n) tab.classList.add('active');
+  });
+}
+
+async function doLaunch() {
+  const account_id = document.getElementById('launchAccount').value;
+  const name = document.getElementById('launchName').value.trim();
+  const objective = document.getElementById('launchObjective').value;
+  const daily_budget = parseInt(document.getElementById('launchBudget').value)||500;
+  const status = document.getElementById('launchStatus').value;
+  if(!name) return alert('請輸入行銷活動名稱');
+  try {
+    const res = await fetch(`${API}/api/quick-launch/campaign`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ account_id, name, objective, daily_budget, status })
+    }).then(r=>r.json());
+    document.getElementById('launchResult').textContent = `行銷活動 ID：${res.id}，名稱：${name}`;
+    launchStep(3);
+    // Refresh camp data for that account
+    delete campData[account_id];
+    if(selectedAccounts.some(a=>a.id===account_id)) loadDashboard();
+  } catch(e) {
+    alert('上架失敗：' + e.message);
+  }
+}
+
+// ── AI Analysis ─────────────────────────────────────────────
+async function loadAiAnalysis() {
+  const el = document.getElementById('aiContent');
+  if(!selectedAccounts.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🤖</div>請先選擇廣告帳戶</div>';
+    return;
+  }
+  el.innerHTML = '<div class="loading"><div class="spinner"></div>分析中...</div>';
+
+  // Gather all campaign data
+  const allCamps = selectedAccounts.flatMap(acc => campData[acc.id]||[]);
+  if(!allCamps.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div>無廣告資料可分析</div>';
+    return;
+  }
+
+  const active = allCamps.filter(c=>c.status==='ACTIVE');
+  const paused = allCamps.filter(c=>c.status==='PAUSED');
+  const highSpend = allCamps.filter(c=>+getIns(c).spend>1000).sort((a,b)=>+getIns(b).spend-+getIns(a).spend).slice(0,3);
+  const lowCtr = allCamps.filter(c=>+getIns(c).ctr>0&&+getIns(c).ctr<1).slice(0,3);
+  const highCtr = allCamps.filter(c=>+getIns(c).ctr>3).slice(0,3);
+
+  let html = '';
+
+  html += `<div class="ai-card info">
+    <h4>📊 帳戶概覽</h4>
+    <p>共 ${allCamps.length} 個行銷活動，執行中 <strong>${active.length}</strong> 個、已暫停 <strong>${paused.length}</strong> 個</p>
+  </div>`;
+
+  if(highSpend.length) {
+    html += `<div class="ai-card warn">
+      <h4>💰 高消耗行銷活動</h4>
+      <p>${highSpend.map(c=>`<strong>${c.name}</strong>（花費 ${fM(getIns(c).spend)} TWD）`).join('、')}。建議檢視這些活動的 ROAS 是否符合預期。</p>
+    </div>`;
+  }
+
+  if(lowCtr.length) {
+    html += `<div class="ai-card warn">
+      <h4>⚠️ CTR 偏低（< 1%）</h4>
+      <p>${lowCtr.map(c=>`<strong>${c.name}</strong>（CTR ${fP(getIns(c).ctr)}）`).join('、')}。建議測試新的廣告素材或優化受眾定向。</p>
+    </div>`;
+  }
+
+  if(highCtr.length) {
+    html += `<div class="ai-card good">
+      <h4>✅ 高效能行銷活動（CTR > 3%）</h4>
+      <p>${highCtr.map(c=>`<strong>${c.name}</strong>（CTR ${fP(getIns(c).ctr)}）`).join('、')}。這些活動表現優異，可考慮增加預算。</p>
+    </div>`;
+  }
+
+  if(paused.length > active.length) {
+    html += `<div class="ai-card info">
+      <h4>💡 暫停活動偏多</h4>
+      <p>暫停中的活動（${paused.length} 個）多於執行中（${active.length} 個）。可以檢視是否有可重新啟動的優質活動。</p>
+    </div>`;
+  }
+
+  el.innerHTML = html || '<div class="empty-state"><div class="empty-icon">✅</div>目前無需特別關注的事項</div>';
+}
+
+// ── Navigation ───────────────────────────────────────────────
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById(`view-${name}`).classList.add('active');
+  document.getElementById(`nav-${name}`)?.classList.add('active');
+  if(name==='ai') loadAiAnalysis();
+  if(document.getElementById('sidebar').classList.contains('open'))
+    document.getElementById('sidebar').classList.remove('open');
+}
+
+// ── Start ────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
