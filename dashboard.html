@@ -256,14 +256,18 @@ input:checked + .slider:before { transform: translateX(14px); }
 .launch-actions { display: flex; gap: 10px; margin-top: 20px; }
 
 /* ── AI View ───────────────────────────────────────────────── */
-.ai-wrap { padding: 24px; max-width: 800px; }
-.ai-wrap h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.3px; }
-.ai-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 12px; background: var(--white); }
-.ai-card h4 { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
-.ai-card p { font-size: 13px; color: var(--gray-500); line-height: 1.6; }
-.ai-card.warn { border-left: 3px solid var(--yellow); }
-.ai-card.good { border-left: 3px solid var(--green); }
-.ai-card.info { border-left: 3px solid var(--blue); }
+.ai-kpi-card { background: var(--white); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; }
+.ai-kpi-label { font-size: 11px; font-weight: 600; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.ai-kpi-value { font-size: 28px; font-weight: 700; color: var(--black); letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.ai-kpi-sub { font-size: 12px; color: var(--gray-500); margin-top: 3px; }
+.ai-chart-card { background: var(--white); border: 1px solid var(--border); border-radius: 16px; padding: 20px 20px 16px; }
+.ai-chart-title { font-size: 13px; font-weight: 700; color: var(--black); margin-bottom: 14px; }
+.ai-text-card { background: var(--white); border: 1px solid var(--border); border-radius: 16px; padding: 16px 20px; border-left: 4px solid var(--border); }
+.ai-text-card.warn { border-left-color: var(--yellow); }
+.ai-text-card.good { border-left-color: var(--green); }
+.ai-text-card.info { border-left-color: var(--orange); }
+.ai-text-card h4 { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.ai-text-card p { font-size: 13px; color: var(--gray-500); line-height: 1.6; }
 
 /* ── Modal ─────────────────────────────────────────────────── */
 .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 900; align-items: center; justify-content: center; }
@@ -500,13 +504,45 @@ input:checked + .slider:before { transform: translateX(14px); }
 <div class="view" id="view-ai">
   <div class="topbar">
     <div class="page-title">AI 廣告分析</div>
+    <div class="topbar-spacer"></div>
+    <button class="btn btn-blue btn-sm" onclick="loadAiAnalysis()">重新分析</button>
   </div>
-  <div class="ai-wrap">
-    <h2>智慧洞察</h2>
-    <p class="sub" style="color:var(--gray-500);font-size:13px;margin-bottom:20px">基於您的廣告數據自動分析，提供優化建議</p>
-    <div id="aiContent">
-      <div class="empty-state">請先在儀表板選擇廣告帳戶以載入分析</div>
+  <div style="padding:20px 24px;overflow-y:auto;height:calc(100vh - 60px)">
+
+    <!-- Loading / Empty -->
+    <div id="aiEmpty" class="empty-state" style="display:none">請先在設定中啟用廣告帳戶</div>
+    <div id="aiLoading" class="loading" style="display:none"><div class="spinner"></div>分析中...</div>
+
+    <!-- Insight Cards Row -->
+    <div id="aiInsightRow" style="display:none;gap:12px;margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+      <div class="ai-kpi-card" id="kpi-spend"></div>
+      <div class="ai-kpi-card" id="kpi-active"></div>
+      <div class="ai-kpi-card" id="kpi-ctr"></div>
+      <div class="ai-kpi-card" id="kpi-cpc"></div>
     </div>
+
+    <!-- Charts Grid -->
+    <div id="aiChartGrid" style="display:none;gap:16px;grid-template-columns:1fr 1fr;margin-bottom:20px">
+      <div class="ai-chart-card">
+        <div class="ai-chart-title">各帳戶花費分布</div>
+        <canvas id="chartSpendByAccount" height="220"></canvas>
+      </div>
+      <div class="ai-chart-card">
+        <div class="ai-chart-title">行銷活動狀態</div>
+        <canvas id="chartStatus" height="220"></canvas>
+      </div>
+      <div class="ai-chart-card">
+        <div class="ai-chart-title">CTR 分布區間</div>
+        <canvas id="chartCtrDist" height="220"></canvas>
+      </div>
+      <div class="ai-chart-card">
+        <div class="ai-chart-title">花費 vs CTR（各活動）</div>
+        <canvas id="chartScatter" height="220"></canvas>
+      </div>
+    </div>
+
+    <!-- AI Insight Text Cards -->
+    <div id="aiTextCards" style="display:none;gap:12px;grid-template-columns:1fr"></div>
   </div>
 </div>
 
@@ -629,6 +665,9 @@ input:checked + .slider:before { transform: translateX(14px); }
 
 </main>
 </div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
 <!-- FB SDK -->
 <div id="fb-root"></div>
@@ -1353,63 +1392,142 @@ async function doLaunch() {
 }
 
 // ── AI Analysis ─────────────────────────────────────────────
+let aiCharts = {};
+
+function destroyCharts() {
+  Object.values(aiCharts).forEach(c => { try { c.destroy(); } catch(e){} });
+  aiCharts = {};
+}
+
 async function loadAiAnalysis() {
-  const el = document.getElementById('aiContent');
-  if(!selectedAccounts.length) {
-    el.innerHTML = '<div class="empty-state">請先選擇廣告帳戶</div>';
+  const visible = getVisibleAccounts();
+  const show = (id, display) => { const el = document.getElementById(id); if(el) el.style.display = display; };
+
+  if(!visible.length) {
+    show('aiEmpty', 'block'); show('aiLoading', 'none');
+    show('aiInsightRow', 'none'); show('aiChartGrid', 'none'); show('aiTextCards', 'none');
     return;
   }
-  el.innerHTML = '<div class="loading"><div class="spinner"></div>分析中...</div>';
 
-  // Gather all campaign data
-  const allCamps = selectedAccounts.flatMap(acc => campData[acc.id]||[]);
+  show('aiEmpty', 'none'); show('aiLoading', 'flex');
+  show('aiInsightRow', 'none'); show('aiChartGrid', 'none'); show('aiTextCards', 'none');
+
+  // Load campaign data for any visible account not yet cached
+  const dp = getDateParams();
+  await Promise.all(visible.map(async acc => {
+    if(!campData[acc.id]) {
+      const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
+      campData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+    }
+  }));
+
+  const allCamps = visible.flatMap(acc => campData[acc.id] || []);
+  show('aiLoading', 'none');
+
   if(!allCamps.length) {
-    el.innerHTML = '<div class="empty-state">無廣告資料可分析</div>';
+    show('aiEmpty', 'block');
+    document.getElementById('aiEmpty').textContent = '無廣告資料可分析';
     return;
   }
 
+  // ── KPI Summary ────────────────────────────────────────────
   const active = allCamps.filter(c=>c.status==='ACTIVE');
   const paused = allCamps.filter(c=>c.status==='PAUSED');
+  const totalSpend = allCamps.reduce((s,c)=>s+(+getIns(c).spend||0), 0);
+  const ctrVals = allCamps.filter(c=>+getIns(c).ctr>0).map(c=>+getIns(c).ctr);
+  const cpcVals = allCamps.filter(c=>+getIns(c).cpc>0).map(c=>+getIns(c).cpc);
+  const avgCtr = ctrVals.length ? ctrVals.reduce((a,b)=>a+b,0)/ctrVals.length : 0;
+  const avgCpc = cpcVals.length ? cpcVals.reduce((a,b)=>a+b,0)/cpcVals.length : 0;
+
+  document.getElementById('kpi-spend').innerHTML = `<div class="ai-kpi-label">總花費</div><div class="ai-kpi-value">$${fM(totalSpend)}</div><div class="ai-kpi-sub">${visible.length} 個帳戶</div>`;
+  document.getElementById('kpi-active').innerHTML = `<div class="ai-kpi-label">執行中活動</div><div class="ai-kpi-value">${active.length}</div><div class="ai-kpi-sub">共 ${allCamps.length} 個</div>`;
+  document.getElementById('kpi-ctr').innerHTML = `<div class="ai-kpi-label">平均 CTR</div><div class="ai-kpi-value">${avgCtr.toFixed(2)}%</div><div class="ai-kpi-sub">有數據活動 ${ctrVals.length} 個</div>`;
+  document.getElementById('kpi-cpc').innerHTML = `<div class="ai-kpi-label">平均 CPC</div><div class="ai-kpi-value">$${fM(avgCpc)}</div><div class="ai-kpi-sub">TWD</div>`;
+  show('aiInsightRow', 'grid');
+
+  // ── Charts ─────────────────────────────────────────────────
+  destroyCharts();
+  show('aiChartGrid', 'grid');
+
+  const O = '#FF6B2C', OL = '#FFF5F0', OB = '#FFE8D9';
+  const COLORS = ['#FF6B2C','#FF9A62','#FFB899','#FFD4BB','#2E7D32','#66BB6A','#0075de','#42A5F5','#7B1FA2','#AB47BC'];
+
+  // Chart 1: Spend by account (horizontal bar)
+  const acctSpend = visible.map(acc => ({
+    name: acc.name,
+    spend: (campData[acc.id]||[]).reduce((s,c)=>s+(+getIns(c).spend||0),0)
+  })).filter(a=>a.spend>0).sort((a,b)=>b.spend-a.spend).slice(0,10);
+
+  aiCharts.spend = new Chart(document.getElementById('chartSpendByAccount'), {
+    type: 'bar',
+    data: {
+      labels: acctSpend.map(a => a.name.length>16 ? a.name.slice(0,16)+'…' : a.name),
+      datasets: [{ data: acctSpend.map(a=>a.spend), backgroundColor: O, borderRadius: 6, borderSkipped: false }]
+    },
+    options: { indexAxis:'y', plugins:{legend:{display:false}}, scales:{x:{grid:{color:'#F5F5F5'},ticks:{callback:v=>'$'+fM(v)}},y:{grid:{display:false}}}, responsive:true }
+  });
+
+  // Chart 2: Status donut
+  const other = allCamps.length - active.length - paused.length;
+  aiCharts.status = new Chart(document.getElementById('chartStatus'), {
+    type: 'doughnut',
+    data: {
+      labels: ['執行中', '已暫停', '其他'],
+      datasets: [{ data: [active.length, paused.length, other], backgroundColor: ['#2E7D32', O, '#E0E0E0'], borderWidth: 0, hoverOffset: 6 }]
+    },
+    options: { plugins:{legend:{position:'bottom',labels:{padding:16,font:{size:12}}}}, cutout:'65%', responsive:true }
+  });
+
+  // Chart 3: CTR distribution
+  const ctrBuckets = {'0%': 0, '0-1%': 0, '1-2%': 0, '2-3%': 0, '3-5%': 0, '>5%': 0};
+  allCamps.forEach(c => {
+    const ctr = +getIns(c).ctr||0;
+    if(ctr === 0) ctrBuckets['0%']++;
+    else if(ctr < 1) ctrBuckets['0-1%']++;
+    else if(ctr < 2) ctrBuckets['1-2%']++;
+    else if(ctr < 3) ctrBuckets['2-3%']++;
+    else if(ctr < 5) ctrBuckets['3-5%']++;
+    else ctrBuckets['>5%']++;
+  });
+  aiCharts.ctr = new Chart(document.getElementById('chartCtrDist'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(ctrBuckets),
+      datasets: [{ data: Object.values(ctrBuckets), backgroundColor: ['#E0E0E0','#FFB899','#FF9A62',O,'#2E7D32','#1B5E20'], borderRadius: 6, borderSkipped: false }]
+    },
+    options: { plugins:{legend:{display:false}}, scales:{x:{grid:{display:false}},y:{grid:{color:'#F5F5F5'},ticks:{precision:0}}}, responsive:true }
+  });
+
+  // Chart 4: Spend vs CTR scatter
+  const scatterData = allCamps.filter(c=>+getIns(c).spend>0&&+getIns(c).ctr>0).map(c=>({
+    x: +getIns(c).ctr,
+    y: +getIns(c).spend,
+    label: c.name
+  }));
+  aiCharts.scatter = new Chart(document.getElementById('chartScatter'), {
+    type: 'scatter',
+    data: { datasets: [{ data: scatterData, backgroundColor: O+'99', pointRadius: 5, pointHoverRadius: 7 }] },
+    options: {
+      plugins:{legend:{display:false},tooltip:{callbacks:{label: ctx=>`${ctx.raw.label?.slice(0,20)} | CTR:${ctx.raw.x.toFixed(2)}% 花費:$${fM(ctx.raw.y)}`}}},
+      scales:{x:{title:{display:true,text:'CTR (%)'},grid:{color:'#F5F5F5'}},y:{title:{display:true,text:'花費 TWD'},grid:{color:'#F5F5F5'},ticks:{callback:v=>'$'+fM(v)}}},
+      responsive:true
+    }
+  });
+
+  // ── Text Insight Cards ──────────────────────────────────────
   const highSpend = allCamps.filter(c=>+getIns(c).spend>1000).sort((a,b)=>+getIns(b).spend-+getIns(a).spend).slice(0,3);
   const lowCtr = allCamps.filter(c=>+getIns(c).ctr>0&&+getIns(c).ctr<1).slice(0,3);
   const highCtr = allCamps.filter(c=>+getIns(c).ctr>3).slice(0,3);
 
-  let html = '';
+  let cards = '';
+  if(highSpend.length) cards += `<div class="ai-text-card warn"><h4>高消耗行銷活動</h4><p>${highSpend.map(c=>`<strong>${c.name}</strong>（$${fM(getIns(c).spend)}）`).join('、')}</p></div>`;
+  if(lowCtr.length) cards += `<div class="ai-text-card warn"><h4>CTR 偏低（&lt; 1%）</h4><p>${lowCtr.map(c=>`<strong>${c.name}</strong>（${fP(getIns(c).ctr)}）`).join('、')}。建議優化素材或受眾。</p></div>`;
+  if(highCtr.length) cards += `<div class="ai-text-card good"><h4>高效能行銷活動（CTR &gt; 3%）</h4><p>${highCtr.map(c=>`<strong>${c.name}</strong>（${fP(getIns(c).ctr)}）`).join('、')}。可考慮增加預算。</p></div>`;
+  if(paused.length > active.length) cards += `<div class="ai-text-card info"><h4>暫停活動偏多</h4><p>暫停中 ${paused.length} 個，執行中 ${active.length} 個。可檢視是否有值得重啟的活動。</p></div>`;
 
-  html += `<div class="ai-card info">
-    <h4>帳戶概覽</h4>
-    <p>共 ${allCamps.length} 個行銷活動，執行中 <strong>${active.length}</strong> 個、已暫停 <strong>${paused.length}</strong> 個</p>
-  </div>`;
-
-  if(highSpend.length) {
-    html += `<div class="ai-card warn">
-      <h4>高消耗行銷活動</h4>
-      <p>${highSpend.map(c=>`<strong>${c.name}</strong>（花費 ${fM(getIns(c).spend)} TWD）`).join('、')}。建議檢視這些活動的 ROAS 是否符合預期。</p>
-    </div>`;
-  }
-
-  if(lowCtr.length) {
-    html += `<div class="ai-card warn">
-      <h4>CTR 偏低（< 1%）</h4>
-      <p>${lowCtr.map(c=>`<strong>${c.name}</strong>（CTR ${fP(getIns(c).ctr)}）`).join('、')}。建議測試新的廣告素材或優化受眾定向。</p>
-    </div>`;
-  }
-
-  if(highCtr.length) {
-    html += `<div class="ai-card good">
-      <h4>高效能行銷活動（CTR > 3%）</h4>
-      <p>${highCtr.map(c=>`<strong>${c.name}</strong>（CTR ${fP(getIns(c).ctr)}）`).join('、')}。這些活動表現優異，可考慮增加預算。</p>
-    </div>`;
-  }
-
-  if(paused.length > active.length) {
-    html += `<div class="ai-card info">
-      <h4>暫停活動偏多</h4>
-      <p>暫停中的活動（${paused.length} 個）多於執行中（${active.length} 個）。可以檢視是否有可重新啟動的優質活動。</p>
-    </div>`;
-  }
-
-  el.innerHTML = html || '<div class="empty-state">目前無需特別關注的事項</div>';
+  const tcEl = document.getElementById('aiTextCards');
+  tcEl.innerHTML = cards;
+  show('aiTextCards', 'grid');
 }
 
 // ── Navigation ───────────────────────────────────────────────
