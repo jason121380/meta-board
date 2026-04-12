@@ -111,7 +111,7 @@ nav { padding: 10px 10px; flex: 1; }
 /* ── Stats ─────────────────────────────────────────────────── */
 .stats-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr));
-  gap: 12px; padding: 16px 16px 0; background: var(--warm-white);
+  gap: 12px; padding: 16px 16px 0; background: var(--warm-white); flex-shrink: 0;
 }
 .stat { background: var(--white); padding: 16px 20px; border-radius: 16px; border: 1px solid var(--border); }
 .stat-label { font-size: 11px; font-weight: 600; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.5px; }
@@ -145,13 +145,13 @@ nav { padding: 10px 10px; flex: 1; }
 .dash-acct-name { flex: 1; font-size: 12px; font-weight: 500; color: var(--black); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dash-acct-item.active .dash-acct-name { color: var(--orange); font-weight: 600; }
 .dash-acct-check { width: 14px; height: 14px; accent-color: var(--blue); flex-shrink: 0; }
-.dash-content { flex: 1; overflow-y: auto; }
+.dash-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
 .acct-status-2 { color: var(--gray-300); }
 
 /* ── Tree Table ────────────────────────────────────────────── */
-.tree-wrap { overflow: hidden; flex: 1; margin: 12px 16px 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--white); }
-.tree-toolbar { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; background: var(--white); border-radius: 16px 16px 0 0; }
+.tree-wrap { overflow: hidden; flex: 1; margin: 12px 16px 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--white); display: flex; flex-direction: column; }
+.tree-toolbar { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; background: var(--white); border-radius: 16px 16px 0 0; flex-shrink: 0; }
 .tree-search { flex: 1; max-width: 260px; height: 34px; padding: 0 12px; border: 1.5px solid var(--border); border-radius: var(--radius-pill); font-size: 13px; background: var(--warm-white); font-family: inherit; }
 .tree-search:focus { outline: none; border-color: var(--orange); background: var(--white); }
 .tree-count { font-size: 12px; color: var(--gray-500); }
@@ -261,8 +261,8 @@ input:checked + .slider:before { transform: translateX(14px); }
 .finance-summary-label { font-size: 11px; color: var(--gray-500); margin-bottom: 2px; }
 .finance-summary-value { font-size: 18px; font-weight: 700; color: var(--black); letter-spacing: -0.3px; font-variant-numeric: tabular-nums; }
 .finance-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.finance-kpi-row { display: flex; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); background: var(--white); flex-shrink: 0; overflow-x: auto; }
-.finance-kpi { flex-shrink: 0; }
+.finance-kpi-row { display: flex; padding: 16px 20px; border-bottom: 1px solid var(--border); background: var(--white); flex-shrink: 0; }
+.finance-kpi { flex: 1; min-width: 0; }
 .finance-kpi-val { font-size: 22px; font-weight: 700; color: var(--black); letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
 .finance-kpi-label { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
 .finance-kpi-sep { width: 1px; background: var(--border); flex-shrink: 0; margin: 0 4px; }
@@ -663,7 +663,10 @@ input:checked + .slider:before { transform: translateX(14px); }
       <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span> 儀表板
     </div>
     <div class="nav-item" id="nav-ai" onclick="showView('ai')">
-      <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span> AI 廣告分析
+      <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span> 數據分析
+    </div>
+    <div class="nav-item" id="nav-alert" onclick="showView('alert')">
+      <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> AI警示建議
     </div>
     <div class="nav-item" id="nav-finance" onclick="showView('finance')">
       <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span> 財務專區
@@ -753,7 +756,7 @@ input:checked + .slider:before { transform: translateX(14px); }
             <button class="btn btn-ghost btn-sm" onclick="collapseAll()">收合全部</button>
           </div>
         </div>
-        <div id="treeContainer">
+        <div id="treeContainer" style="overflow-y:auto;flex:1">
           <div class="empty-state">從左側選擇廣告帳戶</div>
         </div>
       </div>
@@ -766,7 +769,7 @@ input:checked + .slider:before { transform: translateX(14px); }
 ═══════════════════════════════════════════════════════════ -->
 <div class="view" id="view-ai">
   <div class="topbar">
-    <div class="page-title">AI 廣告分析</div>
+    <div class="page-title">數據分析</div>
     <div class="topbar-spacer"></div>
     <div id="dpAi"></div>
     <div class="topbar-sep"></div>
@@ -808,8 +811,39 @@ input:checked + .slider:before { transform: translateX(14px); }
       </div>
     </div>
 
-    <!-- Comprehensive Insights -->
-    <div id="aiTextCards" style="display:none;gap:0;grid-template-columns:1fr"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     VIEW: AI警示建議
+═══════════════════════════════════════════════════════════ -->
+<div class="view" id="view-alert">
+  <div class="topbar">
+    <div class="page-title">AI警示建議</div>
+    <div class="topbar-spacer"></div>
+    <select id="alertDatePreset" onchange="onAlertDateChange()">
+      <option value="today">今天</option>
+      <option value="yesterday">昨天</option>
+      <option value="last_7d">近 7 天</option>
+      <option value="last_30d">近 30 天</option>
+      <option value="last_90d">近 90 天</option>
+      <option value="this_month" selected>本月</option>
+      <option value="last_month">上個月</option>
+      <option value="custom">自訂區間...</option>
+    </select>
+    <div class="date-range-wrap" id="alertDateRangeWrap">
+      <input type="date" id="alertDateFrom">
+      <span style="color:var(--gray-300)">—</span>
+      <input type="date" id="alertDateTo">
+      <button class="btn btn-blue btn-sm" onclick="applyAlertCustomDate()">套用</button>
+    </div>
+    <div class="topbar-sep"></div>
+    <button class="btn btn-blue btn-sm" onclick="alertCampData={};loadAiAlerts()">重新分析</button>
+  </div>
+  <div style="padding:20px 24px;overflow-y:auto;flex:1">
+    <div id="alertEmpty" class="empty-state" style="display:none">請先在設定中啟用廣告帳戶</div>
+    <div id="alertLoading" class="loading" style="display:none"><div class="spinner"></div>分析中...</div>
+    <div id="alertTextCards" style="display:none;gap:0;grid-template-columns:1fr"></div>
   </div>
 </div>
 
@@ -871,27 +905,12 @@ input:checked + .slider:before { transform: translateX(14px); }
       <div class="finance-toolbar">
         <input id="financeSearch" placeholder="搜尋活動名稱..." oninput="renderFinanceTable()" style="flex:1;height:32px;padding:0 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit">
         <span style="font-size:12px;color:var(--gray-500)">預設月%：</span>
-        <input type="number" id="financeMarkupDefault" value="5" min="0" max="100" step="0.5" oninput="applyDefaultMarkup()" style="width:54px;height:32px;border:1.5px solid var(--border);border-radius:var(--radius-sm);text-align:center;font-size:13px;font-family:inherit;padding:0 4px">
+        <input type="number" id="financeMarkupDefault" value="5" min="0" max="100" step="0.5" oninput="applyDefaultMarkup();localStorage.setItem('fin_default_markup',this.value)" style="width:54px;height:32px;border:1.5px solid var(--border);border-radius:var(--radius-sm);text-align:center;font-size:13px;font-family:inherit;padding:0 4px">
         <span style="font-size:12px;color:var(--gray-500)">%</span>
       </div>
       <div class="finance-table-wrap">
         <table class="finance-table">
-          <thead>
-            <tr>
-              <th>NO.</th>
-              <th>活動名稱</th>
-              <th>廣告帳戶</th>
-              <th>報告起始</th>
-              <th>報告截止</th>
-              <th class="num">花費金額</th>
-              <th class="num">月%</th>
-              <th class="num">金額+%</th>
-              <th class="num">連結點擊數</th>
-              <th class="num">點擊成本</th>
-              <th class="num">私訊數</th>
-              <th class="num">私訊成本</th>
-              <th class="num">備註</th>
-            </tr>
+          <thead id="financeTableHead">
           </thead>
           <tbody id="financeTableBody">
             <tr><td colspan="12" style="text-align:center;padding:32px;color:var(--gray-300)">請先在儀表板選擇帳戶，或等待資料載入</td></tr>
@@ -1027,7 +1046,14 @@ input:checked + .slider:before { transform: translateX(14px); }
 <!-- FB SDK -->
 <div id="fb-root"></div>
 <script>
+// Fallback: if FB SDK doesn't respond in 6s, show login anyway
+var _fbTimeout = setTimeout(function() {
+  var el = document.getElementById('loginChecking');
+  if(el && el.style.display !== 'none') showLogin();
+}, 6000);
+
 window.fbAsyncInit = function() {
+  clearTimeout(_fbTimeout);
   FB.init({ appId: '2780372365654462', cookie: true, xfbml: true, version: 'v21.0' });
   FB.getLoginStatus(function(resp) { handleFBStatus(resp); });
 };
@@ -1058,7 +1084,9 @@ let aiCampData = {}; // separate cache for AI view (keyed by accountId)
 let finDateConfig = { preset: 'this_month', from: null, to: null };
 let finCampData = {}; // separate cache for finance view
 let finSelectedAcctIds = []; // selected accounts in finance view (empty = all)
-let finRowMarkups = {}; // per-campaign markup overrides { campaignId: % }
+let finRowMarkups = JSON.parse(localStorage.getItem('fin_row_markups') || '{}'); // per-campaign markup overrides { campaignId: % }
+let finPinnedIds = JSON.parse(localStorage.getItem('fin_pinned_ids') || '[]'); // pinned campaign IDs (shown at top)
+let finSort = { key: null, dir: 'desc' };
 let currentLaunchStep = 1;
 let _currentUserId = null;  // FB user ID for cloud settings sync
 let _syncTimer = null;       // debounce timer for cloud sync
@@ -1084,9 +1112,10 @@ const statusBadge = s => {
   if(s==='PAUSED') return '<span class="badge badge-paused">已暫停</span>';
   return `<span class="badge badge-other">${s}</span>`;
 };
-const budgetStr = item => {
-  if(item.daily_budget) return `日 ${fM(item.daily_budget/100)}`;
-  if(item.lifetime_budget) return `總 ${fM(item.lifetime_budget/100)}`;
+const budgetStr = (item, isCamp=false) => {
+  if(item.daily_budget && +item.daily_budget > 0) return `日 $${fM(+item.daily_budget)}`;
+  if(item.lifetime_budget && +item.lifetime_budget > 0) return `總 $${fM(+item.lifetime_budget)}`;
+  if(isCamp) return '<span style="font-size:10px;color:var(--gray-300)">廣告組合</span>';
   return '—';
 };
 const getDateParams = () => {
@@ -1404,11 +1433,22 @@ async function init() {
     defaultPreset: 'this_month',
     onApply: function(cfg) { aiDateConfig = cfg; aiCampData = {}; loadAiAnalysis(); }
   });
+  dpAlert = new DatePicker('dpAlert', {
+    varName: 'dpAlert',
+    defaultPreset: 'this_month',
+    onApply: function(cfg) { alertDateConfig = cfg; alertCampData = {}; loadAiAlerts(); }
+  });
   dpFin = new DatePicker('dpFin', {
     varName: 'dpFin',
     defaultPreset: 'this_month',
     onApply: function(cfg) { finDateConfig = cfg; finCampData = {}; loadFinance(); }
   });
+  // Restore saved default markup
+  const savedMarkup = localStorage.getItem('fin_default_markup');
+  if(savedMarkup) {
+    const el = document.getElementById('financeMarkupDefault');
+    if(el) el.value = savedMarkup;
+  }
 }
 
 // ── Cloud Settings Sync ────────────────────────────────────
@@ -1543,6 +1583,11 @@ async function loadDashboard() {
     return;
   }
   document.getElementById('treeContainer').innerHTML = '<div class="loading"><div class="spinner"></div>載入中...</div>';
+  // Show shimmer on stats immediately
+  ['spend','imp','reach','clicks','ctr','cpc','cpm','freq','purchase','lead','msg','cpm-msg'].forEach(k => {
+    const el = document.getElementById('st-'+k);
+    if(el) el.innerHTML = '<span style="display:inline-block;width:60px;height:18px;background:linear-gradient(90deg,var(--border) 25%,var(--warm-white) 50%,var(--border) 75%);background-size:200% 100%;border-radius:4px;animation:shimmer 1.2s infinite"></span>';
+  });
   // Load campaigns for all selected accounts in parallel
   const dp = getDateParams();
   await Promise.all(selectedAccounts.map(async acc => {
@@ -1630,6 +1675,7 @@ function renderTree() {
   let allCamps = selectedAccounts.flatMap(acc => campData[acc.id] || []);
 
   // Filter
+  if(filterActiveOnly) allCamps = allCamps.filter(c => c.status === 'ACTIVE');
   if(search) allCamps = allCamps.filter(c => c.name.toLowerCase().includes(search));
   if(filterActiveOnly) allCamps = allCamps.filter(c => c.status === 'ACTIVE');
 
@@ -1704,7 +1750,7 @@ function renderTree() {
       <td class="num">${fM(ins.cpc)}</td>
       <td class="num">${(()=>{const m=getMsgTree(camp);return m>0?fN(m):'—';})()}</td>
       <td class="num">${(()=>{const m=getMsgTree(camp),s=+ins.spend||0;return m>0?'$'+fM(s/m):'—';})()}</td>
-      <td class="num">${campBudget}</td>
+      <td class="num" style="white-space:nowrap">${budgetStr(camp, true)}</td>
       <td onclick="event.stopPropagation()">
         <div style="display:flex;align-items:center;gap:6px">
           <label class="toggle"><input type="checkbox" ${camp.status==='ACTIVE'?'checked':''} onchange="toggleStatus('campaigns','${camp.id}',this,true)"><span class="slider"></span></label>
@@ -1743,7 +1789,7 @@ function renderTree() {
             <td class="num">${fM(ai.cpc)}</td>
             <td class="num">${(()=>{const m=getMsgTree(adset);return m>0?fN(m):'—';})()}</td>
             <td class="num">${(()=>{const m=getMsgTree(adset),s=+ai.spend||0;return m>0?'$'+fM(s/m):'—';})()}</td>
-            <td class="num">${budgetStr(adset)}</td>
+            <td class="num" style="white-space:nowrap">${budgetStr(adset)}</td>
             <td onclick="event.stopPropagation()">
               <div style="display:flex;align-items:center;gap:6px">
                 <label class="toggle"><input type="checkbox" ${adset.status==='ACTIVE'?'checked':''} onchange="toggleStatus('adsets','${adset.id}',this,false)"><span class="slider"></span></label>
@@ -2116,12 +2162,12 @@ async function loadAiAnalysis() {
 
   if(!visible.length) {
     show('aiEmpty', 'block'); show('aiLoading', 'none');
-    show('aiInsightRow', 'none'); show('aiChartGrid', 'none'); show('aiTextCards', 'none');
+    show('aiInsightRow', 'none'); show('aiChartGrid', 'none');
     return;
   }
 
   show('aiEmpty', 'none'); show('aiLoading', 'flex');
-  show('aiInsightRow', 'none'); show('aiChartGrid', 'none'); show('aiTextCards', 'none');
+  show('aiInsightRow', 'none'); show('aiChartGrid', 'none');
 
   // Load campaign data for any visible account not yet cached (separate aiCampData cache)
   const dp = getAiDateParams();
@@ -2240,8 +2286,78 @@ async function loadAiAnalysis() {
     }
   });
 
-  // ── Comprehensive Insights ──────────────────────────────────
-  const campRef = c => `<span style="color:var(--gray-500);font-size:11px">${c._accountName}</span> → <strong>${c.name}</strong>`;
+}
+
+// ── AI Alerts ────────────────────────────────────────────────
+let alertCampData = {};
+let alertDateConfig = { preset: 'this_month', from: null, to: null };
+
+function onAlertDateChange() {
+  const val = document.getElementById('alertDatePreset').value;
+  const wrap = document.getElementById('alertDateRangeWrap');
+  if(val === 'custom') { wrap.classList.add('show'); return; }
+  wrap.classList.remove('show');
+  alertDateConfig = { preset: val, from: null, to: null };
+  alertCampData = {};
+  loadAiAlerts();
+}
+function applyAlertCustomDate() {
+  alertDateConfig.preset = 'custom';
+  alertDateConfig.from = document.getElementById('alertDateFrom').value;
+  alertDateConfig.to = document.getElementById('alertDateTo').value;
+  if(!alertDateConfig.from || !alertDateConfig.to) return alert('請選擇日期區間');
+  alertCampData = {};
+  loadAiAlerts();
+}
+const getAlertDateParams = () => {
+  if(alertDateConfig.preset === 'custom' && alertDateConfig.from && alertDateConfig.to)
+    return `time_range={"since":"${alertDateConfig.from}","until":"${alertDateConfig.to}"}`;
+  return `date_preset=${alertDateConfig.preset}`;
+};
+
+async function loadAiAlerts() {
+  const visible = getVisibleAccounts();
+  const showEl = (id, display) => { const el = document.getElementById(id); if(el) el.style.display = display; };
+
+  if(!visible.length) {
+    showEl('alertEmpty', 'block'); showEl('alertLoading', 'none'); showEl('alertTextCards', 'none');
+    return;
+  }
+  showEl('alertEmpty', 'none'); showEl('alertLoading', 'flex'); showEl('alertTextCards', 'none');
+
+  const dp = getAlertDateParams();
+  await Promise.all(visible.map(async acc => {
+    if(!alertCampData[acc.id]) {
+      const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
+      alertCampData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+    }
+  }));
+
+  const allCamps = visible.flatMap(acc => alertCampData[acc.id] || []);
+  showEl('alertLoading', 'none');
+
+  if(!allCamps.length) {
+    showEl('alertEmpty', 'block');
+    document.getElementById('alertEmpty').textContent = '無廣告資料可分析';
+    return;
+  }
+
+  const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'];
+  const getMsgCount = c => {
+    const acts = getIns(c).actions || [];
+    for(const t of MSG_TYPES) { const a = acts.find(x=>x.action_type===t); if(a) return +a.value||0; }
+    return 0;
+  };
+  const hasMsgData = allCamps.some(c=>getMsgCount(c)>0);
+
+  const totalSpend = allCamps.reduce((s,c)=>s+(+getIns(c).spend||0), 0);
+  const ctrVals = allCamps.filter(c=>+getIns(c).ctr>0).map(c=>+getIns(c).ctr);
+  const cpcVals = allCamps.filter(c=>+getIns(c).cpc>0).map(c=>+getIns(c).cpc);
+  const avgCtr = ctrVals.length ? ctrVals.reduce((a,b)=>a+b,0)/ctrVals.length : 0;
+  const avgCpc = cpcVals.length ? cpcVals.reduce((a,b)=>a+b,0)/cpcVals.length : 0;
+  const totalMsg = allCamps.reduce((s,c)=>s+getMsgCount(c), 0);
+  const avgCostPerMsg = totalMsg > 0 ? totalSpend / totalMsg : 0;
+
   const issues = { priority: [], warning: [], good: [] };
 
   // ── 優先處理：低效率問題 ──────────────────────────────────────
@@ -2325,7 +2441,7 @@ async function loadAiAnalysis() {
     ...issues.good.map(i=>({...i, section:'表現優秀', sectionColor:'#2E7D32', tagColor:'#1B5E20'})),
   ];
 
-  const tcEl = document.getElementById('aiTextCards');
+  const tcEl = document.getElementById('alertTextCards');
   if(!allRows.length) {
     tcEl.innerHTML = '<div style="text-align:center;padding:32px;color:var(--gray-300);font-size:13px">無特別需要關注的項目</div>';
   } else {
@@ -2370,7 +2486,7 @@ async function loadAiAnalysis() {
               <td style="padding:10px 12px;text-align:right;${+ci.frequency>5?'color:var(--orange);font-weight:600':''}">${+ci.frequency>0?(+ci.frequency).toFixed(1):'—'}</td>
               <td style="padding:10px 12px;text-align:right">${msgs>0?fN(msgs):'—'}</td>
               <td style="padding:10px 12px;text-align:right">${msgCost>0?'$'+fM(msgCost):'—'}</td>
-              <td id="ai-rec-${idx}" style="padding:10px 12px;color:var(--gray-500);min-width:200px;font-size:12px">
+              <td id="alert-rec-${idx}" style="padding:10px 12px;color:var(--gray-500);min-width:200px;font-size:12px">
                 <span style="color:var(--gray-300);font-style:italic">AI 分析中...</span>
               </td>
             </tr>`;
@@ -2380,14 +2496,15 @@ async function loadAiAnalysis() {
     </div>`;
 
     // Async: fetch AI recommendations for all rows
-    fetchAiRecommendations(allRows);
+    fetchAiRecommendations(allRows, 'alert-rec-');
   }
 
-  show('aiTextCards', 'grid');
+  showEl('alertTextCards', 'grid');
 }
 
-async function fetchAiRecommendations(rows) {
+async function fetchAiRecommendations(rows, idPrefix) {
   if(!rows.length) return;
+  idPrefix = idPrefix || 'alert-rec-';
   const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'];
   const getMsgC = item => { const acts = getIns(item.camp).actions||[]; for(const t of MSG_TYPES){const a=acts.find(x=>x.action_type===t);if(a)return +a.value||0;} return 0; };
 
@@ -2415,13 +2532,13 @@ async function fetchAiRecommendations(rows) {
     if(!match) throw new Error('no array');
     const recs = JSON.parse(match[0]);
     rows.forEach((_, idx) => {
-      const el = document.getElementById(`ai-rec-${idx}`);
+      const el = document.getElementById(`${idPrefix}${idx}`);
       if(el && recs[idx]) el.textContent = recs[idx];
     });
   } catch(e) {
     // Fallback to rule-based labels
     rows.forEach((item, idx) => {
-      const el = document.getElementById(`ai-rec-${idx}`);
+      const el = document.getElementById(`${idPrefix}${idx}`);
       if(el) el.textContent = item.label;
     });
   }
@@ -2475,34 +2592,23 @@ function renderFinanceAcctList(accounts) {
   const totalPlus = accounts.reduce((s,a)=>s+getAcctPlus(a.id),0);
   const totalCount = accounts.reduce((s,a)=>s+getAcctCampCount(a.id),0);
 
-  // Update summary stats
-  document.getElementById('fin-acct-count').textContent = accounts.length;
-  document.getElementById('fin-total-spend').textContent = '$'+fM(totalSpend);
-  document.getElementById('fin-total-markup').textContent = '$'+fM(Math.ceil(totalPlus-totalSpend));
-  document.getElementById('fin-total-plus').textContent = '$'+fM(Math.ceil(totalPlus));
-
-  const rowStyle = 'display:flex;align-items:center;padding:6px 14px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px;';
-  const activeStyle = 'background:var(--orange-bg);';
-
-  const allRow = `<div style="${rowStyle}${finSelectedAcctIds.length===0?activeStyle:''}" onclick="finSelectAcct('__all__')">
-    <span style="width:28px;flex-shrink:0;color:var(--gray-300)"></span>
-    <span style="flex:1;font-weight:600;color:var(--orange);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">全部帳戶</span>
-    <span style="width:36px;text-align:right;font-weight:600">${totalCount}</span>
-    <span style="width:70px;text-align:right;font-variant-numeric:tabular-nums">${fM(totalSpend)}</span>
-    <span style="width:70px;text-align:right;font-variant-numeric:tabular-nums;color:var(--orange);font-weight:600">${fM(Math.ceil(totalPlus))}</span>
+  const dataLoaded = accounts.every(a => finCampData[a.id] !== undefined);
+  const allRow = `<div class="finance-acct-item ${finSelectedAcctIds.length===0?'active':''}" onclick="finSelectAcct('__all__')">
+    <div style="flex:1;min-width:0">
+      <div class="finance-acct-name">全部帳戶</div>
+      ${dataLoaded?`<div style="font-size:11px;color:var(--gray-400);margin-top:3px"><span style="color:var(--gray-500)">花費</span> $${fM(totalSpend)}</div><div style="font-size:11px;color:var(--orange);font-weight:600"><span style="color:var(--gray-500);font-weight:400">含%</span> $${fM(Math.ceil(totalPlus))}</div>`:'<div style="font-size:11px;color:var(--gray-300);margin-top:2px">載入中...</div>'}
+    </div>
   </div>`;
 
   const rows = accounts.map((acc, i) => {
     const spend = getAcctSpend(acc.id);
-    const plus = getAcctPlus(acc.id);
-    const count = getAcctCampCount(acc.id);
-    const isActive = finSelectedAcctIds.includes(acc.id);
-    return `<div style="${rowStyle}${isActive?activeStyle:''}" onclick="finSelectAcct('${acc.id}')" title="${escHtml(acc.name)}">
-      <span style="width:28px;flex-shrink:0;color:var(--gray-300)">${i+1}</span>
-      <span style="flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(acc.name)}</span>
-      <span style="width:36px;text-align:right">${count}</span>
-      <span style="width:70px;text-align:right;font-variant-numeric:tabular-nums">${spend>0?fM(spend):'—'}</span>
-      <span style="width:70px;text-align:right;font-variant-numeric:tabular-nums;color:var(--orange);font-weight:600">${plus>0?fM(Math.ceil(plus)):'—'}</span>
+    const plus = getAcctPlus(acc.id, spend);
+    const loaded = finCampData[acc.id] !== undefined;
+    return `<div class="finance-acct-item ${finSelectedAcctIds.includes(acc.id)?'active':''}" onclick="finSelectAcct('${acc.id}')">
+      <div style="flex:1;min-width:0">
+        <div class="finance-acct-name" title="${acc.name}">${acc.name}</div>
+        ${loaded?`<div style="font-size:11px;color:var(--gray-400);margin-top:3px"><span style="color:var(--gray-500)">花費</span> $${fM(spend)}</div><div style="font-size:11px;color:var(--orange);font-weight:600"><span style="color:var(--gray-500);font-weight:400">含%</span> $${fM(Math.ceil(plus))}</div>`:'<div style="font-size:11px;color:var(--gray-300);margin-top:2px">載入中...</div>'}
+      </div>
     </div>`;
   }).join('');
 
@@ -2530,92 +2636,130 @@ function getFinanceDateRange() {
 }
 
 function applyDefaultMarkup() {
-  const def = parseFloat(document.getElementById('financeMarkupDefault')?.value) || 0;
-  // Apply to all rows that haven't been individually set
-  document.querySelectorAll('.fin-markup-input').forEach(inp => {
-    if(!inp.dataset.customized) inp.value = def;
-  });
+  renderFinanceTable();
+}
+
+function finSortBy(key) {
+  if(finSort.key === key) finSort.dir = finSort.dir === 'asc' ? 'desc' : 'asc';
+  else { finSort.key = key; finSort.dir = 'desc'; }
+  renderFinanceTable();
+}
+
+function toggleFinPin(campId) {
+  const idx = finPinnedIds.indexOf(campId);
+  if(idx === -1) finPinnedIds.push(campId);
+  else finPinnedIds.splice(idx, 1);
+  localStorage.setItem('fin_pinned_ids', JSON.stringify(finPinnedIds));
   renderFinanceTable();
 }
 
 function renderFinanceTable() {
   const defaultMarkup = parseFloat(document.getElementById('financeMarkupDefault')?.value) || 0;
   const q = (document.getElementById('financeSearch')?.value||'').toLowerCase();
-  const { start, end } = getFinanceDateRange();
   const visible = getVisibleAccounts();
   const filtered = finSelectedAcctIds.length ? visible.filter(a=>finSelectedAcctIds.includes(a.id)) : visible;
-  const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'];
 
-  const allCamps = filtered.flatMap(acc => (finCampData[acc.id]||[]).filter(c => +getIns(c).spend > 0));
-  financeRows = allCamps.filter(c => !q || c.name.toLowerCase().includes(q) || c._accountName.toLowerCase().includes(q));
+  // Aggregate per account
+  let accountRows = filtered.map(acc => {
+    const camps = (finCampData[acc.id]||[]).filter(c => +getIns(c).spend > 0);
+    const spend = camps.reduce((s,c) => s + (+getIns(c).spend||0), 0);
+    return { acc, campCount: camps.length, spend };
+  }).filter(r => finCampData[r.acc.id] !== undefined);
+
+  if(q) accountRows = accountRows.filter(r => r.acc.name.toLowerCase().includes(q));
+
+  // Sort
+  const sortFn = (a, b) => {
+    if(!finSort.key) return 0;
+    const getVal = r => {
+      const m = finRowMarkups[r.acc.id] !== undefined ? finRowMarkups[r.acc.id] : defaultMarkup;
+      switch(finSort.key) {
+        case 'name': return r.acc.name;
+        case 'count': return r.campCount;
+        case 'spend': return r.spend;
+        case 'markup': return m;
+        case 'plus': return r.spend*(1+m/100);
+        default: return 0;
+      }
+    };
+    const va = getVal(a), vb = getVal(b);
+    const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
+    return finSort.dir === 'asc' ? cmp : -cmp;
+  };
+  const pinned = accountRows.filter(r=>finPinnedIds.includes(r.acc.id)).sort(sortFn);
+  const unpinned = accountRows.filter(r=>!finPinnedIds.includes(r.acc.id)).sort(sortFn);
+  financeRows = [...pinned, ...unpinned];
+
+  // Render sortable header
+  const fsTh = (label, key, align='left') => {
+    const isActive = finSort.key === key;
+    const arrow = isActive ? (finSort.dir==='asc'?' ↑':' ↓') : '';
+    return `<th class="${align==='right'?'num':''}" style="cursor:${key?'pointer':'default'};user-select:none;white-space:nowrap;${isActive?'color:var(--orange)':''}" ${key?`onclick="finSortBy('${key}')"`:''}>${label}${arrow}</th>`;
+  };
+  document.getElementById('financeTableHead').innerHTML = `<tr>
+    ${fsTh('No.', '')}
+    ${fsTh('廣告帳號', 'name')}
+    ${fsTh('數量', 'count', 'right')}
+    ${fsTh('花費', 'spend', 'right')}
+    ${fsTh('月%', 'markup', 'right')}
+    ${fsTh('花費+%', 'plus', 'right')}
+    <th style="text-align:center;width:48px">Pin</th>
+  </tr>`;
 
   const body = document.getElementById('financeTableBody');
   if(!financeRows.length) {
-    body.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:32px;color:var(--gray-300)">無資料</td></tr>';
+    body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--gray-300)">無資料</td></tr>';
     return;
   }
 
-  let totalSpend = 0, totalClicks = 0, totalMsg = 0, totalPlus = 0, campCount = 0;
-  body.innerHTML = financeRows.map((c, i) => {
-    const ins = getIns(c);
-    const spend = +ins.spend || 0;
-    const clicks = +ins.clicks || 0;
-    const cpc = +ins.cpc || 0;
-    const msgs = MSG_TYPES.reduce((s,t)=>{ const a=(ins.actions||[]).find(x=>x.action_type===t); return s+(a?+a.value:0); },0);
-    const msgCost = msgs > 0 ? spend / msgs : 0;
-    const rowMarkup = finRowMarkups[c.id] !== undefined ? finRowMarkups[c.id] : defaultMarkup;
-    const plus = spend * (1 + rowMarkup/100);
-    totalSpend += spend; totalClicks += clicks; totalMsg += msgs; totalPlus += plus; campCount++;
-    return `<tr>
-      <td style="color:var(--gray-500)">${i+1}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${escHtml(c.name)}</td>
-      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;color:var(--gray-500);font-size:12px">${escHtml(c._accountName)}</td>
-      <td style="color:var(--gray-500)">${start}</td>
-      <td style="color:var(--gray-500)">${end}</td>
-      <td class="num">$${fM(spend)}</td>
-      <td class="num"><input class="fin-markup-input" type="number" value="${rowMarkup}" min="0" max="999" step="0.5" data-camp-id="${c.id}" oninput="onRowMarkupChange(this)" style="width:52px;height:26px;border:1.5px solid var(--border);border-radius:4px;text-align:center;font-size:12px;font-family:inherit;padding:0 4px">%</td>
+  let totalSpend = 0, totalPlus = 0;
+  body.innerHTML = financeRows.map((r, i) => {
+    const isPinned = finPinnedIds.includes(r.acc.id);
+    const rowMarkup = finRowMarkups[r.acc.id] !== undefined ? finRowMarkups[r.acc.id] : defaultMarkup;
+    const plus = r.spend * (1 + rowMarkup/100);
+    totalSpend += r.spend; totalPlus += plus;
+    return `<tr style="${isPinned?'border-left:3px solid var(--orange);background:var(--orange-bg);':''}">
+      <td style="color:var(--gray-500);width:40px">${i+1}</td>
+      <td style="font-weight:600">${r.acc.name}</td>
+      <td class="num" style="color:var(--gray-500)">${r.campCount}</td>
+      <td class="num">$${fM(r.spend)}</td>
+      <td class="num"><input class="fin-markup-input" type="number" value="${rowMarkup}" min="0" max="999" step="0.5" data-acct-id="${r.acc.id}" oninput="onRowMarkupChange(this)" style="width:52px;height:26px;border:1.5px solid var(--border);border-radius:4px;text-align:center;font-size:12px;font-family:inherit;padding:0 4px">%</td>
       <td class="num fin-plus-cell" style="color:var(--orange);font-weight:600">$${fM(Math.ceil(plus))}</td>
-      <td class="num">${fN(clicks)}</td>
-      <td class="num">${cpc>0?'$'+fM(cpc):'—'}</td>
-      <td class="num">${msgs>0?fN(msgs):'—'}</td>
-      <td class="num">${msgCost>0?'$'+fM(msgCost):'—'}</td>
-      <td class="num"><input type="text" placeholder="備註" style="width:80px;height:26px;border:1.5px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;padding:0 6px"></td>
+      <td style="text-align:center">
+        <button onclick="toggleFinPin('${r.acc.id}')" title="${isPinned?'取消置頂':'置頂'}" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 6px;opacity:${isPinned?'1':'0.25'};transition:opacity 0.15s">📌</button>
+      </td>
     </tr>`;
   }).join('');
 
-  // KPIs
-  const avgClicks = campCount > 0 ? totalClicks / campCount : 0;
-  const avgCpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
-  const avgMsg = campCount > 0 ? totalMsg / campCount : 0;
-  const avgMsgCost = totalMsg > 0 ? totalSpend / totalMsg : 0;
+  // KPIs & summary
   document.getElementById('fin-kpi-spend').textContent = '$' + fM(totalSpend);
-  document.getElementById('fin-kpi-plus').textContent = '$' + fM(totalPlus);
-  document.getElementById('fin-kpi-clicks').textContent = fN(Math.round(avgClicks));
-  document.getElementById('fin-kpi-cpc').textContent = avgCpc > 0 ? '$' + fM(avgCpc) : '—';
-  document.getElementById('fin-kpi-msg').textContent = fN(Math.round(avgMsg));
-  document.getElementById('fin-kpi-cpm').textContent = avgMsgCost > 0 ? '$' + fM(avgMsgCost) : '—';
-  // Summary
+  document.getElementById('fin-kpi-plus').textContent = '$' + fM(Math.ceil(totalPlus));
+  document.getElementById('fin-kpi-clicks').textContent = '—';
+  document.getElementById('fin-kpi-cpc').textContent = '—';
+  document.getElementById('fin-kpi-msg').textContent = '—';
+  document.getElementById('fin-kpi-cpm').textContent = '—';
   document.getElementById('fin-acct-count').textContent = filtered.length;
   document.getElementById('fin-total-spend').textContent = '$' + fM(totalSpend);
   document.getElementById('fin-total-markup').textContent = '$' + fM(Math.ceil(totalPlus - totalSpend));
-  document.getElementById('fin-total-plus').textContent = '$' + fM(totalPlus);
+  document.getElementById('fin-total-plus').textContent = '$' + fM(Math.ceil(totalPlus));
 }
 
 function onRowMarkupChange(inp) {
-  const id = inp.dataset.campId;
+  const id = inp.dataset.acctId || inp.dataset.campId;
   finRowMarkups[id] = parseFloat(inp.value) || 0;
   syncToCloud();
+  localStorage.setItem('fin_row_markups', JSON.stringify(finRowMarkups));
   // Update the plus cell in same row
   const row = inp.closest('tr');
-  const spendCell = row.cells[5].textContent.replace(/[$,]/g,'');
+  const spendCell = row.cells[3].textContent.replace(/[$,]/g,'');
   const spend = parseFloat(spendCell) || 0;
   const plus = spend * (1 + finRowMarkups[id]/100);
   row.querySelector('.fin-plus-cell').textContent = '$' + fM(Math.ceil(plus));
   // Update summary totals
   let totalSpend = 0, totalPlus = 0;
-  financeRows.forEach(c => {
-    const s = +getIns(c).spend||0;
-    const m = finRowMarkups[c.id] !== undefined ? finRowMarkups[c.id] : (parseFloat(document.getElementById('financeMarkupDefault')?.value)||0);
+  financeRows.forEach(r => {
+    const s = r.spend||0;
+    const m = finRowMarkups[r.acc.id] !== undefined ? finRowMarkups[r.acc.id] : (parseFloat(document.getElementById('financeMarkupDefault')?.value)||0);
     totalSpend += s; totalPlus += s*(1+m/100);
   });
   document.getElementById('fin-total-spend').textContent = '$' + fM(totalSpend);
@@ -2628,14 +2772,10 @@ function onRowMarkupChange(inp) {
 function downloadFinanceCsv() {
   const defaultMarkup = parseFloat(document.getElementById('financeMarkupDefault')?.value) || 0;
   const { start, end } = getFinanceDateRange();
-  const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'];
-  const rows = [['NO.','活動名稱','廣告帳戶','報告起始','報告截止','花費金額','月%','金額+%','連結點擊數','點擊成本','私訊數','私訊成本']];
-  financeRows.forEach((c,i) => {
-    const ins = getIns(c);
-    const spend = +ins.spend||0, clicks = +ins.clicks||0, cpc = +ins.cpc||0;
-    const msgs = MSG_TYPES.reduce((s,t)=>{ const a=(ins.actions||[]).find(x=>x.action_type===t); return s+(a?+a.value:0); },0);
-    const rowMarkup = finRowMarkups[c.id] !== undefined ? finRowMarkups[c.id] : defaultMarkup;
-    rows.push([i+1, c.name, c._accountName, start, end, spend.toFixed(0), rowMarkup+'%', Math.ceil(spend*(1+rowMarkup/100)), clicks, cpc.toFixed(0), msgs||'', msgs>0?(spend/msgs).toFixed(0):'']);
+  const rows = [['No.','廣告帳號','數量','花費','月%','花費+%']];
+  financeRows.forEach((r,i) => {
+    const rowMarkup = finRowMarkups[r.acc.id] !== undefined ? finRowMarkups[r.acc.id] : defaultMarkup;
+    rows.push([i+1, r.acc.name, r.campCount, r.spend.toFixed(0), rowMarkup+'%', Math.ceil(r.spend*(1+rowMarkup/100))]);
   });
   const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
@@ -2683,6 +2823,7 @@ function showView(name) {
   document.getElementById(`view-${name}`).classList.add('active');
   document.getElementById(`nav-${name}`)?.classList.add('active');
   if(name==='ai') loadAiAnalysis();
+  if(name==='alert') loadAiAlerts();
   if(name==='finance') loadFinance();
   if(name==='settings') {
     renderSettingsBmList();

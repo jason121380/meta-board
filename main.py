@@ -183,7 +183,7 @@ async def quick_launch_campaign(payload: CampaignCreate):
         "objective": payload.objective,
         "status": payload.status,
         "special_ad_categories": "[]",
-        "daily_budget": str(payload.daily_budget * 100),
+        "daily_budget": str(payload.daily_budget),
     })
 
 
@@ -236,9 +236,9 @@ async def update_campaign_status(campaign_id: str, status: str = Query(...)):
 async def update_campaign_budget(campaign_id: str, daily_budget: int = Query(None), lifetime_budget: int = Query(None)):
     payload = {}
     if daily_budget:
-        payload["daily_budget"] = str(daily_budget * 100)
+        payload["daily_budget"] = str(daily_budget)
     if lifetime_budget:
-        payload["lifetime_budget"] = str(lifetime_budget * 100)
+        payload["lifetime_budget"] = str(lifetime_budget)
     return await fb_post(campaign_id, payload)
 
 
@@ -270,7 +270,7 @@ async def update_adset_status(adset_id: str, status: str = Query(...)):
 async def update_adset_budget(adset_id: str, daily_budget: int = Query(None)):
     payload = {}
     if daily_budget:
-        payload["daily_budget"] = str(daily_budget * 100)
+        payload["daily_budget"] = str(daily_budget)
     return await fb_post(adset_id, payload)
 
 
