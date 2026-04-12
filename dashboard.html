@@ -508,6 +508,103 @@ input:checked + .slider:before { transform: translateX(14px); }
 .chat-send-btn { width: 36px; height: 36px; background: var(--orange); border: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
 .chat-send-btn:hover { background: var(--orange-dark); }
 .chat-send-btn:disabled { background: var(--gray-300); cursor: not-allowed; }
+/* ── Custom Date Picker ──────────────────────────────────── */
+.dp-wrap { position: relative; display: inline-flex; }
+.dp-trigger {
+  display: flex; align-items: center; gap: 8px;
+  height: 36px; padding: 0 14px;
+  border: 1.5px solid var(--border); border-radius: var(--radius);
+  background: var(--white); cursor: pointer; font-size: 13px;
+  font-weight: 500; color: var(--black); font-family: inherit;
+  transition: all 0.15s; user-select: none; white-space: nowrap;
+}
+.dp-trigger:hover { border-color: var(--orange-border); background: var(--orange-bg); }
+.dp-trigger.active { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255,107,44,0.08); }
+.dp-trigger svg { color: var(--orange); flex-shrink: 0; }
+.dp-arrow { font-size: 10px; color: var(--gray-300); transition: transform 0.2s; }
+.dp-trigger.active .dp-arrow { transform: rotate(180deg); }
+.dp-dropdown {
+  display: none; position: absolute; top: calc(100% + 6px); right: 0;
+  background: var(--white); border: 1.5px solid var(--border);
+  border-radius: 16px; box-shadow: 0 12px 48px rgba(0,0,0,0.12);
+  z-index: 999; overflow: hidden; animation: dpFadeIn 0.15s ease;
+}
+.dp-dropdown.open { display: flex; }
+@keyframes dpFadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+.dp-presets { width: 150px; border-right: 1px solid var(--border); padding: 8px; flex-shrink: 0; }
+.dp-preset {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: 8px;
+  cursor: pointer; font-size: 13px; color: var(--gray-500);
+  transition: all 0.1s; user-select: none;
+}
+.dp-preset:hover { background: var(--orange-bg); color: var(--orange); }
+.dp-preset.active { background: var(--orange-bg); color: var(--orange); font-weight: 600; }
+.dp-preset-dot { width: 6px; height: 6px; border-radius: 50%; border: 1.5px solid var(--gray-300); flex-shrink: 0; }
+.dp-preset.active .dp-preset-dot { background: var(--orange); border-color: var(--orange); }
+.dp-divider { height: 1px; background: var(--border); margin: 4px 0; }
+.dp-calendar { padding: 12px 16px; min-width: 268px; }
+.dp-cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.dp-cal-title { font-size: 14px; font-weight: 700; color: var(--black); user-select: none; }
+.dp-cal-nav {
+  width: 28px; height: 28px; border: none; background: none;
+  border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: var(--gray-500); font-size: 12px; transition: all 0.1s;
+}
+.dp-cal-nav:hover { background: var(--orange-bg); color: var(--orange); }
+.dp-cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 2px; }
+.dp-cal-wd { text-align: center; font-size: 11px; font-weight: 600; color: var(--gray-300); padding: 4px 0; user-select: none; }
+.dp-cal-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
+.dp-day {
+  height: 32px; border: none; background: none; border-radius: 0;
+  cursor: pointer; font-size: 12px; color: var(--black);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.08s; font-family: inherit;
+}
+.dp-day:hover:not(.other-month):not(.selected) { background: var(--orange-bg); }
+.dp-day.other-month { color: var(--border); cursor: default; }
+.dp-day.today { font-weight: 700; color: var(--orange); }
+.dp-day.selected { background: var(--orange); color: #fff; font-weight: 600; }
+.dp-day.selected.range-start { border-radius: 8px 0 0 8px; }
+.dp-day.selected.range-end { border-radius: 0 8px 8px 0; }
+.dp-day.selected.range-single { border-radius: 8px; }
+.dp-day.in-range { background: var(--orange-bg); color: var(--orange); }
+.dp-cal-days.readonly .dp-day { cursor: default; }
+.dp-cal-days.readonly .dp-day:hover:not(.selected):not(.in-range) { background: none; }
+.dp-range-info {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 0 0; margin-top: 8px; border-top: 1px solid var(--border);
+  font-size: 12px; color: var(--gray-500);
+}
+.dp-range-badge { padding: 3px 10px; border-radius: 6px; background: var(--orange-bg); font-weight: 500; color: var(--orange); font-size: 12px; }
+.dp-apply-btn {
+  margin-left: auto; height: 30px; padding: 0 16px;
+  background: var(--orange); color: #fff; border: none; border-radius: 8px;
+  font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background 0.15s;
+}
+.dp-apply-btn:hover { background: var(--orange-dark); }
+.dp-apply-btn:disabled { background: var(--gray-300); cursor: not-allowed; }
+
+/* ── UI Polish ───────────────────────────────────────────── */
+.stat { transition: transform 0.15s, box-shadow 0.15s; }
+.stat:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gray-300); }
+.dash-acct-list, .settings-acct-list, .finance-acct-list, .settings-bm-list { scroll-behavior: smooth; }
+
+@media (max-width: 768px) {
+  .dp-dropdown { flex-direction: column; min-width: 260px; max-width: calc(100vw - 24px); }
+  .dp-presets { width: 100%; border-right: none; border-bottom: 1px solid var(--border); padding: 6px; display: flex; flex-wrap: wrap; gap: 2px; }
+  .dp-preset { padding: 6px 10px; font-size: 12px; flex-shrink: 0; }
+  .dp-calendar { padding: 10px 12px; min-width: unset; }
+  .dp-trigger { height: 30px; padding: 0 10px; font-size: 11px; gap: 4px; }
+  .dp-trigger svg { width: 12px; height: 12px; }
+  .dp-day { height: 28px; font-size: 11px; }
+  .dp-range-info { flex-wrap: wrap; gap: 6px; }
+  .dp-range-badge { font-size: 11px; padding: 2px 8px; }
+}
 </style>
 </head>
 <body>
@@ -592,22 +689,7 @@ input:checked + .slider:before { transform: translateX(14px); }
   <div class="topbar">
     <div class="page-title">儀表板</div>
     <div class="topbar-spacer"></div>
-    <select id="datePreset" onchange="onDateChange()">
-      <option value="today">今天</option>
-      <option value="yesterday">昨天</option>
-      <option value="last_7d">近 7 天</option>
-      <option value="last_30d">近 30 天</option>
-      <option value="last_90d">近 90 天</option>
-      <option value="this_month" selected>本月</option>
-      <option value="last_month">上個月</option>
-      <option value="custom">自訂區間...</option>
-    </select>
-    <div class="date-range-wrap" id="dateRangeWrap">
-      <input type="date" id="dateFrom">
-      <span style="color:var(--gray-300)">—</span>
-      <input type="date" id="dateTo">
-      <button class="btn btn-blue btn-sm" onclick="applyCustomDate()">套用</button>
-    </div>
+    <div id="dpDash"></div>
     <div class="topbar-sep"></div>
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--gray-500);white-space:nowrap">
       <input type="checkbox" class="custom-cb" id="filterActiveOnly" onchange="saveFilterPref()"> 只顯示進行中
@@ -686,22 +768,7 @@ input:checked + .slider:before { transform: translateX(14px); }
   <div class="topbar">
     <div class="page-title">AI 廣告分析</div>
     <div class="topbar-spacer"></div>
-    <select id="aiDatePreset" onchange="onAiDateChange()">
-      <option value="today">今天</option>
-      <option value="yesterday">昨天</option>
-      <option value="last_7d">近 7 天</option>
-      <option value="last_30d">近 30 天</option>
-      <option value="last_90d">近 90 天</option>
-      <option value="this_month" selected>本月</option>
-      <option value="last_month">上個月</option>
-      <option value="custom">自訂區間...</option>
-    </select>
-    <div class="date-range-wrap" id="aiDateRangeWrap">
-      <input type="date" id="aiDateFrom">
-      <span style="color:var(--gray-300)">—</span>
-      <input type="date" id="aiDateTo">
-      <button class="btn btn-blue btn-sm" onclick="applyAiCustomDate()">套用</button>
-    </div>
+    <div id="dpAi"></div>
     <div class="topbar-sep"></div>
     <button class="btn btn-blue btn-sm" onclick="aiCampData={};loadAiAnalysis()">重新分析</button>
   </div>
@@ -753,22 +820,7 @@ input:checked + .slider:before { transform: translateX(14px); }
   <div class="topbar">
     <div class="page-title">財務專區</div>
     <div class="topbar-spacer"></div>
-    <select id="finDatePreset" onchange="onFinDateChange()">
-      <option value="today">今天</option>
-      <option value="yesterday">昨天</option>
-      <option value="last_7d">近 7 天</option>
-      <option value="last_30d">近 30 天</option>
-      <option value="last_90d">近 90 天</option>
-      <option value="this_month" selected>本月</option>
-      <option value="last_month">上個月</option>
-      <option value="custom">自訂區間...</option>
-    </select>
-    <div class="date-range-wrap" id="finDateRangeWrap">
-      <input type="date" id="finDateFrom">
-      <span style="color:var(--gray-300)">—</span>
-      <input type="date" id="finDateTo">
-      <button class="btn btn-blue btn-sm" onclick="applyFinCustomDate()">套用</button>
-    </div>
+    <div id="dpFin"></div>
     <div class="topbar-sep"></div>
     <button class="btn btn-blue btn-sm" onclick="downloadFinanceCsv()">下載資料</button>
   </div>
@@ -1010,6 +1062,7 @@ let finRowMarkups = {}; // per-campaign markup overrides { campaignId: % }
 let currentLaunchStep = 1;
 let _currentUserId = null;  // FB user ID for cloud settings sync
 let _syncTimer = null;       // debounce timer for cloud sync
+let dpDash = null, dpAi = null, dpFin = null; // date picker instances
 
 // ── Format ─────────────────────────────────────────────────
 const ACCT_STATUS = {1:'正常',2:'停用',3:'欠費',7:'待審核',8:'待結算',9:'寬限期',100:'待關閉',101:'暫時不可用'};
@@ -1037,10 +1090,240 @@ const budgetStr = item => {
   return '—';
 };
 const getDateParams = () => {
+  if(dpDash) return dpDash.getParams();
   if(dateConfig.preset === 'custom' && dateConfig.from && dateConfig.to)
     return `time_range={"since":"${dateConfig.from}","until":"${dateConfig.to}"}`;
   return `date_preset=${dateConfig.preset}`;
 };
+
+// ── DatePicker Component ────────────────────────────────────
+const DP_PRESETS = [
+  { value: 'today', label: '今天' },
+  { value: 'yesterday', label: '昨天' },
+  { value: 'last_7d', label: '近 7 天' },
+  { value: 'last_30d', label: '近 30 天' },
+  { value: 'last_90d', label: '近 90 天' },
+  { value: 'this_month', label: '本月' },
+  { value: 'last_month', label: '上個月' },
+];
+
+class DatePicker {
+  constructor(containerId, opts) {
+    this.container = document.getElementById(containerId);
+    this.varName = opts.varName;
+    this.onApply = opts.onApply;
+    this.preset = opts.defaultPreset || 'this_month';
+    this.customFrom = null;
+    this.customTo = null;
+    this.isOpen = false;
+    this.showCal = false;
+    this.viewDate = new Date();
+    this.viewDate.setDate(1);
+    this.picking = 'from';
+    this._boundClose = (e) => {
+      if (this.container && !this.container.contains(e.target)) this.close();
+    };
+    document.addEventListener('click', this._boundClose);
+    this.render();
+  }
+
+  static fmtDate(d) {
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  getLabel() {
+    if (this.preset === 'custom' && this.customFrom && this.customTo)
+      return this.customFrom + ' ~ ' + this.customTo;
+    const p = DP_PRESETS.find(p => p.value === this.preset);
+    return p ? p.label : '選擇日期';
+  }
+
+  getParams() {
+    if (this.preset === 'custom' && this.customFrom && this.customTo)
+      return 'time_range={"since":"' + this.customFrom + '","until":"' + this.customTo + '"}';
+    return 'date_preset=' + this.preset;
+  }
+
+  getConfig() {
+    return { preset: this.preset, from: this.customFrom, to: this.customTo };
+  }
+
+  getRange() {
+    if (this.preset === 'custom' && this.customFrom && this.customTo)
+      return { start: this.customFrom, end: this.customTo };
+    const today = new Date();
+    const fmt = DatePicker.fmtDate;
+    switch(this.preset) {
+      case 'today': return { start: fmt(today), end: fmt(today) };
+      case 'yesterday': { const d = new Date(today); d.setDate(d.getDate()-1); return { start: fmt(d), end: fmt(d) }; }
+      case 'last_7d': { const d = new Date(today); d.setDate(d.getDate()-6); return { start: fmt(d), end: fmt(today) }; }
+      case 'last_30d': { const d = new Date(today); d.setDate(d.getDate()-29); return { start: fmt(d), end: fmt(today) }; }
+      case 'last_90d': { const d = new Date(today); d.setDate(d.getDate()-89); return { start: fmt(d), end: fmt(today) }; }
+      case 'this_month': { const s = new Date(today.getFullYear(), today.getMonth(), 1); return { start: fmt(s), end: fmt(today) }; }
+      case 'last_month': { const s = new Date(today.getFullYear(), today.getMonth()-1, 1); const e = new Date(today.getFullYear(), today.getMonth(), 0); return { start: fmt(s), end: fmt(e) }; }
+      default: return { start: fmt(today), end: fmt(today) };
+    }
+  }
+
+  toggle(e) { if(e) e.stopPropagation(); this.isOpen ? this.close() : this.open(); }
+
+  open() {
+    [dpDash, dpAi, dpFin].forEach(dp => { if(dp && dp !== this && dp.isOpen) dp.close(); });
+    this.isOpen = true;
+    const range = this.getRange();
+    if(range.start) {
+      const d = new Date(range.start + 'T00:00:00');
+      this.viewDate = new Date(d.getFullYear(), d.getMonth(), 1);
+    }
+    this.render();
+  }
+
+  close() {
+    if(!this.isOpen) return;
+    this.isOpen = false;
+    this.showCal = false;
+    this.picking = 'from';
+    this.render();
+  }
+
+  selectPreset(value) {
+    this.preset = value;
+    this.customFrom = null;
+    this.customTo = null;
+    this.showCal = false;
+    this.close();
+    this.onApply(this.getConfig());
+  }
+
+  enterCustomMode() {
+    this.showCal = true;
+    this.picking = 'from';
+    this.customFrom = null;
+    this.customTo = null;
+    this.viewDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    this.render();
+  }
+
+  selectDay(dateStr) {
+    if(!this.showCal) return;
+    if(this.picking === 'from') {
+      this.customFrom = dateStr;
+      this.customTo = null;
+      this.picking = 'to';
+    } else {
+      if(dateStr < this.customFrom) {
+        this.customTo = this.customFrom;
+        this.customFrom = dateStr;
+      } else {
+        this.customTo = dateStr;
+      }
+      this.picking = 'from';
+    }
+    this.render();
+  }
+
+  applyCustom() {
+    if(!this.customFrom || !this.customTo) return;
+    this.preset = 'custom';
+    this.close();
+    this.onApply(this.getConfig());
+  }
+
+  prevMonth() { this.viewDate.setMonth(this.viewDate.getMonth() - 1); this.render(); }
+  nextMonth() { this.viewDate.setMonth(this.viewDate.getMonth() + 1); this.render(); }
+
+  render() {
+    if(!this.container) return;
+    const range = this.getRange();
+    const label = this.getLabel();
+    const v = this.varName;
+    let h = `<div class="dp-wrap">`;
+    h += `<div class="dp-trigger${this.isOpen?' active':''}" onclick="${v}.toggle(event)">`;
+    h += `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+    h += `<span>${escHtml(label)}</span>`;
+    h += `<span class="dp-arrow">&#9662;</span></div>`;
+
+    if(this.isOpen) {
+      h += `<div class="dp-dropdown open" onclick="event.stopPropagation()">`;
+      // Presets
+      h += `<div class="dp-presets">`;
+      DP_PRESETS.forEach(p => {
+        const active = !this.showCal && this.preset === p.value ? ' active' : '';
+        h += `<div class="dp-preset${active}" onclick="${v}.selectPreset('${p.value}')"><div class="dp-preset-dot"></div>${p.label}</div>`;
+      });
+      h += `<div class="dp-divider"></div>`;
+      h += `<div class="dp-preset${this.showCal?' active':''}" onclick="${v}.enterCustomMode()"><div class="dp-preset-dot"></div>自訂區間</div>`;
+      h += `</div>`;
+      // Calendar
+      h += `<div class="dp-calendar">`;
+      h += this._renderCal(range);
+      if(this.showCal) {
+        const fl = this.customFrom || '開始日期';
+        const tl = this.customTo || '結束日期';
+        h += `<div class="dp-range-info">`;
+        h += `<span class="dp-range-badge">${fl}</span>`;
+        h += `<span style="color:var(--gray-300)">→</span>`;
+        h += `<span class="dp-range-badge">${tl}</span>`;
+        h += `<button class="dp-apply-btn" onclick="${v}.applyCustom()"${!this.customFrom||!this.customTo?' disabled':''}>套用</button>`;
+        h += `</div>`;
+      } else {
+        h += `<div class="dp-range-info"><span style="font-size:12px;color:var(--gray-500)">${range.start} → ${range.end}</span></div>`;
+      }
+      h += `</div></div>`;
+    }
+    h += `</div>`;
+    this.container.innerHTML = h;
+  }
+
+  _renderCal(range) {
+    const year = this.viewDate.getFullYear();
+    const month = this.viewDate.getMonth();
+    const mNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+    const v = this.varName;
+    const today = DatePicker.fmtDate(new Date());
+    const from = this.showCal ? this.customFrom : range.start;
+    const to = this.showCal ? this.customTo : range.end;
+
+    let h = `<div class="dp-cal-header">`;
+    h += `<button class="dp-cal-nav" onclick="${v}.prevMonth()">&#9664;</button>`;
+    h += `<div class="dp-cal-title">${year}年 ${mNames[month]}</div>`;
+    h += `<button class="dp-cal-nav" onclick="${v}.nextMonth()">&#9654;</button>`;
+    h += `</div>`;
+    h += `<div class="dp-cal-weekdays">`;
+    ['日','一','二','三','四','五','六'].forEach(d => { h += `<div class="dp-cal-wd">${d}</div>`; });
+    h += `</div>`;
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const prevDays = new Date(year, month, 0).getDate();
+    h += `<div class="dp-cal-days${this.showCal ? '' : ' readonly'}">`;
+    for(let i = firstDay - 1; i >= 0; i--) {
+      h += `<button class="dp-day other-month" disabled>${prevDays - i}</button>`;
+    }
+    for(let d = 1; d <= daysInMonth; d++) {
+      const ds = year + '-' + String(month+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+      let cls = 'dp-day';
+      if(ds === today) cls += ' today';
+      const isFrom = ds === from, isTo = ds === to;
+      if(isFrom || isTo) {
+        cls += ' selected';
+        if(from && to && from !== to) cls += isFrom ? ' range-start' : ' range-end';
+        else cls += ' range-single';
+      } else if(from && to && ds > from && ds < to) {
+        cls += ' in-range';
+      }
+      const oc = this.showCal ? ` onclick="${v}.selectDay('${ds}')"` : '';
+      h += `<button class="${cls}"${oc}>${d}</button>`;
+    }
+    const total = firstDay + daysInMonth;
+    const rem = total % 7 === 0 ? 0 : 7 - (total % 7);
+    for(let i = 1; i <= rem; i++) {
+      h += `<button class="dp-day other-month" disabled>${i}</button>`;
+    }
+    h += `</div>`;
+    return h;
+  }
+}
 
 // ── FB Auth ─────────────────────────────────────────────────
 function showApp(name, picture) {
@@ -1110,8 +1393,22 @@ async function setToken(token) {
 
 // ── Init ───────────────────────────────────────────────────
 async function init() {
-  // FB SDK handles login state via handleFBStatus callback
-  // Login page stays visible until FB Login button is clicked
+  // Initialize date pickers
+  dpDash = new DatePicker('dpDash', {
+    varName: 'dpDash',
+    defaultPreset: 'this_month',
+    onApply: function(cfg) { dateConfig = cfg; refreshDashboard(); }
+  });
+  dpAi = new DatePicker('dpAi', {
+    varName: 'dpAi',
+    defaultPreset: 'this_month',
+    onApply: function(cfg) { aiDateConfig = cfg; aiCampData = {}; loadAiAnalysis(); }
+  });
+  dpFin = new DatePicker('dpFin', {
+    varName: 'dpFin',
+    defaultPreset: 'this_month',
+    onApply: function(cfg) { finDateConfig = cfg; finCampData = {}; loadFinance(); }
+  });
 }
 
 // ── Cloud Settings Sync ────────────────────────────────────
@@ -1189,40 +1486,9 @@ function getVisibleAccounts() {
   return allAccounts.filter(a => savedSelectedIds.includes(a.id));
 }
 
-// ── Date ───────────────────────────────────────────────────
-function onDateChange() {
-  const val = document.getElementById('datePreset').value;
-  const wrap = document.getElementById('dateRangeWrap');
-  if(val === 'custom') { wrap.classList.add('show'); return; }
-  wrap.classList.remove('show');
-  dateConfig = { preset: val, from: null, to: null };
-  refreshDashboard();
-}
-function applyCustomDate() {
-  dateConfig.preset = 'custom';
-  dateConfig.from = document.getElementById('dateFrom').value;
-  dateConfig.to = document.getElementById('dateTo').value;
-  if(!dateConfig.from || !dateConfig.to) return alert('請選擇日期區間');
-  refreshDashboard();
-}
-function onAiDateChange() {
-  const val = document.getElementById('aiDatePreset').value;
-  const wrap = document.getElementById('aiDateRangeWrap');
-  if(val === 'custom') { wrap.classList.add('show'); return; }
-  wrap.classList.remove('show');
-  aiDateConfig = { preset: val, from: null, to: null };
-  aiCampData = {}; // clear cache when date changes
-  loadAiAnalysis();
-}
-function applyAiCustomDate() {
-  aiDateConfig.preset = 'custom';
-  aiDateConfig.from = document.getElementById('aiDateFrom').value;
-  aiDateConfig.to = document.getElementById('aiDateTo').value;
-  if(!aiDateConfig.from || !aiDateConfig.to) return alert('請選擇日期區間');
-  aiCampData = {};
-  loadAiAnalysis();
-}
+// ── Date (handled by DatePicker instances) ──────────────────
 const getAiDateParams = () => {
+  if(dpAi) return dpAi.getParams();
   if(aiDateConfig.preset === 'custom' && aiDateConfig.from && aiDateConfig.to)
     return `time_range={"since":"${aiDateConfig.from}","until":"${aiDateConfig.to}"}`;
   return `date_preset=${aiDateConfig.preset}`;
@@ -1619,7 +1885,18 @@ async function toggleStatus(endpoint, id, checkbox, isCampaign) {
         const c = (campData[acc.id]||[]).find(c=>c.id===id);
         if(c) c.status = status;
       }
+    } else if(endpoint === 'adsets') {
+      Object.values(adsetData).forEach(list => {
+        const a = list.find(a => a.id === id);
+        if(a) a.status = status;
+      });
+    } else if(endpoint === 'ads') {
+      Object.values(adData).forEach(list => {
+        const a = list.find(a => a.id === id);
+        if(a) a.status = status;
+      });
     }
+    renderTree();
   } catch {
     checkbox.checked = !checkbox.checked;
     alert('更新失敗');
@@ -1884,7 +2161,7 @@ async function loadAiAnalysis() {
   const totalMsg = allCamps.reduce((s,c)=>s+getMsgCount(c), 0);
   const avgCostPerMsg = totalMsg > 0 ? totalSpend / totalMsg : 0;
 
-  const aiPresetLabel = document.getElementById('aiDatePreset')?.options[document.getElementById('aiDatePreset')?.selectedIndex]?.text || '';
+  const aiPresetLabel = dpAi ? dpAi.getLabel() : '本月';
   document.getElementById('kpi-spend').innerHTML = `<div class="ai-kpi-label">總花費</div><div class="ai-kpi-value">$${fM(totalSpend)}</div><div class="ai-kpi-sub">${visible.length} 個帳戶・${aiPresetLabel}</div>`;
   document.getElementById('kpi-active').innerHTML = `<div class="ai-kpi-label">進行中活動</div><div class="ai-kpi-value">${active.length}</div><div class="ai-kpi-sub">共 ${allCamps.length} 個</div>`;
   document.getElementById('kpi-ctr').innerHTML = `<div class="ai-kpi-label">平均 CTR</div><div class="ai-kpi-value">${avgCtr.toFixed(2)}%</div><div class="ai-kpi-sub">有數據活動 ${ctrVals.length} 個</div>`;
@@ -2155,28 +2432,11 @@ async function fetchAiRecommendations(rows) {
 let financeRows = []; // cached rows for download
 
 const getFinDateParams = () => {
+  if(dpFin) return dpFin.getParams();
   if(finDateConfig.preset === 'custom' && finDateConfig.from && finDateConfig.to)
     return `time_range={"since":"${finDateConfig.from}","until":"${finDateConfig.to}"}`;
   return `date_preset=${finDateConfig.preset}`;
 };
-function onFinDateChange() {
-  const val = document.getElementById('finDatePreset').value;
-  const wrap = document.getElementById('finDateRangeWrap');
-  if(val === 'custom') { wrap.classList.add('show'); return; }
-  wrap.classList.remove('show');
-  finDateConfig = { preset: val, from: null, to: null };
-  finCampData = {};
-  loadFinance();
-}
-function applyFinCustomDate() {
-  finDateConfig.preset = 'custom';
-  finDateConfig.from = document.getElementById('finDateFrom').value;
-  finDateConfig.to = document.getElementById('finDateTo').value;
-  if(!finDateConfig.from || !finDateConfig.to) return alert('請選擇日期區間');
-  finCampData = {};
-  loadFinance();
-}
-
 async function loadFinance() {
   const visible = getVisibleAccounts();
   if(!visible.length) { renderFinanceAcctList([]); return; }
@@ -2262,28 +2522,10 @@ function finSelectAcct(id) {
 }
 
 function getFinanceDateRange() {
+  if(dpFin) return dpFin.getRange();
   const today = new Date();
   const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  if(finDateConfig.preset === 'custom' && finDateConfig.from && finDateConfig.to)
-    return { start: finDateConfig.from, end: finDateConfig.to };
-  const p = finDateConfig.preset;
-  if(p === 'today') return { start: fmt(today), end: fmt(today) };
-  if(p === 'yesterday') {
-    const y = new Date(today); y.setDate(y.getDate()-1);
-    return { start: fmt(y), end: fmt(y) };
-  }
-  if(p === 'this_month') {
-    const s = new Date(today.getFullYear(), today.getMonth(), 1);
-    return { start: fmt(s), end: fmt(today) };
-  }
-  if(p === 'last_month') {
-    const s = new Date(today.getFullYear(), today.getMonth()-1, 1);
-    const e = new Date(today.getFullYear(), today.getMonth(), 0);
-    return { start: fmt(s), end: fmt(e) };
-  }
-  const daysMap = { last_7d:7, last_14d:14, last_30d:30, last_90d:90 };
-  const days = daysMap[p] || 30;
-  const s = new Date(today); s.setDate(s.getDate()-days);
+  const s = new Date(today.getFullYear(), today.getMonth(), 1);
   return { start: fmt(s), end: fmt(today) };
 }
 
