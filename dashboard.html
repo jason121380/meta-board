@@ -674,14 +674,6 @@ input:checked + .slider:before { transform: translateX(14px); }
         <div class="loading" style="padding:20px"><div class="spinner"></div></div>
       </div>
     </div>
-    <!-- Middle: Summary -->
-    <div class="finance-summary">
-      <div class="finance-summary-title">統計</div>
-      <div class="finance-summary-item"><div class="finance-summary-label">帳戶數</div><div class="finance-summary-value" id="fin-acct-count">—</div></div>
-      <div class="finance-summary-item"><div class="finance-summary-label">總花費</div><div class="finance-summary-value" id="fin-total-spend">—</div></div>
-      <div class="finance-summary-item"><div class="finance-summary-label">%</div><div class="finance-summary-value" id="fin-total-markup">—</div></div>
-      <div class="finance-summary-item"><div class="finance-summary-label">總花費+%</div><div class="finance-summary-value" id="fin-total-plus">—</div></div>
-    </div>
     <!-- Right: KPIs + Table -->
     <div class="finance-main">
       <div class="finance-kpi-row">
@@ -1236,12 +1228,12 @@ function renderTree() {
     const isOpen = expandedCamps.has(camp.id);
     const adsets = adsetData[camp.id];
 
-    rows += `<tr class="campaign-row" data-camp="${camp.id}">
+    rows += `<tr class="campaign-row" data-camp="${camp.id}" onclick="toggleCamp(event,'${camp.id}')" style="cursor:pointer">
       <td>
         <div class="name-cell indent-0">
-          <button class="expand-btn ${isOpen?'open':''}" onclick="toggleCamp(event,'${camp.id}')" title="${isOpen?'收合':'展開'}">
+          <span class="expand-btn ${isOpen?'open':''}" style="pointer-events:none">
             ${isOpen?'▼':'▶'}
-          </button>
+          </span>
           <span class="name-text" title="${camp.name}">${camp.name}</span>
         </div>
       </td>
@@ -1274,12 +1266,12 @@ function renderTree() {
           const adsetOpen = expandedAdsets.has(adset.id);
           const ads = adData[adset.id];
 
-          rows += `<tr class="adset-row" data-adset="${adset.id}">
+          rows += `<tr class="adset-row" data-adset="${adset.id}" onclick="toggleAdset(event,'${adset.id}')" style="cursor:pointer">
             <td>
               <div class="name-cell indent-1">
-                <button class="expand-btn ${adsetOpen?'open':''}" onclick="toggleAdset(event,'${adset.id}')" title="${adsetOpen?'收合':'展開'}">
+                <span class="expand-btn ${adsetOpen?'open':''}" style="pointer-events:none">
                   ${adsetOpen?'▼':'▶'}
-                </button>
+                </span>
                 <span class="name-text" title="${adset.name}" style="font-weight:500">${adset.name}</span>
               </div>
             </td>
