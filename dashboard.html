@@ -800,12 +800,11 @@ async function loadAllAccounts() {
   renderDashAcctList();
   renderSettingsBmList();
   renderLaunchAccountSelect();
-  // Restore selected accounts from last session
+  // Restore last selected account from last session (single-select)
   const lastSelected = JSON.parse(localStorage.getItem('fb_active_accounts') || '[]');
   if(lastSelected.length) {
-    selectedAccounts = getVisibleAccounts().filter(a => lastSelected.includes(a.id));
-    renderDashAcctList();
-    if(selectedAccounts.length) await loadDashboard();
+    const restored = getVisibleAccounts().find(a => lastSelected.includes(a.id));
+    if(restored) { selectedAccounts = [restored]; renderDashAcctList(); await loadDashboard(); }
   }
 }
 
@@ -845,26 +844,20 @@ function renderDashAcctList() {
   el.innerHTML = list.map(a => {
     const isActive = selectedAccounts.some(s=>s.id===a.id);
     const dotClass = a.account_status===1?'on':'off';
-    return `<div class="dash-acct-item${isActive?' active':''}" onclick="toggleAccount('${a.id}')">
+    return `<div class="dash-acct-item${isActive?' active':''}" onclick="selectAccount('${a.id}')">
       <div class="dash-acct-dot ${dotClass}"></div>
       <span class="dash-acct-name" title="${a.name}">${a.name}</span>
-      ${isActive?'<span style="font-size:10px;color:var(--orange)">✓</span>':''}
     </div>`;
   }).join('');
   const info = document.getElementById('dashAcctSelInfo');
-  if(info) info.textContent = selectedAccounts.length ? `已選 ${selectedAccounts.length} / ${visible.length} 個` : `共 ${visible.length} 個帳戶`;
+  if(info) info.textContent = `共 ${visible.length} 個帳戶`;
 }
 
-async function toggleAccount(id) {
+async function selectAccount(id) {
   const acc = allAccounts.find(a=>a.id===id);
   if(!acc) return;
-  const idx = selectedAccounts.findIndex(a=>a.id===id);
-  if(idx >= 0) {
-    selectedAccounts.splice(idx,1);
-    delete campData[id];
-  } else {
-    selectedAccounts.push(acc);
-  }
+  selectedAccounts = [acc];
+  campData = {}; adsetData = {}; adData = {};
   renderDashAcctList();
   saveSelectedIds();
   await loadDashboard();
