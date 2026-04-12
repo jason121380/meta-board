@@ -239,7 +239,15 @@ input:checked + .slider:before { transform: translateX(14px); }
 
 /* ── Finance View ──────────────────────────────────────────── */
 .finance-body { display: flex; flex: 1; overflow: hidden; }
-.finance-summary { width: 180px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 20px 16px; background: var(--white); overflow-y: auto; }
+.finance-acct-panel { width: 200px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--white); overflow: hidden; }
+.finance-acct-header { padding: 12px 14px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.finance-acct-title { font-size: 11px; font-weight: 700; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.finance-acct-list { flex: 1; overflow-y: auto; }
+.finance-acct-item { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; font-size: 13px; color: var(--gray-500); }
+.finance-acct-item:hover { background: var(--orange-bg); }
+.finance-acct-item.active { background: var(--orange-bg); color: var(--orange); font-weight: 600; border-right: 3px solid var(--orange); }
+.finance-acct-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.finance-summary { width: 160px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 20px 14px; background: var(--white); overflow-y: auto; }
 .finance-summary-title { font-size: 11px; font-weight: 700; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
 .finance-summary-item { margin-bottom: 14px; }
 .finance-summary-label { font-size: 11px; color: var(--gray-500); margin-bottom: 2px; }
@@ -416,14 +424,21 @@ input:checked + .slider:before { transform: translateX(14px); }
     <div class="login-logo">LURE <span>META</span></div>
     <div class="login-tagline">Meta 廣告管理平台</div>
     <div class="login-divider"></div>
-    <p class="login-desc">使用你的 Facebook 帳號登入，即可查看並管理廣告帳戶的成效數據。</p>
-    <button class="fb-login-big" onclick="fbLogin()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-      使用 Facebook 帳號登入
-    </button>
-    <div class="login-footer">
-      登入即代表授權本應用程式讀取你的廣告數據<br>
-      本工具僅限本機使用，不上傳任何資料
+    <!-- Loading state while FB SDK checks session -->
+    <div id="loginChecking" style="text-align:center;padding:20px 0;color:var(--gray-300);font-size:13px">
+      <div class="spinner" style="margin:0 auto 10px"></div>
+      驗證登入狀態...
+    </div>
+    <!-- Login button, hidden until FB SDK confirms not logged in -->
+    <div id="loginForm" style="display:none">
+      <p class="login-desc">使用你的 Facebook 帳號登入，即可查看並管理廣告帳戶的成效數據。</p>
+      <button class="fb-login-big" onclick="fbLogin()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+        使用 Facebook 帳號登入
+      </button>
+      <div class="login-footer">
+        登入即代表授權本應用程式讀取你的廣告數據
+      </div>
     </div>
   </div>
 </div>
@@ -473,9 +488,9 @@ input:checked + .slider:before { transform: translateX(14px); }
       <option value="today">今天</option>
       <option value="yesterday">昨天</option>
       <option value="last_7d">近 7 天</option>
-      <option value="last_30d" selected>近 30 天</option>
+      <option value="last_30d">近 30 天</option>
       <option value="last_90d">近 90 天</option>
-      <option value="this_month">本月</option>
+      <option value="this_month" selected>本月</option>
       <option value="last_month">上個月</option>
       <option value="custom">自訂區間...</option>
     </select>
@@ -559,6 +574,23 @@ input:checked + .slider:before { transform: translateX(14px); }
   <div class="topbar">
     <div class="page-title">AI 廣告分析</div>
     <div class="topbar-spacer"></div>
+    <select id="aiDatePreset" onchange="onAiDateChange()">
+      <option value="today">今天</option>
+      <option value="yesterday">昨天</option>
+      <option value="last_7d">近 7 天</option>
+      <option value="last_30d">近 30 天</option>
+      <option value="last_90d">近 90 天</option>
+      <option value="this_month" selected>本月</option>
+      <option value="last_month">上個月</option>
+      <option value="custom">自訂區間...</option>
+    </select>
+    <div class="date-range-wrap" id="aiDateRangeWrap">
+      <input type="date" id="aiDateFrom">
+      <span style="color:var(--gray-300)">—</span>
+      <input type="date" id="aiDateTo">
+      <button class="btn btn-blue btn-sm" onclick="applyAiCustomDate()">套用</button>
+    </div>
+    <div class="topbar-sep"></div>
     <button class="btn btn-blue btn-sm" onclick="loadAiAnalysis()">重新分析</button>
   </div>
   <div style="padding:20px 24px;overflow-y:auto;flex:1">
@@ -609,16 +641,36 @@ input:checked + .slider:before { transform: translateX(14px); }
   <div class="topbar">
     <div class="page-title">財務專區</div>
     <div class="topbar-spacer"></div>
-    <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--gray-500)">
-      月% 加成：
-      <input type="number" id="financeMarkup" value="5" min="0" max="100" step="0.5" oninput="renderFinanceTable()" style="width:60px;height:32px;border:1.5px solid var(--border);border-radius:var(--radius-sm);text-align:center;font-size:13px;font-family:inherit;padding:0 6px">
-      %
-    </label>
+    <select id="finDatePreset" onchange="onFinDateChange()">
+      <option value="today">今天</option>
+      <option value="yesterday">昨天</option>
+      <option value="last_7d">近 7 天</option>
+      <option value="last_30d">近 30 天</option>
+      <option value="last_90d">近 90 天</option>
+      <option value="this_month" selected>本月</option>
+      <option value="last_month">上個月</option>
+      <option value="custom">自訂區間...</option>
+    </select>
+    <div class="date-range-wrap" id="finDateRangeWrap">
+      <input type="date" id="finDateFrom">
+      <span style="color:var(--gray-300)">—</span>
+      <input type="date" id="finDateTo">
+      <button class="btn btn-blue btn-sm" onclick="applyFinCustomDate()">套用</button>
+    </div>
     <div class="topbar-sep"></div>
     <button class="btn btn-blue btn-sm" onclick="downloadFinanceCsv()">下載資料</button>
   </div>
   <div class="finance-body">
-    <!-- Left: Summary -->
+    <!-- Left: Account Selector -->
+    <div class="finance-acct-panel">
+      <div class="finance-acct-header">
+        <div class="finance-acct-title">廣告帳戶</div>
+      </div>
+      <div class="finance-acct-list" id="financeAcctList">
+        <div class="loading" style="padding:20px"><div class="spinner"></div></div>
+      </div>
+    </div>
+    <!-- Middle: Summary -->
     <div class="finance-summary">
       <div class="finance-summary-title">統計</div>
       <div class="finance-summary-item"><div class="finance-summary-label">帳戶數</div><div class="finance-summary-value" id="fin-acct-count">—</div></div>
@@ -643,6 +695,9 @@ input:checked + .slider:before { transform: translateX(14px); }
       </div>
       <div class="finance-toolbar">
         <input id="financeSearch" placeholder="搜尋活動名稱..." oninput="renderFinanceTable()" style="flex:1;height:32px;padding:0 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit">
+        <span style="font-size:12px;color:var(--gray-500)">預設月%：</span>
+        <input type="number" id="financeMarkupDefault" value="5" min="0" max="100" step="0.5" oninput="applyDefaultMarkup()" style="width:54px;height:32px;border:1.5px solid var(--border);border-radius:var(--radius-sm);text-align:center;font-size:13px;font-family:inherit;padding:0 4px">
+        <span style="font-size:12px;color:var(--gray-500)">%</span>
       </div>
       <div class="finance-table-wrap">
         <table class="finance-table">
@@ -660,6 +715,7 @@ input:checked + .slider:before { transform: translateX(14px); }
               <th class="num">點擊成本</th>
               <th class="num">私訊數</th>
               <th class="num">私訊成本</th>
+              <th class="num">備註</th>
             </tr>
           </thead>
           <tbody id="financeTableBody">
@@ -825,7 +881,13 @@ let expandedCamps = new Set();  // expanded campaign IDs
 let expandedAdsets = new Set(); // expanded adset IDs
 let treeSort = { key: null, dir: 'desc' };
 let budgetTarget = null;
-let dateConfig = { preset: 'last_30d', from: null, to: null };
+let dateConfig = { preset: 'this_month', from: null, to: null };
+let aiDateConfig = { preset: 'this_month', from: null, to: null };
+let aiCampData = {}; // separate cache for AI view (keyed by accountId)
+let finDateConfig = { preset: 'this_month', from: null, to: null };
+let finCampData = {}; // separate cache for finance view
+let finSelectedAcctIds = []; // selected accounts in finance view (empty = all)
+let finRowMarkups = {}; // per-campaign markup overrides { campaignId: % }
 let currentLaunchStep = 1;
 
 // ── Format ─────────────────────────────────────────────────
@@ -874,6 +936,8 @@ function showApp(name, picture) {
 function showLogin() {
   document.getElementById('loginPage').classList.remove('hidden');
   document.getElementById('appLayout').classList.remove('visible');
+  document.getElementById('loginChecking').style.display = 'none';
+  document.getElementById('loginForm').style.display = 'block';
 }
 
 function toggleUserMenu(e) {
@@ -948,10 +1012,7 @@ function getVisibleAccounts() {
 function onDateChange() {
   const val = document.getElementById('datePreset').value;
   const wrap = document.getElementById('dateRangeWrap');
-  if(val === 'custom') {
-    wrap.classList.add('show');
-    return;
-  }
+  if(val === 'custom') { wrap.classList.add('show'); return; }
   wrap.classList.remove('show');
   dateConfig = { preset: val, from: null, to: null };
   refreshDashboard();
@@ -963,6 +1024,28 @@ function applyCustomDate() {
   if(!dateConfig.from || !dateConfig.to) return alert('請選擇日期區間');
   refreshDashboard();
 }
+function onAiDateChange() {
+  const val = document.getElementById('aiDatePreset').value;
+  const wrap = document.getElementById('aiDateRangeWrap');
+  if(val === 'custom') { wrap.classList.add('show'); return; }
+  wrap.classList.remove('show');
+  aiDateConfig = { preset: val, from: null, to: null };
+  aiCampData = {}; // clear cache when date changes
+  loadAiAnalysis();
+}
+function applyAiCustomDate() {
+  aiDateConfig.preset = 'custom';
+  aiDateConfig.from = document.getElementById('aiDateFrom').value;
+  aiDateConfig.to = document.getElementById('aiDateTo').value;
+  if(!aiDateConfig.from || !aiDateConfig.to) return alert('請選擇日期區間');
+  aiCampData = {};
+  loadAiAnalysis();
+}
+const getAiDateParams = () => {
+  if(aiDateConfig.preset === 'custom' && aiDateConfig.from && aiDateConfig.to)
+    return `time_range={"since":"${aiDateConfig.from}","until":"${aiDateConfig.to}"}`;
+  return `date_preset=${aiDateConfig.preset}`;
+};
 
 // ── Dashboard Account Panel ─────────────────────────────────
 function renderDashAcctList() {
@@ -1543,16 +1626,16 @@ async function loadAiAnalysis() {
   show('aiEmpty', 'none'); show('aiLoading', 'flex');
   show('aiInsightRow', 'none'); show('aiChartGrid', 'none'); show('aiTextCards', 'none');
 
-  // Load campaign data for any visible account not yet cached
-  const dp = getDateParams();
+  // Load campaign data for any visible account not yet cached (separate aiCampData cache)
+  const dp = getAiDateParams();
   await Promise.all(visible.map(async acc => {
-    if(!campData[acc.id]) {
+    if(!aiCampData[acc.id]) {
       const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
-      campData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+      aiCampData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
     }
   }));
 
-  const allCamps = visible.flatMap(acc => campData[acc.id] || []);
+  const allCamps = visible.flatMap(acc => aiCampData[acc.id] || []);
   show('aiLoading', 'none');
 
   if(!allCamps.length) {
@@ -1594,7 +1677,7 @@ async function loadAiAnalysis() {
   // Chart 1: Spend by account
   const acctSpend = visible.map(acc => ({
     name: acc.name,
-    spend: (campData[acc.id]||[]).reduce((s,c)=>s+(+getIns(c).spend||0),0)
+    spend: (aiCampData[acc.id]||[]).reduce((s,c)=>s+(+getIns(c).spend||0),0)
   })).filter(a=>a.spend>0).sort((a,b)=>b.spend-a.spend).slice(0,10);
   aiCharts.spend = new Chart(document.getElementById('chartSpendByAccount'), {
     type: 'bar',
@@ -1608,7 +1691,7 @@ async function loadAiAnalysis() {
   // Chart 2: Messages by account
   const acctMsg = visible.map(acc => ({
     name: acc.name,
-    msg: (campData[acc.id]||[]).reduce((s,c)=>s+getMsgCount(c),0)
+    msg: (aiCampData[acc.id]||[]).reduce((s,c)=>s+getMsgCount(c),0)
   })).filter(a=>a.msg>0).sort((a,b)=>b.msg-a.msg).slice(0,10);
   if(acctMsg.length) {
     aiCharts.msg = new Chart(document.getElementById('chartMsgByAccount'), {
@@ -1733,49 +1816,109 @@ async function loadAiAnalysis() {
 // ── Finance ──────────────────────────────────────────────────
 let financeRows = []; // cached rows for download
 
+const getFinDateParams = () => {
+  if(finDateConfig.preset === 'custom' && finDateConfig.from && finDateConfig.to)
+    return `time_range={"since":"${finDateConfig.from}","until":"${finDateConfig.to}"}`;
+  return `date_preset=${finDateConfig.preset}`;
+};
+function onFinDateChange() {
+  const val = document.getElementById('finDatePreset').value;
+  const wrap = document.getElementById('finDateRangeWrap');
+  if(val === 'custom') { wrap.classList.add('show'); return; }
+  wrap.classList.remove('show');
+  finDateConfig = { preset: val, from: null, to: null };
+  finCampData = {};
+  loadFinance();
+}
+function applyFinCustomDate() {
+  finDateConfig.preset = 'custom';
+  finDateConfig.from = document.getElementById('finDateFrom').value;
+  finDateConfig.to = document.getElementById('finDateTo').value;
+  if(!finDateConfig.from || !finDateConfig.to) return alert('請選擇日期區間');
+  finCampData = {};
+  loadFinance();
+}
+
 async function loadFinance() {
   const visible = getVisibleAccounts();
-  if(!visible.length) return;
-  const dp = getDateParams();
-  // Load campaigns for visible accounts (use cache if available)
+  if(!visible.length) { renderFinanceAcctList([]); return; }
+  renderFinanceAcctList(visible);
+  const dp = getFinDateParams();
+  // Load campaigns for visible accounts (use finCampData cache)
   await Promise.all(visible.map(async acc => {
-    if(!campData[acc.id]) {
+    if(!finCampData[acc.id]) {
       const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
-      campData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+      finCampData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
     }
   }));
+  renderFinanceTable();
+}
+
+function renderFinanceAcctList(accounts) {
+  const list = document.getElementById('financeAcctList');
+  if(!accounts.length) {
+    list.innerHTML = '<div style="padding:12px 14px;font-size:12px;color:var(--gray-300)">尚無帳戶</div>';
+    return;
+  }
+  const allBtn = `<div class="finance-acct-item ${finSelectedAcctIds.length===0?'active':''}" onclick="finSelectAcct('__all__')"><span class="finance-acct-name">全部帳戶</span></div>`;
+  const items = accounts.map(acc => `
+    <div class="finance-acct-item ${finSelectedAcctIds.includes(acc.id)?'active':''}" onclick="finSelectAcct('${acc.id}')">
+      <span class="finance-acct-name" title="${acc.name}">${acc.name}</span>
+    </div>`).join('');
+  list.innerHTML = allBtn + items;
+}
+
+function finSelectAcct(id) {
+  if(id === '__all__') {
+    finSelectedAcctIds = [];
+  } else {
+    finSelectedAcctIds = [id];
+  }
+  // Re-render account list and table
+  const visible = getVisibleAccounts();
+  renderFinanceAcctList(visible);
   renderFinanceTable();
 }
 
 function getFinanceDateRange() {
   const today = new Date();
   const fmt = d => d.toISOString().slice(0,10);
-  if(dateConfig.preset === 'custom' && dateConfig.from && dateConfig.to)
-    return { start: dateConfig.from, end: dateConfig.to };
+  if(finDateConfig.preset === 'custom' && finDateConfig.from && finDateConfig.to)
+    return { start: finDateConfig.from, end: finDateConfig.to };
   const end = fmt(today);
   const daysMap = { last_7d:7, last_14d:14, last_30d:30, last_90d:90, this_month:today.getDate(), last_month:30 };
-  const days = daysMap[dateConfig.preset] || 30;
+  const days = daysMap[finDateConfig.preset] || 30;
   const start = fmt(new Date(today - days*864e5));
   return { start, end };
 }
 
+function applyDefaultMarkup() {
+  const def = parseFloat(document.getElementById('financeMarkupDefault')?.value) || 0;
+  // Apply to all rows that haven't been individually set
+  document.querySelectorAll('.fin-markup-input').forEach(inp => {
+    if(!inp.dataset.customized) inp.value = def;
+  });
+  renderFinanceTable();
+}
+
 function renderFinanceTable() {
-  const markup = parseFloat(document.getElementById('financeMarkup')?.value) || 0;
+  const defaultMarkup = parseFloat(document.getElementById('financeMarkupDefault')?.value) || 0;
   const q = (document.getElementById('financeSearch')?.value||'').toLowerCase();
   const { start, end } = getFinanceDateRange();
   const visible = getVisibleAccounts();
+  const filtered = finSelectedAcctIds.length ? visible.filter(a=>finSelectedAcctIds.includes(a.id)) : visible;
   const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'];
 
-  const allCamps = visible.flatMap(acc => (campData[acc.id]||[]).filter(c => +getIns(c).spend > 0));
+  const allCamps = filtered.flatMap(acc => (finCampData[acc.id]||[]).filter(c => +getIns(c).spend > 0));
   financeRows = allCamps.filter(c => !q || c.name.toLowerCase().includes(q) || c._accountName.toLowerCase().includes(q));
 
   const body = document.getElementById('financeTableBody');
   if(!financeRows.length) {
-    body.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:32px;color:var(--gray-300)">無資料</td></tr>';
+    body.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:32px;color:var(--gray-300)">無資料</td></tr>';
     return;
   }
 
-  let totalSpend = 0, totalClicks = 0, totalMsg = 0, campCount = 0;
+  let totalSpend = 0, totalClicks = 0, totalMsg = 0, totalPlus = 0, campCount = 0;
   body.innerHTML = financeRows.map((c, i) => {
     const ins = getIns(c);
     const spend = +ins.spend || 0;
@@ -1783,26 +1926,27 @@ function renderFinanceTable() {
     const cpc = +ins.cpc || 0;
     const msgs = MSG_TYPES.reduce((s,t)=>{ const a=(ins.actions||[]).find(x=>x.action_type===t); return s+(a?+a.value:0); },0);
     const msgCost = msgs > 0 ? spend / msgs : 0;
-    const plus = spend * (1 + markup/100);
-    totalSpend += spend; totalClicks += clicks; totalMsg += msgs; campCount++;
+    const rowMarkup = finRowMarkups[c.id] !== undefined ? finRowMarkups[c.id] : defaultMarkup;
+    const plus = spend * (1 + rowMarkup/100);
+    totalSpend += spend; totalClicks += clicks; totalMsg += msgs; totalPlus += plus; campCount++;
     return `<tr>
       <td style="color:var(--gray-500)">${i+1}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${c.name}</td>
-      <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;color:var(--gray-500);font-size:12px">${c._accountName}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;color:var(--gray-500);font-size:12px">${c._accountName}</td>
       <td style="color:var(--gray-500)">${start}</td>
       <td style="color:var(--gray-500)">${end}</td>
       <td class="num">$${fM(spend)}</td>
-      <td class="num">${markup}%</td>
-      <td class="num" style="color:var(--orange);font-weight:600">$${fM(plus)}</td>
+      <td class="num"><input class="fin-markup-input" type="number" value="${rowMarkup}" min="0" max="999" step="0.5" data-camp-id="${c.id}" oninput="onRowMarkupChange(this)" style="width:52px;height:26px;border:1.5px solid var(--border);border-radius:4px;text-align:center;font-size:12px;font-family:inherit;padding:0 4px">%</td>
+      <td class="num fin-plus-cell" style="color:var(--orange);font-weight:600">$${fM(plus)}</td>
       <td class="num">${fN(clicks)}</td>
       <td class="num">${cpc>0?'$'+fM(cpc):'—'}</td>
       <td class="num">${msgs>0?fN(msgs):'—'}</td>
       <td class="num">${msgCost>0?'$'+fM(msgCost):'—'}</td>
+      <td class="num"><input type="text" placeholder="備註" style="width:80px;height:26px;border:1.5px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;padding:0 6px"></td>
     </tr>`;
   }).join('');
 
   // KPIs
-  const totalPlus = totalSpend * (1 + markup/100);
   const avgClicks = campCount > 0 ? totalClicks / campCount : 0;
   const avgCpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
   const avgMsg = campCount > 0 ? totalMsg / campCount : 0;
@@ -1814,14 +1958,37 @@ function renderFinanceTable() {
   document.getElementById('fin-kpi-msg').textContent = fN(Math.round(avgMsg));
   document.getElementById('fin-kpi-cpm').textContent = avgMsgCost > 0 ? '$' + fM(avgMsgCost) : '—';
   // Summary
-  document.getElementById('fin-acct-count').textContent = visible.length;
+  document.getElementById('fin-acct-count').textContent = filtered.length;
   document.getElementById('fin-total-spend').textContent = '$' + fM(totalSpend);
-  document.getElementById('fin-total-markup').textContent = '$' + fM(totalSpend * markup/100);
+  document.getElementById('fin-total-markup').textContent = '$' + fM(totalPlus - totalSpend);
   document.getElementById('fin-total-plus').textContent = '$' + fM(totalPlus);
 }
 
+function onRowMarkupChange(inp) {
+  const id = inp.dataset.campId;
+  finRowMarkups[id] = parseFloat(inp.value) || 0;
+  // Update the plus cell in same row
+  const row = inp.closest('tr');
+  const spendCell = row.cells[5].textContent.replace(/[$,]/g,'');
+  const spend = parseFloat(spendCell) || 0;
+  const plus = spend * (1 + finRowMarkups[id]/100);
+  row.querySelector('.fin-plus-cell').textContent = '$' + fM(plus);
+  // Update summary totals
+  let totalSpend = 0, totalPlus = 0;
+  financeRows.forEach(c => {
+    const s = +getIns(c).spend||0;
+    const m = finRowMarkups[c.id] !== undefined ? finRowMarkups[c.id] : (parseFloat(document.getElementById('financeMarkupDefault')?.value)||0);
+    totalSpend += s; totalPlus += s*(1+m/100);
+  });
+  document.getElementById('fin-total-spend').textContent = '$' + fM(totalSpend);
+  document.getElementById('fin-total-markup').textContent = '$' + fM(totalPlus - totalSpend);
+  document.getElementById('fin-total-plus').textContent = '$' + fM(totalPlus);
+  document.getElementById('fin-kpi-spend').textContent = '$' + fM(totalSpend);
+  document.getElementById('fin-kpi-plus').textContent = '$' + fM(totalPlus);
+}
+
 function downloadFinanceCsv() {
-  const markup = parseFloat(document.getElementById('financeMarkup')?.value) || 0;
+  const defaultMarkup = parseFloat(document.getElementById('financeMarkupDefault')?.value) || 0;
   const { start, end } = getFinanceDateRange();
   const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'];
   const rows = [['NO.','活動名稱','廣告帳戶','報告起始','報告截止','花費金額','月%','金額+%','連結點擊數','點擊成本','私訊數','私訊成本']];
@@ -1829,7 +1996,8 @@ function downloadFinanceCsv() {
     const ins = getIns(c);
     const spend = +ins.spend||0, clicks = +ins.clicks||0, cpc = +ins.cpc||0;
     const msgs = MSG_TYPES.reduce((s,t)=>{ const a=(ins.actions||[]).find(x=>x.action_type===t); return s+(a?+a.value:0); },0);
-    rows.push([i+1, c.name, c._accountName, start, end, spend.toFixed(0), markup+'%', (spend*(1+markup/100)).toFixed(0), clicks, cpc.toFixed(0), msgs||'', msgs>0?(spend/msgs).toFixed(0):'']);
+    const rowMarkup = finRowMarkups[c.id] !== undefined ? finRowMarkups[c.id] : defaultMarkup;
+    rows.push([i+1, c.name, c._accountName, start, end, spend.toFixed(0), rowMarkup+'%', (spend*(1+rowMarkup/100)).toFixed(0), clicks, cpc.toFixed(0), msgs||'', msgs>0?(spend/msgs).toFixed(0):'']);
   });
   const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
@@ -1970,10 +2138,39 @@ function getAdContext() {
   return lines.join('\n');
 }
 
+function mdToHtml(text) {
+  return text
+    // Code blocks
+    .replace(/```[\s\S]*?```/g, m => `<pre style="background:var(--border);border-radius:4px;padding:8px;font-size:11px;overflow-x:auto;white-space:pre-wrap">${m.slice(3,-3).replace(/^[a-z]*\n/,'')}</pre>`)
+    // Headings
+    .replace(/^### (.+)$/gm, '<strong style="font-size:13px;display:block;margin:8px 0 4px">$1</strong>')
+    .replace(/^## (.+)$/gm, '<strong style="font-size:14px;display:block;margin:8px 0 4px">$1</strong>')
+    .replace(/^# (.+)$/gm, '<strong style="font-size:15px;display:block;margin:8px 0 4px">$1</strong>')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Bullets
+    .replace(/^\* (.+)$/gm, '<div style="display:flex;gap:6px;margin:2px 0"><span>•</span><span>$1</span></div>')
+    .replace(/^\- (.+)$/gm, '<div style="display:flex;gap:6px;margin:2px 0"><span>•</span><span>$1</span></div>')
+    // Numbered list
+    .replace(/^\d+\. (.+)$/gm, (m, p1, offset, str) => {
+      const num = m.match(/^(\d+)/)[1];
+      return `<div style="display:flex;gap:6px;margin:2px 0"><span style="flex-shrink:0">${num}.</span><span>${p1}</span></div>`;
+    })
+    // Double newlines → paragraph breaks
+    .replace(/\n{2,}/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+}
+
 function appendMsg(role, text, isLoading) {
   const el = document.createElement('div');
   el.className = `chat-msg ${role}${isLoading?' loading':''}`;
-  el.textContent = text;
+  if(role === 'model' && !isLoading) {
+    el.innerHTML = mdToHtml(text);
+  } else {
+    el.textContent = text;
+  }
   const container = document.getElementById('chatMessages');
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
@@ -1989,7 +2186,6 @@ async function sendChat() {
 
   appendMsg('user', text);
   chatHistory.push({ role: 'user', text });
-  document.getElementById('chatPresets').style.display = 'none';
 
   const btn = document.getElementById('chatSendBtn');
   btn.disabled = true;
@@ -2004,7 +2200,7 @@ async function sendChat() {
     }).then(r=>r.json());
 
     const reply = res.reply || res.detail || '無法取得回應';
-    loadingEl.textContent = reply;
+    loadingEl.innerHTML = mdToHtml(reply);
     loadingEl.classList.remove('loading');
     chatHistory.push({ role: 'model', text: reply });
   } catch(e) {
