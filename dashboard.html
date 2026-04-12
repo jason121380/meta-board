@@ -501,6 +501,10 @@ input:checked + .slider:before { transform: translateX(14px); }
       <button class="btn btn-blue btn-sm" onclick="applyCustomDate()">套用</button>
     </div>
     <div class="topbar-sep"></div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--gray-500);white-space:nowrap">
+      <input type="checkbox" id="filterActiveOnly" onchange="saveFilterPref()" style="accent-color:var(--orange);width:14px;height:14px"> 只顯示進行中
+    </label>
+    <div class="topbar-sep"></div>
     <button class="btn btn-ghost btn-sm" onclick="refreshDashboard()">↻ 重新整理</button>
     <div class="topbar-sep"></div>
     <div class="topbar-user" id="topbarUser" onclick="toggleUserMenu(event)">
@@ -812,10 +816,6 @@ input:checked + .slider:before { transform: translateX(14px); }
   <div class="topbar">
     <div class="page-title">設定</div>
     <div class="topbar-spacer"></div>
-    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--gray-500)">
-      <input type="checkbox" id="filterActiveOnly" onchange="saveFilterPref()" style="accent-color:var(--orange);width:14px;height:14px"> 只顯示進行中的行銷活動
-    </label>
-    <div class="topbar-sep"></div>
     <span id="settingsSelCount" style="font-size:12px;color:var(--gray-500)"></span>
     <button class="btn btn-blue btn-sm" onclick="saveSettings()">儲存</button>
   </div>
@@ -924,6 +924,9 @@ const getDateParams = () => {
 function showApp(name, picture) {
   document.getElementById('loginPage').classList.add('hidden');
   document.getElementById('appLayout').classList.add('visible');
+  // Init dashboard checkbox
+  const cb = document.getElementById('filterActiveOnly');
+  if(cb) cb.checked = filterActiveOnly;
   // Set topbar user
   const initial = (name||'?')[0].toUpperCase();
   const avatarEl = document.getElementById('topbarAvatar');
@@ -1743,71 +1746,139 @@ async function loadAiAnalysis() {
   const campRef = c => `<span style="color:var(--gray-500);font-size:11px">${c._accountName}</span> → <strong>${c.name}</strong>`;
   const issues = { priority: [], warning: [], good: [] };
 
-  // High spend active campaigns
-  allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).spend>5000).sort((a,b)=>+getIns(b).spend-+getIns(a).spend)
-    .forEach(c=>issues.priority.push({ label: `花費 $${fM(getIns(c).spend)}`, camp: c, tag:'高消耗' }));
+  // ── 優先處理：低效率問題 ──────────────────────────────────────
+  // P1: High spend + very low CTR (burning budget on bad creative)
+  allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).ctr>0&&+getIns(c).ctr<0.5&&+getIns(c).spend>5000)
+    .sort((a,b)=>+getIns(b).spend-+getIns(a).spend)
+    .forEach(c=>issues.priority.push({ label: `CTR 僅 ${fP(getIns(c).ctr)}，花費 $${fM(getIns(c).spend)}，素材效益差，建議立即換素材或關閉`, camp: c, tag:'高花費低CTR' }));
 
-  // Active + zero impressions (wasted budget)
-  allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).impressions===0)
-    .forEach(c=>issues.warning.push({ label: '執行中但無曝光', camp: c, tag:'無曝光' }));
-
-  // Active + very low CTR (< 0.5%) with meaningful spend
-  allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).ctr>0&&+getIns(c).ctr<0.5&&+getIns(c).spend>500)
-    .sort((a,b)=>+getIns(a).ctr-+getIns(b).ctr)
-    .forEach(c=>issues.warning.push({ label: `CTR ${fP(getIns(c).ctr)} 偏低，花費 $${fM(getIns(c).spend)}`, camp: c, tag:'低CTR' }));
-
-  // High CPC (> 3x average)
-  if(avgCpc>0) allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).cpc>avgCpc*3&&+getIns(c).clicks>10)
-    .sort((a,b)=>+getIns(b).cpc-+getIns(a).cpc)
-    .forEach(c=>issues.warning.push({ label: `CPC $${fM(getIns(c).cpc)}（均值 ${fM(avgCpc*3)} 以上）`, camp: c, tag:'高CPC' }));
-
-  // High msg cost vs avg
+  // P2: High msg cost (> 3x average) — spending a lot per conversion
   if(hasMsgData && avgCostPerMsg>0) {
-    allCamps.filter(c=>getMsgCount(c)>0&&(+getIns(c).spend/getMsgCount(c))>avgCostPerMsg*2)
-      .sort((a,b)=>(+getIns(b).spend/getMsgCount(b))-(+getIns(a).spend/getMsgCount(a)))
-      .forEach(c=>{ const cpm=+getIns(c).spend/getMsgCount(c); issues.warning.push({ label: `私訊成本 $${fM(cpm)}（均值 $${fM(avgCostPerMsg)} 的 ${(cpm/avgCostPerMsg).toFixed(1)}x）`, camp: c, tag:'高私訊成本' }); });
+    allCamps.filter(c=>getMsgCount(c)>0&&+getIns(c).spend>3000&&(+getIns(c).spend/getMsgCount(c))>avgCostPerMsg*3)
+      .sort((a,b)=>+getIns(b).spend-+getIns(a).spend)
+      .forEach(c=>{ const cpm=+getIns(c).spend/getMsgCount(c); issues.priority.push({ label: `私訊成本 $${fM(cpm)}（均值 $${fM(avgCostPerMsg)} 的 ${(cpm/avgCostPerMsg).toFixed(1)}x），建議優化受眾或素材`, camp: c, tag:'私訊成本過高' }); });
   }
 
-  // Good performers: high CTR > 3%
+  // P3: High CPC (> 4x average) with meaningful spend
+  if(avgCpc>0) allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).cpc>avgCpc*4&&+getIns(c).spend>2000)
+    .sort((a,b)=>+getIns(b).spend-+getIns(a).spend)
+    .forEach(c=>issues.priority.push({ label: `CPC $${fM(getIns(c).cpc)}（均值 $${fM(avgCpc)} 的 ${(+getIns(c).cpc/avgCpc).toFixed(1)}x），點擊成本異常偏高`, camp: c, tag:'CPC 過高' }));
+
+  // P4: High frequency (> 5) — audience fatigue
+  allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).frequency>5&&+getIns(c).spend>1000)
+    .sort((a,b)=>+getIns(b).frequency-+getIns(a).frequency)
+    .forEach(c=>issues.priority.push({ label: `頻次 ${(+getIns(c).frequency).toFixed(1)} 次，受眾可能已飽和，建議擴大受眾或換素材`, camp: c, tag:'頻次過高' }));
+
+  // P5: Active + spend but zero impressions
+  allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).impressions===0&&+getIns(c).spend>0)
+    .forEach(c=>issues.priority.push({ label: '有花費但無曝光，投放設定可能有問題', camp: c, tag:'異常無曝光' }));
+
+  // ── 警示：效率偏低 ─────────────────────────────────────────────
+  // W1: Active + zero impressions (no spend)
+  allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).impressions===0&&+getIns(c).spend===0)
+    .forEach(c=>issues.warning.push({ label: '執行中但無曝光也無花費，可能審核中或出價太低', camp: c, tag:'無曝光' }));
+
+  // W2: Low CTR with moderate spend
+  allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).ctr>0&&+getIns(c).ctr<0.5&&+getIns(c).spend>=500&&+getIns(c).spend<=5000)
+    .sort((a,b)=>+getIns(a).ctr-+getIns(b).ctr)
+    .forEach(c=>issues.warning.push({ label: `CTR ${fP(getIns(c).ctr)} 偏低，花費 $${fM(getIns(c).spend)}，建議測試新素材`, camp: c, tag:'低CTR' }));
+
+  // W3: High CPC (2-4x average)
+  if(avgCpc>0) allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).cpc>avgCpc*2&&+getIns(c).cpc<=avgCpc*4&&+getIns(c).clicks>10)
+    .sort((a,b)=>+getIns(b).cpc-+getIns(a).cpc)
+    .forEach(c=>issues.warning.push({ label: `CPC $${fM(getIns(c).cpc)}（均值 $${fM(avgCpc)} 的 ${(+getIns(c).cpc/avgCpc).toFixed(1)}x），競價或受眾需調整`, camp: c, tag:'CPC 偏高' }));
+
+  // W4: Frequency 3-5
+  allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).frequency>=3&&+getIns(c).frequency<=5&&+getIns(c).spend>500)
+    .sort((a,b)=>+getIns(b).frequency-+getIns(a).frequency)
+    .forEach(c=>issues.warning.push({ label: `頻次 ${(+getIns(c).frequency).toFixed(1)} 次，受眾有飽和風險，建議更新素材`, camp: c, tag:'頻次偏高' }));
+
+  // W5: High msg cost (2-3x avg)
+  if(hasMsgData && avgCostPerMsg>0) {
+    allCamps.filter(c=>getMsgCount(c)>0&&(+getIns(c).spend/getMsgCount(c))>avgCostPerMsg*2&&(+getIns(c).spend/getMsgCount(c))<=avgCostPerMsg*3)
+      .sort((a,b)=>(+getIns(b).spend/getMsgCount(b))-(+getIns(a).spend/getMsgCount(a)))
+      .forEach(c=>{ const cpm=+getIns(c).spend/getMsgCount(c); issues.warning.push({ label: `私訊成本 $${fM(cpm)}（均值 $${fM(avgCostPerMsg)} 的 ${(cpm/avgCostPerMsg).toFixed(1)}x），可優化受眾縮小範圍`, camp: c, tag:'私訊成本偏高' }); });
+  }
+
+  // ── 表現優秀 ───────────────────────────────────────────────────
+  // G1: High CTR > 3%
   allCamps.filter(c=>+getIns(c).ctr>3&&+getIns(c).spend>0)
     .sort((a,b)=>+getIns(b).ctr-+getIns(a).ctr).slice(0,5)
-    .forEach(c=>issues.good.push({ label: `CTR ${fP(getIns(c).ctr)}，花費 $${fM(getIns(c).spend)}`, camp: c, tag:'高效能' }));
+    .forEach(c=>issues.good.push({ label: `CTR ${fP(getIns(c).ctr)}，點擊品質佳，可考慮加大預算`, camp: c, tag:'高CTR' }));
 
-  // Good performers: low msg cost
+  // G2: Low msg cost (< 50% of avg)
   if(hasMsgData && avgCostPerMsg>0) {
     allCamps.filter(c=>getMsgCount(c)>5&&(+getIns(c).spend/getMsgCount(c))<avgCostPerMsg*0.5)
       .sort((a,b)=>(+getIns(a).spend/getMsgCount(a))-(+getIns(b).spend/getMsgCount(b))).slice(0,3)
-      .forEach(c=>{ const cpm=+getIns(c).spend/getMsgCount(c); issues.good.push({ label: `私訊成本 $${fM(cpm)}（低於均值 50%），私訊數 ${getMsgCount(c)}`, camp: c, tag:'低成本私訊' }); });
+      .forEach(c=>{ const cpm=+getIns(c).spend/getMsgCount(c); issues.good.push({ label: `私訊成本 $${fM(cpm)}（低於均值 50%），私訊數 ${fN(getMsgCount(c))}，建議加大預算`, camp: c, tag:'低成本私訊' }); });
   }
 
-  const rowHtml = (item, color) => `
-    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border)">
-      <span style="background:${color};color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9999px;white-space:nowrap;margin-top:2px">${item.tag}</span>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:12px;color:var(--gray-500)">${item.camp._accountName}</div>
-        <div style="font-size:13px;font-weight:600;color:var(--black);margin:1px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.camp.name}</div>
-        <div style="font-size:12px;color:var(--gray-500)">${item.label}</div>
-      </div>
-    </div>`;
+  // G3: Balanced high-spend + good CTR
+  if(avgCtr>0 && allCamps.length>0) {
+    const avgSpend = totalSpend/allCamps.length;
+    allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).spend>avgSpend*2&&+getIns(c).ctr>avgCtr&&+getIns(c).frequency<4)
+      .sort((a,b)=>+getIns(b).spend-+getIns(a).spend).slice(0,3)
+      .forEach(c=>issues.good.push({ label: `花費 $${fM(getIns(c).spend)}，CTR ${fP(getIns(c).ctr)} 高於均值，頻次 ${(+getIns(c).frequency||0).toFixed(1)} 健康，主力素材`, camp: c, tag:'主力活動' }));
+  }
 
-  const section = (title, items, color, borderColor) => {
-    if(!items.length) return '';
-    return `<div class="ai-text-card" style="border-left-color:${borderColor};padding:0;margin-bottom:12px;overflow:hidden">
-      <div style="padding:12px 16px;background:${borderColor}15;border-bottom:1px solid ${borderColor}40">
-        <h4 style="margin:0;font-size:13px;color:${borderColor}">${title}（${items.length} 項）</h4>
-      </div>
-      ${items.map(i=>rowHtml(i,color)).join('')}
-    </div>`;
-  };
+  const allRows = [
+    ...issues.priority.map(i=>({...i, section:'優先處理', sectionColor:'#FF6B2C', tagColor:'#E55A1C'})),
+    ...issues.warning.map(i=>({...i, section:'警示', sectionColor:'#F59E0B', tagColor:'#B45309'})),
+    ...issues.good.map(i=>({...i, section:'表現優秀', sectionColor:'#2E7D32', tagColor:'#1B5E20'})),
+  ];
 
   const tcEl = document.getElementById('aiTextCards');
-  tcEl.innerHTML =
-    section('優先處理', issues.priority, '#E55A1C', '#FF6B2C') +
-    section('警示', issues.warning, '#B45309', '#F59E0B') +
-    section('表現優秀', issues.good, '#1B5E20', '#2E7D32');
-
-  if(!issues.priority.length && !issues.warning.length && !issues.good.length)
+  if(!allRows.length) {
     tcEl.innerHTML = '<div style="text-align:center;padding:32px;color:var(--gray-300);font-size:13px">無特別需要關注的項目</div>';
+  } else {
+    const ins = c => getIns(c);
+    tcEl.innerHTML = `<div style="overflow-x:auto;border-radius:8px;border:1px solid var(--border);background:var(--white)">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:var(--warm-white);border-bottom:2px solid var(--border)">
+            <th style="padding:10px 12px;text-align:left;font-weight:700;color:var(--gray-500);white-space:nowrap">分類</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:700;color:var(--gray-500);white-space:nowrap">標籤</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:700;color:var(--gray-500)">廣告帳戶</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:700;color:var(--gray-500)">行銷活動</th>
+            <th style="padding:10px 12px;text-align:right;font-weight:700;color:var(--gray-500);white-space:nowrap">花費</th>
+            <th style="padding:10px 12px;text-align:right;font-weight:700;color:var(--gray-500);white-space:nowrap">CTR</th>
+            <th style="padding:10px 12px;text-align:right;font-weight:700;color:var(--gray-500);white-space:nowrap">CPC</th>
+            <th style="padding:10px 12px;text-align:right;font-weight:700;color:var(--gray-500);white-space:nowrap">頻次</th>
+            <th style="padding:10px 12px;text-align:right;font-weight:700;color:var(--gray-500);white-space:nowrap">私訊數</th>
+            <th style="padding:10px 12px;text-align:right;font-weight:700;color:var(--gray-500);white-space:nowrap">私訊成本</th>
+            <th style="padding:10px 12px;text-align:left;font-weight:700;color:var(--gray-500)">建議說明</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${allRows.map((item, idx) => {
+            const c = item.camp;
+            const ci = ins(c);
+            const spend = +ci.spend||0;
+            const ctr = +ci.ctr||0;
+            const msgs = getMsgCount(c);
+            const msgCost = msgs>0 ? spend/msgs : 0;
+            return `<tr style="border-bottom:1px solid var(--border);${idx%2===1?'background:var(--warm-white)':''}">
+              <td style="padding:10px 12px;white-space:nowrap">
+                <span style="background:${item.sectionColor}20;color:${item.sectionColor};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px">${item.section}</span>
+              </td>
+              <td style="padding:10px 12px;white-space:nowrap">
+                <span style="background:${item.tagColor};color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9999px">${item.tag}</span>
+              </td>
+              <td style="padding:10px 12px;color:var(--gray-500);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c._accountName}</td>
+              <td style="padding:10px 12px;font-weight:600;color:var(--black);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.name}">${c.name}</td>
+              <td style="padding:10px 12px;text-align:right;font-variant-numeric:tabular-nums">$${fM(spend)}</td>
+              <td style="padding:10px 12px;text-align:right">${ctr>0?fP(ctr):'—'}</td>
+              <td style="padding:10px 12px;text-align:right">${+ci.cpc>0?'$'+fM(ci.cpc):'—'}</td>
+              <td style="padding:10px 12px;text-align:right;${+ci.frequency>5?'color:var(--orange);font-weight:600':''}">${+ci.frequency>0?(+ci.frequency).toFixed(1):'—'}</td>
+              <td style="padding:10px 12px;text-align:right">${msgs>0?fN(msgs):'—'}</td>
+              <td style="padding:10px 12px;text-align:right">${msgCost>0?'$'+fM(msgCost):'—'}</td>
+              <td style="padding:10px 12px;color:var(--gray-500);min-width:160px">${item.label}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }
 
   show('aiTextCards', 'grid');
 }
@@ -2058,8 +2129,6 @@ function showView(name) {
   if(name==='ai') loadAiAnalysis();
   if(name==='finance') loadFinance();
   if(name==='settings') {
-    const cb = document.getElementById('filterActiveOnly');
-    if(cb) cb.checked = filterActiveOnly;
     renderSettingsBmList();
   }
   if(document.getElementById('sidebar').classList.contains('open'))

@@ -147,7 +147,7 @@ async def get_accounts():
 @app.get("/api/accounts/{account_id}/campaigns")
 async def get_campaigns(account_id: str, date_preset: str = "last_30d"):
     data = await fb_get(f"{account_id}/campaigns", {
-        "fields": "id,name,status,objective,daily_budget,lifetime_budget,insights.date_preset(" + date_preset + "){spend,impressions,clicks,ctr,cpc,cpm,actions}",
+        "fields": "id,name,status,objective,daily_budget,lifetime_budget,insights.date_preset(" + date_preset + "){spend,impressions,clicks,ctr,cpc,cpm,frequency,reach,actions}",
         "limit": "100"
     })
     return data
