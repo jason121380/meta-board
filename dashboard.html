@@ -1882,15 +1882,61 @@ async function loadAiAnalysis() {
               <td style="padding:10px 12px;text-align:right;${+ci.frequency>5?'color:var(--orange);font-weight:600':''}">${+ci.frequency>0?(+ci.frequency).toFixed(1):'—'}</td>
               <td style="padding:10px 12px;text-align:right">${msgs>0?fN(msgs):'—'}</td>
               <td style="padding:10px 12px;text-align:right">${msgCost>0?'$'+fM(msgCost):'—'}</td>
-              <td style="padding:10px 12px;color:var(--gray-500);min-width:160px">${item.label}</td>
+              <td id="ai-rec-${idx}" style="padding:10px 12px;color:var(--gray-500);min-width:200px;font-size:12px">
+                <span style="color:var(--gray-300);font-style:italic">AI 分析中...</span>
+              </td>
             </tr>`;
           }).join('')}
         </tbody>
       </table>
     </div>`;
+
+    // Async: fetch AI recommendations for all rows
+    fetchAiRecommendations(allRows);
   }
 
   show('aiTextCards', 'grid');
+}
+
+async function fetchAiRecommendations(rows) {
+  if(!rows.length) return;
+  const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'];
+  const getMsgC = item => { const acts = getIns(item.camp).actions||[]; for(const t of MSG_TYPES){const a=acts.find(x=>x.action_type===t);if(a)return +a.value||0;} return 0; };
+
+  const lines = rows.map((item, i) => {
+    const c = item.camp;
+    const ci = getIns(c);
+    const spend = +ci.spend||0;
+    const msgs = getMsgC(item);
+    const msgCost = msgs>0?spend/msgs:0;
+    return `${i+1}. [${item.section}/${item.tag}] ${c._accountName} | ${c.name} | 花費$${Math.round(spend)} CTR${(+ci.ctr||0).toFixed(2)}% CPC$${Math.round(+ci.cpc||0)} 頻次${(+ci.frequency||0).toFixed(1)} 私訊${msgs}個 私訊成本$${Math.round(msgCost)}`;
+  }).join('\n');
+
+  const prompt = `以下是廣告成效異常的行銷活動清單，請針對每個活動給出一句精簡的操作建議（不超過30個中文字，直接切入重點，不要說「建議」開頭）：\n\n${lines}\n\n請只回傳 JSON 陣列格式，例如：["優化受眾縮小範圍", "立即更換素材", ...] 共${rows.length}個建議，順序對應上方清單。`;
+
+  try {
+    const res = await fetch(`${API}/api/ai/chat`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ messages: [{ role: 'user', text: prompt }] })
+    }).then(r=>r.json());
+
+    const reply = res.reply || '';
+    // Extract JSON array from response
+    const match = reply.match(/\[[\s\S]*\]/);
+    if(!match) throw new Error('no array');
+    const recs = JSON.parse(match[0]);
+    rows.forEach((_, idx) => {
+      const el = document.getElementById(`ai-rec-${idx}`);
+      if(el && recs[idx]) el.textContent = recs[idx];
+    });
+  } catch(e) {
+    // Fallback to rule-based labels
+    rows.forEach((item, idx) => {
+      const el = document.getElementById(`ai-rec-${idx}`);
+      if(el) el.textContent = item.label;
+    });
+  }
 }
 
 // ── Navigation ───────────────────────────────────────────────
