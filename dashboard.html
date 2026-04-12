@@ -241,9 +241,8 @@ input:checked + .slider:before { transform: translateX(14px); }
 .settings-acct-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--white); cursor: pointer; user-select: none; }
 .settings-acct-item:hover { background: var(--orange-bg); }
 /* Custom white-check orange checkbox */
-.custom-cb { appearance: none; -webkit-appearance: none; width: 16px; height: 16px; border: 2px solid var(--border); border-radius: 4px; background: var(--white); cursor: pointer; flex-shrink: 0; position: relative; overflow: hidden; transition: background 0.15s, border-color 0.15s; }
-.custom-cb:checked { background: var(--orange); border-color: var(--orange); }
-.custom-cb:checked::after { content: ''; position: absolute; left: 3px; top: 1px; width: 5px; height: 9px; border: 2px solid #fff; border-top: none; border-left: none; transform: rotate(45deg); }
+.custom-cb { appearance: none; -webkit-appearance: none; width: 16px; height: 16px; border: 2px solid var(--border); border-radius: 4px; background: var(--white); cursor: pointer; flex-shrink: 0; transition: all 0.15s; }
+.custom-cb:checked { background: var(--orange); border-color: var(--orange); background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 6l3 3 5-5' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-size: 75% 75%; background-repeat: no-repeat; background-position: center; }
 .account-list-name { flex: 1; font-size: 13px; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-list-id { font-size: 11px; color: var(--gray-300); }
 .account-list-status { font-size: 11px; padding: 2px 6px; border-radius: 9999px; font-weight: 600; flex-shrink: 0; }
@@ -2791,7 +2790,8 @@ async function loadAiAlerts() {
     const cpcRows  = allRows.filter(r => r.tag.includes('CPC'));
     const freqRows = allRows.filter(r => r.tag.includes('頻次'));
 
-    const campCol = {label:'行銷活動', right:false, extra:'font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', fn:({c})=>`<span title="${c.name}">${c.name}</span>`};
+    const fbLink = (c) => { const act = (c._accountId||'').replace('act_',''); return act ? `<a href="https://www.facebook.com/adsmanager/manage/campaigns?act=${act}&selected_campaign_ids=${c.id}" target="_blank" style="margin-left:6px;color:var(--gray-300);font-size:11px;text-decoration:none;flex-shrink:0" title="開啟臉書後台">↗</a>` : ''; };
+    const campCol = {label:'行銷活動', right:false, extra:'', fn:({c})=>`<div style="display:flex;align-items:center;gap:0;max-width:220px"><span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${c.name}">${c.name}</span>${fbLink(c)}</div>`};
 
     _alertCols.msg = [
       campCol,
