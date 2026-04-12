@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from typing import Optional
 import httpx
 import os
 from dotenv import load_dotenv
@@ -16,7 +17,7 @@ API_VERSION = os.getenv("FB_API_VERSION", "v21.0")
 BASE_URL = f"https://graph.facebook.com/{API_VERSION}"
 
 # Runtime token override (from FB Login)
-_runtime_token: str | None = None
+_runtime_token: Optional[str] = None
 
 def get_token() -> str:
     return _runtime_token or _ACCESS_TOKEN or ""
