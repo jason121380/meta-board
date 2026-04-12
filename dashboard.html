@@ -2,7 +2,13 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#FF6B2C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LURE META">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/static/icon-192.svg">
 <title>LURE Meta Platform</title>
 <style>
 /* ── Design System (Google My Business style) ─────────────── */
@@ -315,10 +321,78 @@ input:checked + .slider:before { transform: translateX(14px); }
 
 /* ── Responsive ────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .sidebar { transform: translateX(-100%); }
+  :root { --sidebar-w: 0px; }
+  .sidebar { transform: translateX(-100%); width: 260px; }
   .sidebar.open { transform: translateX(0); }
   .main { margin-left: 0; }
   .hamburger { display: flex !important; }
+  /* Topbar */
+  .topbar { padding: 0 12px; gap: 6px; flex-wrap: wrap; height: auto; min-height: 50px; padding-top: 6px; padding-bottom: 6px; }
+  .page-title { font-size: 14px; }
+  #datePreset { width: 100px; font-size: 12px; height: 32px; }
+  .topbar select, .topbar input[type=date] { height: 32px; font-size: 12px; padding: 0 8px; }
+  .topbar-sep { display: none; }
+  .topbar-user { padding: 4px 8px; }
+  .topbar-username { display: none; }
+  .date-range-wrap.show { flex-wrap: wrap; }
+  /* Stats */
+  .stats-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 10px 10px 0; }
+  .stat { padding: 10px 12px; border-radius: 10px; }
+  .stat-label { font-size: 10px; }
+  .stat-value { font-size: 16px; min-height: 22px; }
+  /* Dashboard two-column → stack */
+  .dash-body { flex-direction: column; }
+  .dash-accounts-panel { width: 100%; max-height: 140px; border-right: none; border-bottom: 1px solid var(--border); }
+  .dash-acct-list { display: flex; overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap; gap: 0; }
+  .dash-acct-item { flex-shrink: 0; min-width: 140px; border-bottom: none; border-right: 1px solid var(--border); padding: 6px 10px; }
+  .dash-content { flex: 1; overflow-y: auto; }
+  /* Tree */
+  .tree-wrap { margin: 8px 8px 10px; border-radius: 10px; overflow: auto; }
+  .tree-toolbar { padding: 8px 10px; flex-wrap: wrap; gap: 6px; }
+  .tree-search { max-width: 100%; font-size: 12px; height: 30px; }
+  .tree-actions { margin-left: 0; }
+  table.tree { font-size: 12px; min-width: 700px; }
+  table.tree th, table.tree td { padding: 8px 8px; }
+  .name-cell { max-width: 160px; }
+  /* Settings → stack */
+  .settings-wrap { flex-direction: column; }
+  .settings-bm-panel { width: 100%; max-height: 180px; border-right: none; border-bottom: 1px solid var(--border); overflow-y: auto; }
+  .settings-acct-panel { flex: 1; }
+  /* Finance → stack */
+  .finance-body { flex-direction: column; }
+  .finance-acct-panel { width: 100%; max-height: 120px; border-right: none; border-bottom: 1px solid var(--border); }
+  .finance-acct-list { display: flex; overflow-x: auto; flex-wrap: nowrap; }
+  .finance-acct-item { flex-shrink: 0; min-width: 130px; border-bottom: none; border-right: 1px solid var(--border); padding: 8px 10px; }
+  .finance-summary { width: 100%; border-right: none; border-bottom: 1px solid var(--border); padding: 12px; display: flex; flex-wrap: wrap; gap: 12px; }
+  .finance-summary-item { flex: 1; min-width: 80px; margin-bottom: 0; }
+  .finance-summary-value { font-size: 15px; }
+  .finance-kpi-row { padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
+  .finance-kpi-val { font-size: 16px; }
+  .finance-toolbar { padding: 8px 12px; flex-wrap: wrap; }
+  .finance-table { font-size: 12px; min-width: 900px; }
+  /* Quick Launch */
+  .launch-wrap { padding: 16px; }
+  .launch-wrap h2 { font-size: 18px; }
+  /* AI View */
+  #aiChartGrid { grid-template-columns: 1fr !important; }
+  .ai-kpi-value { font-size: 22px; }
+  /* AI Chat */
+  #aiChatPanel { width: 100vw; right: -100vw; }
+  #aiChatBubble { bottom: 16px; right: 16px; width: 46px; height: 46px; }
+}
+@media (max-width: 480px) {
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .stat-value { font-size: 14px; }
+  .dash-accounts-panel { max-height: 110px; }
+  .login-card { width: calc(100vw - 32px); padding: 32px 24px; border-radius: 16px; }
+  .login-logo { font-size: 24px; }
+  .fb-login-big { height: 44px; font-size: 14px; }
+}
+/* Safe area for notched devices */
+@supports (padding: env(safe-area-inset-top)) {
+  .sidebar { padding-top: env(safe-area-inset-top); }
+  .topbar { padding-top: env(safe-area-inset-top); }
+  #loginPage { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 }
 .hamburger { display: none; position: fixed; top: 12px; left: 12px; z-index: 200; background: var(--blue); color: #fff; border: none; border-radius: var(--radius-sm); padding: 6px 10px; cursor: pointer; font-size: 16px; }
 
@@ -445,7 +519,7 @@ input:checked + .slider:before { transform: translateX(14px); }
   </div>
 </div>
 
-<button class="hamburger" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+<button class="hamburger" onclick="event.stopPropagation();document.getElementById('sidebar').classList.toggle('open')">☰</button>
 
 <div class="layout" id="appLayout" style="display:none">
 <!-- ── Sidebar ─────────────────────────────────────────────── -->
@@ -606,7 +680,7 @@ input:checked + .slider:before { transform: translateX(14px); }
     <div id="aiLoading" class="loading" style="display:none"><div class="spinner"></div>分析中...</div>
 
     <!-- KPI Row -->
-    <div id="aiInsightRow" style="display:none;gap:12px;margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+    <div id="aiInsightRow" style="display:none;gap:12px;margin-bottom:20px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
       <div class="ai-kpi-card" id="kpi-spend"></div>
       <div class="ai-kpi-card" id="kpi-active"></div>
       <div class="ai-kpi-card" id="kpi-ctr"></div>
@@ -674,6 +748,26 @@ input:checked + .slider:before { transform: translateX(14px); }
       </div>
       <div class="finance-acct-list" id="financeAcctList">
         <div class="loading" style="padding:20px"><div class="spinner"></div></div>
+      </div>
+    </div>
+    <!-- Middle: Summary -->
+    <div class="finance-summary">
+      <div class="finance-summary-title">摘要</div>
+      <div class="finance-summary-item">
+        <div class="finance-summary-label">帳戶數</div>
+        <div class="finance-summary-value" id="fin-acct-count">—</div>
+      </div>
+      <div class="finance-summary-item">
+        <div class="finance-summary-label">總花費</div>
+        <div class="finance-summary-value" id="fin-total-spend">—</div>
+      </div>
+      <div class="finance-summary-item">
+        <div class="finance-summary-label">加成金額</div>
+        <div class="finance-summary-value" id="fin-total-markup">—</div>
+      </div>
+      <div class="finance-summary-item">
+        <div class="finance-summary-label">總計 (含%)</div>
+        <div class="finance-summary-value" id="fin-total-plus">—</div>
       </div>
     </div>
     <!-- Right: KPIs + Table -->
@@ -896,6 +990,7 @@ const fN = (n,d=0) => n == null || n==='' ? '—' : Number(n).toLocaleString('zh
 const fM = n => fN(n,0);
 const fP = n => n==null||n==='' ? '—' : `${Number(n).toFixed(2)}%`;
 const fF = n => n==null||n==='' ? '—' : Number(n).toFixed(2);
+const escHtml = s => s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;') : '';
 const getIns = item => item.insights?.data?.[0] || {};
 const getAct = (item,type) => getIns(item).actions?.find(a=>a.action_type===type)?.value||null;
 const statusBadge = s => {
@@ -1068,7 +1163,7 @@ function renderDashAcctList() {
         ondrop="dragDrop(event,'${a.id}')"
         ondragend="dragEnd()">
       <div class="dash-acct-dot ${dotClass}"></div>
-      <span class="dash-acct-name" title="${a.name}">${a.name}</span>
+      <span class="dash-acct-name" title="${escHtml(a.name)}">${escHtml(a.name)}</span>
     </div>`;
   }).join('');
   const info = document.getElementById('dashAcctSelInfo');
@@ -1186,6 +1281,7 @@ function renderTree() {
 
   // Filter
   if(search) allCamps = allCamps.filter(c => c.name.toLowerCase().includes(search));
+  if(filterActiveOnly) allCamps = allCamps.filter(c => c.status === 'ACTIVE');
 
   // Sort campaigns
   if(treeSort.key) {
@@ -1241,10 +1337,10 @@ function renderTree() {
           <span class="expand-btn ${isOpen?'open':''}" style="pointer-events:none">
             ${isOpen?'▼':'▶'}
           </span>
-          <span class="name-text" title="${camp.name}">${camp.name}</span>
+          <span class="name-text" title="${escHtml(camp.name)}">${escHtml(camp.name)}</span>
         </div>
       </td>
-      ${multiAcct ? `<td><span style="font-size:11px;color:var(--gray-500)">${camp._accountName}</span></td>` : ''}
+      ${multiAcct ? `<td><span style="font-size:11px;color:var(--gray-500)">${escHtml(camp._accountName)}</span></td>` : ''}
       <td>${statusBadge(camp.status)}</td>
       <td class="num">${fM(ins.spend)}</td>
       <td class="num">${fN(ins.impressions)}</td>
@@ -1279,7 +1375,7 @@ function renderTree() {
                 <span class="expand-btn ${adsetOpen?'open':''}" style="pointer-events:none">
                   ${adsetOpen?'▼':'▶'}
                 </span>
-                <span class="name-text" title="${adset.name}" style="font-weight:500">${adset.name}</span>
+                <span class="name-text" title="${escHtml(adset.name)}" style="font-weight:500">${escHtml(adset.name)}</span>
               </div>
             </td>
             ${multiAcct ? `<td></td>` : ''}
@@ -1313,7 +1409,7 @@ function renderTree() {
                   <td>
                     <div class="name-cell indent-2" style="padding-left:72px">
                       ${thumb ? `<img class="thumb" src="${thumb}" alt="">` : '<div style="width:30px;height:30px;background:var(--warm-white);border-radius:3px;flex-shrink:0"></div>'}
-                      <span class="name-text" title="${ad.name}" style="font-weight:400;color:var(--gray-500)">${ad.name}</span>
+                      <span class="name-text" title="${escHtml(ad.name)}" style="font-weight:400;color:var(--gray-500)">${escHtml(ad.name)}</span>
                     </div>
                   </td>
                   ${multiAcct ? `<td></td>` : ''}
@@ -1482,7 +1578,7 @@ function renderSettingsBmList() {
     const isActive = g.key === selectedBmKey;
     return `<div class="settings-bm-item${isActive?' active':''}" onclick="selectBm('${g.key}')">
       <div>
-        <div class="settings-bm-name">${g.name}</div>
+        <div class="settings-bm-name">${escHtml(g.name)}</div>
         <div class="settings-bm-count">${g.accounts.length} 個帳號</div>
       </div>
       ${checkedCount>0?`<span class="settings-bm-badge">${checkedCount}</span>`:''}
@@ -1524,8 +1620,8 @@ function renderSettingsAcctList() {
     return `<div class="settings-acct-item" onclick="toggleAcctCheck('${a.id}')">
       <input type="checkbox" class="custom-cb" ${checked?'checked':''} id="set-${a.id}" data-id="${a.id}" onclick="event.stopPropagation()" onchange="updateSelCount();renderSettingsBmList()">
       <div style="flex:1;min-width:0">
-        <div class="account-list-name">${a.name}</div>
-        <div class="account-list-id">${a.id}</div>
+        <div class="account-list-name">${escHtml(a.name)}</div>
+        <div class="account-list-id">${escHtml(a.id)}</div>
       </div>
       ${statusLabel}
     </div>`;
@@ -2013,7 +2109,7 @@ function renderFinanceAcctList(accounts) {
     const plus = getAcctPlus(acc.id, spend);
     return `<div class="finance-acct-item ${finSelectedAcctIds.includes(acc.id)?'active':''}" onclick="finSelectAcct('${acc.id}')">
       <div style="flex:1;min-width:0">
-        <div class="finance-acct-name" title="${acc.name}">${acc.name}</div>
+        <div class="finance-acct-name" title="${escHtml(acc.name)}">${escHtml(acc.name)}</div>
         ${spend>0?`<div style="font-size:12px;color:var(--orange);font-weight:600;margin-top:2px">$${fM(Math.ceil(plus))}</div>`:'<div style="font-size:11px;color:var(--gray-300);margin-top:2px">載入中...</div>'}
       </div>
     </div>`;
@@ -2038,11 +2134,25 @@ function getFinanceDateRange() {
   const fmt = d => d.toISOString().slice(0,10);
   if(finDateConfig.preset === 'custom' && finDateConfig.from && finDateConfig.to)
     return { start: finDateConfig.from, end: finDateConfig.to };
-  const end = fmt(today);
-  const daysMap = { last_7d:7, last_14d:14, last_30d:30, last_90d:90, this_month:today.getDate(), last_month:30 };
-  const days = daysMap[finDateConfig.preset] || 30;
-  const start = fmt(new Date(today - days*864e5));
-  return { start, end };
+  const p = finDateConfig.preset;
+  if(p === 'today') return { start: fmt(today), end: fmt(today) };
+  if(p === 'yesterday') {
+    const y = new Date(today); y.setDate(y.getDate()-1);
+    return { start: fmt(y), end: fmt(y) };
+  }
+  if(p === 'this_month') {
+    const s = new Date(today.getFullYear(), today.getMonth(), 1);
+    return { start: fmt(s), end: fmt(today) };
+  }
+  if(p === 'last_month') {
+    const s = new Date(today.getFullYear(), today.getMonth()-1, 1);
+    const e = new Date(today.getFullYear(), today.getMonth(), 0);
+    return { start: fmt(s), end: fmt(e) };
+  }
+  const daysMap = { last_7d:7, last_14d:14, last_30d:30, last_90d:90 };
+  const days = daysMap[p] || 30;
+  const s = new Date(today); s.setDate(s.getDate()-days);
+  return { start: fmt(s), end: fmt(today) };
 }
 
 function applyDefaultMarkup() {
@@ -2084,8 +2194,8 @@ function renderFinanceTable() {
     totalSpend += spend; totalClicks += clicks; totalMsg += msgs; totalPlus += plus; campCount++;
     return `<tr>
       <td style="color:var(--gray-500)">${i+1}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${c.name}</td>
-      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;color:var(--gray-500);font-size:12px">${c._accountName}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${escHtml(c.name)}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;color:var(--gray-500);font-size:12px">${escHtml(c._accountName)}</td>
       <td style="color:var(--gray-500)">${start}</td>
       <td style="color:var(--gray-500)">${end}</td>
       <td class="num">$${fM(spend)}</td>
@@ -2368,6 +2478,20 @@ function sendPreset(text) {
   document.getElementById('chatInput').value = text;
   sendChat();
 }
+
+// ── PWA Service Worker ──────────────────────────────────────
+if('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(()=>{});
+}
+
+// ── Mobile: close sidebar on overlay tap ────────────────────
+document.addEventListener('click', function(e) {
+  const sidebar = document.getElementById('sidebar');
+  if(!sidebar || !sidebar.classList.contains('open')) return;
+  if(!sidebar.contains(e.target) && !e.target.classList.contains('hamburger')) {
+    sidebar.classList.remove('open');
+  }
+});
 </script>
 </body>
 </html>

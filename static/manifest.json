@@ -1,0 +1,24 @@
+{
+  "name": "LURE META PLATFORM",
+  "short_name": "LURE META",
+  "description": "Facebook Ads management dashboard for LURE agency",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#FF6B2C",
+  "background_color": "#FFF5F0",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/static/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
