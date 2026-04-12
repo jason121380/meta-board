@@ -864,17 +864,8 @@ input:checked + .slider:before { transform: translateX(14px); }
   <div class="finance-body">
     <!-- Left: Account Summary Panel -->
     <div class="finance-acct-panel">
-      <!-- Account Table Header -->
-      <div style="padding:6px 14px;border-bottom:1px solid var(--border);background:var(--warm-white);display:flex;font-size:10px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.5px">
-        <div style="font-size:10px;font-weight:700;color:var(--gray-300)">廣告帳號</div>
-      </div>
-      <div style="padding:4px 0;border-bottom:1px solid var(--border);background:var(--warm-white);display:flex;font-size:10px;font-weight:600;color:var(--gray-500);padding:0 14px">
-        <span style="width:28px;flex-shrink:0">No.</span>
-        <span style="flex:1">名稱</span>
-        <span style="width:36px;text-align:right">數量</span>
-        <span style="width:70px;text-align:right">花費</span>
-        <span style="width:70px;text-align:right">花費+%</span>
-      </div>
+      <!-- Account List Header -->
+      <div style="padding:8px 14px;border-bottom:1px solid var(--border);background:var(--warm-white);font-size:10px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.5px">廣告帳號</div>
       <!-- Account List -->
       <div class="finance-acct-list" id="financeAcctList">
         <div class="loading" style="padding:20px"><div class="spinner"></div></div>
@@ -1088,6 +1079,7 @@ let aiDateConfig = { preset: 'this_month', from: null, to: null };
 let aiCampData = {}; // separate cache for AI view (keyed by accountId)
 let finDateConfig = { preset: 'this_month', from: null, to: null };
 let finCampData = {}; // separate cache for finance view
+let finInsightData = {}; // account-level insights (accurate total spend)
 let finSelectedAcctIds = []; // selected accounts in finance view (empty = all)
 let finRowMarkups = JSON.parse(localStorage.getItem('fin_row_markups') || '{}'); // per-campaign markup overrides { campaignId: % }
 let finPinnedIds = JSON.parse(localStorage.getItem('fin_pinned_ids') || '[]'); // pinned campaign IDs (shown at top)
@@ -1446,7 +1438,7 @@ async function init() {
   dpFin = new DatePicker('dpFin', {
     varName: 'dpFin',
     defaultPreset: 'this_month',
-    onApply: function(cfg) { finDateConfig = cfg; finCampData = {}; loadFinance(); }
+    onApply: function(cfg) { finDateConfig = cfg; finCampData = {}; finInsightData = {}; loadFinance(); }
   });
   // Restore saved default markup
   const savedMarkup = localStorage.getItem('fin_default_markup');
@@ -2572,17 +2564,35 @@ async function loadFinance() {
   if(!visible.length) { renderFinanceAcctList([]); return; }
   renderFinanceAcctList(visible);
   const dp = getFinDateParams();
-  // Load campaigns for visible accounts (with session cache)
+  // Fetch account-level insights (accurate spend) + campaigns in parallel
   await Promise.all(visible.map(async acc => {
-    if(finCampData[acc.id]) return;
-    const cached = _cacheGet('fin', acc.id, dp);
-    if(cached) { finCampData[acc.id] = cached; renderFinanceAcctList(visible); return; }
-    const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
-    finCampData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
-    _cacheSet('fin', acc.id, dp, finCampData[acc.id]);
+    const tasks = [];
+    // Account-level insights for accurate spend total
+    if(!finInsightData[acc.id]) {
+      const cInsight = _cacheGet('fin_ins', acc.id, dp);
+      if(cInsight) { finInsightData[acc.id] = cInsight; }
+      else tasks.push(
+        fetch(`${API}/api/accounts/${acc.id}/insights?${dp}`).then(r=>r.json()).then(res => {
+          finInsightData[acc.id] = res.data?.[0] || {};
+          _cacheSet('fin_ins', acc.id, dp, finInsightData[acc.id]);
+        }).catch(()=>{ finInsightData[acc.id] = {}; })
+      );
+    }
+    // Campaign list (for drill-down and count)
+    if(!finCampData[acc.id]) {
+      const cCamp = _cacheGet('fin', acc.id, dp);
+      if(cCamp) { finCampData[acc.id] = cCamp; }
+      else tasks.push(
+        fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json()).then(res => {
+          finCampData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+          _cacheSet('fin', acc.id, dp, finCampData[acc.id]);
+        }).catch(()=>{ finCampData[acc.id] = []; })
+      );
+    }
+    if(tasks.length) await Promise.all(tasks);
+    renderFinanceAcctList(visible);
   }));
   renderFinanceTable();
-  // Re-render account list with spend data now available
   renderFinanceAcctList(visible);
 }
 
@@ -2593,21 +2603,20 @@ function renderFinanceAcctList(accounts) {
     return;
   }
   const defaultMarkup = parseFloat(document.getElementById('financeMarkupDefault')?.value) || 0;
-  const getAcctSpend = (accId) => (finCampData[accId]||[]).reduce((s,c)=>s+(+getIns(c).spend||0),0);
-  const getAcctCampCount = (accId) => (finCampData[accId]||[]).filter(c=>+getIns(c).spend>0).length;
+  // Use account-level insights for accurate spend; fallback to campaign sum
+  const getAcctSpend = (accId) => {
+    if(finInsightData[accId]?.spend) return +finInsightData[accId].spend;
+    return (finCampData[accId]||[]).reduce((s,c)=>s+(+getIns(c).spend||0),0);
+  };
   const getAcctPlus = (accId) => {
-    const camps = finCampData[accId]||[];
-    return camps.reduce((s,c)=>{
-      const sp=+getIns(c).spend||0;
-      const m=finRowMarkups[c.id]!==undefined?finRowMarkups[c.id]:defaultMarkup;
-      return s+sp*(1+m/100);
-    },0);
+    const sp = getAcctSpend(accId);
+    const m = finRowMarkups[accId] !== undefined ? finRowMarkups[accId] : defaultMarkup;
+    return sp * (1 + m/100);
   };
   const totalSpend = accounts.reduce((s,a)=>s+getAcctSpend(a.id),0);
   const totalPlus = accounts.reduce((s,a)=>s+getAcctPlus(a.id),0);
-  const totalCount = accounts.reduce((s,a)=>s+getAcctCampCount(a.id),0);
 
-  const dataLoaded = accounts.every(a => finCampData[a.id] !== undefined);
+  const dataLoaded = accounts.every(a => finInsightData[a.id] !== undefined || finCampData[a.id] !== undefined);
   const allRow = `<div class="finance-acct-item ${finSelectedAcctIds.length===0?'active':''}" onclick="finSelectAcct('__all__')">
     <div style="flex:1;min-width:0">
       <div class="finance-acct-name">全部帳戶</div>
@@ -2615,10 +2624,10 @@ function renderFinanceAcctList(accounts) {
     </div>
   </div>`;
 
-  const rows = accounts.map((acc, i) => {
+  const rows = accounts.map((acc) => {
     const spend = getAcctSpend(acc.id);
-    const plus = getAcctPlus(acc.id, spend);
-    const loaded = finCampData[acc.id] !== undefined;
+    const plus = getAcctPlus(acc.id);
+    const loaded = finInsightData[acc.id] !== undefined || finCampData[acc.id] !== undefined;
     return `<div class="finance-acct-item ${finSelectedAcctIds.includes(acc.id)?'active':''}" onclick="finSelectAcct('${acc.id}')">
       <div style="flex:1;min-width:0">
         <div class="finance-acct-name" title="${acc.name}">${acc.name}</div>
@@ -2672,18 +2681,98 @@ function renderFinanceTable() {
   const defaultMarkup = parseFloat(document.getElementById('financeMarkupDefault')?.value) || 0;
   const q = (document.getElementById('financeSearch')?.value||'').toLowerCase();
   const visible = getVisibleAccounts();
-  const filtered = finSelectedAcctIds.length ? visible.filter(a=>finSelectedAcctIds.includes(a.id)) : visible;
 
-  // Aggregate per account
+  const fsTh = (label, key, align='left') => {
+    const isActive = finSort.key === key;
+    const arrow = isActive ? (finSort.dir==='asc'?' ↑':' ↓') : '';
+    return `<th class="${align==='right'?'num':''}" style="cursor:${key?'pointer':'default'};user-select:none;white-space:nowrap;${isActive?'color:var(--orange)':''}" ${key?`onclick="finSortBy('${key}')"`:''}>${label}${arrow}</th>`;
+  };
+
+  // ── Campaign drill-down mode (single account selected) ──────────────
+  if(finSelectedAcctIds.length === 1) {
+    const accId = finSelectedAcctIds[0];
+    let camps = (finCampData[accId] || []).filter(c => +getIns(c).spend > 0);
+    if(q) camps = camps.filter(c => c.name.toLowerCase().includes(q));
+
+    const sortFn = (a, b) => {
+      if(!finSort.key) return 0;
+      const getVal = c => {
+        const m = finRowMarkups[c.id] !== undefined ? finRowMarkups[c.id] : defaultMarkup;
+        switch(finSort.key) {
+          case 'name': return c.name;
+          case 'spend': return +getIns(c).spend || 0;
+          case 'markup': return m;
+          case 'plus': return (+getIns(c).spend||0)*(1+m/100);
+          default: return 0;
+        }
+      };
+      const va = getVal(a), vb = getVal(b);
+      const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
+      return finSort.dir === 'asc' ? cmp : -cmp;
+    };
+    const pinned = camps.filter(c=>finPinnedIds.includes(c.id)).sort(sortFn);
+    const unpinned = camps.filter(c=>!finPinnedIds.includes(c.id)).sort(sortFn);
+    financeRows = [...pinned, ...unpinned].map(c => ({ camp: c, acc: visible.find(a=>a.id===accId) }));
+
+    document.getElementById('financeTableHead').innerHTML = `<tr>
+      ${fsTh('No.', '')}
+      ${fsTh('行銷活動名稱', 'name')}
+      ${fsTh('花費', 'spend', 'right')}
+      ${fsTh('月%', 'markup', 'right')}
+      ${fsTh('花費+%', 'plus', 'right')}
+      <th style="text-align:center;width:48px">Pin</th>
+    </tr>`;
+
+    const body = document.getElementById('financeTableBody');
+    if(!financeRows.length) {
+      const loaded = finCampData[accId] !== undefined;
+      body.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--gray-300)">${loaded?'無花費資料':'載入中...'}</td></tr>`;
+      return;
+    }
+
+    let totalSpend = 0, totalPlus = 0;
+    body.innerHTML = financeRows.map(({camp}, i) => {
+      const isPinned = finPinnedIds.includes(camp.id);
+      const sp = +getIns(camp).spend || 0;
+      const rowMarkup = finRowMarkups[camp.id] !== undefined ? finRowMarkups[camp.id] : defaultMarkup;
+      const plus = sp * (1 + rowMarkup/100);
+      totalSpend += sp; totalPlus += plus;
+      const statusDot = camp.status === 'ACTIVE'
+        ? `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:5px;vertical-align:middle"></span>`
+        : `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--gray-300);margin-right:5px;vertical-align:middle"></span>`;
+      return `<tr style="${isPinned?'border-left:3px solid var(--orange);background:var(--orange-bg);':''}">
+        <td style="color:var(--gray-500);width:40px">${i+1}</td>
+        <td style="font-weight:500;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${camp.name}">${statusDot}${camp.name}</td>
+        <td class="num">$${fM(sp)}</td>
+        <td class="num"><input class="fin-markup-input" type="number" value="${rowMarkup}" min="0" max="999" step="0.5" data-camp-id="${camp.id}" oninput="onRowMarkupChange(this)" style="width:52px;height:26px;border:1.5px solid var(--border);border-radius:4px;text-align:center;font-size:12px;font-family:inherit;padding:0 4px">%</td>
+        <td class="num fin-plus-cell" style="color:var(--orange);font-weight:600">$${fM(Math.ceil(plus))}</td>
+        <td style="text-align:center">
+          <button onclick="toggleFinPin('${camp.id}')" title="${isPinned?'取消置頂':'置頂'}" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 6px;opacity:${isPinned?'1':'0.25'};transition:opacity 0.15s">📌</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('fin-kpi-spend').textContent = '$' + fM(totalSpend);
+    document.getElementById('fin-kpi-plus').textContent = '$' + fM(Math.ceil(totalPlus));
+    document.getElementById('fin-kpi-clicks').textContent = '—';
+    document.getElementById('fin-kpi-cpc').textContent = '—';
+    document.getElementById('fin-kpi-msg').textContent = '—';
+    document.getElementById('fin-kpi-cpm').textContent = '—';
+    return;
+  }
+
+  // ── Account summary mode (全部帳戶) ──────────────────────────────────
+  const filtered = visible;
   let accountRows = filtered.map(acc => {
     const camps = (finCampData[acc.id]||[]).filter(c => +getIns(c).spend > 0);
-    const spend = camps.reduce((s,c) => s + (+getIns(c).spend||0), 0);
+    // Use accurate account-level insight spend if available
+    const spend = finInsightData[acc.id]?.spend ? +finInsightData[acc.id].spend
+                  : camps.reduce((s,c) => s + (+getIns(c).spend||0), 0);
     return { acc, campCount: camps.length, spend };
-  }).filter(r => finCampData[r.acc.id] !== undefined);
+  }).filter(r => finCampData[r.acc.id] !== undefined || finInsightData[r.acc.id] !== undefined);
 
   if(q) accountRows = accountRows.filter(r => r.acc.name.toLowerCase().includes(q));
 
-  // Sort
   const sortFn = (a, b) => {
     if(!finSort.key) return 0;
     const getVal = r => {
@@ -2705,12 +2794,6 @@ function renderFinanceTable() {
   const unpinned = accountRows.filter(r=>!finPinnedIds.includes(r.acc.id)).sort(sortFn);
   financeRows = [...pinned, ...unpinned];
 
-  // Render sortable header
-  const fsTh = (label, key, align='left') => {
-    const isActive = finSort.key === key;
-    const arrow = isActive ? (finSort.dir==='asc'?' ↑':' ↓') : '';
-    return `<th class="${align==='right'?'num':''}" style="cursor:${key?'pointer':'default'};user-select:none;white-space:nowrap;${isActive?'color:var(--orange)':''}" ${key?`onclick="finSortBy('${key}')"`:''}>${label}${arrow}</th>`;
-  };
   document.getElementById('financeTableHead').innerHTML = `<tr>
     ${fsTh('No.', '')}
     ${fsTh('廣告帳號', 'name')}
@@ -2746,7 +2829,6 @@ function renderFinanceTable() {
     </tr>`;
   }).join('');
 
-  // KPIs & summary
   document.getElementById('fin-kpi-spend').textContent = '$' + fM(totalSpend);
   document.getElementById('fin-kpi-plus').textContent = '$' + fM(Math.ceil(totalPlus));
   document.getElementById('fin-kpi-clicks').textContent = '—';
@@ -2760,17 +2842,21 @@ function onRowMarkupChange(inp) {
   finRowMarkups[id] = parseFloat(inp.value) || 0;
   syncToCloud();
   localStorage.setItem('fin_row_markups', JSON.stringify(finRowMarkups));
+  const defaultMarkup = parseFloat(document.getElementById('financeMarkupDefault')?.value) || 0;
   // Update the plus cell in same row
   const row = inp.closest('tr');
-  const spendCell = row.cells[3].textContent.replace(/[$,]/g,'');
+  // In drill-down mode spend is at cell[2]; in account mode at cell[3]
+  const isDrillDown = finSelectedAcctIds.length === 1;
+  const spendCell = row.cells[isDrillDown ? 2 : 3].textContent.replace(/[$,]/g,'');
   const spend = parseFloat(spendCell) || 0;
   const plus = spend * (1 + finRowMarkups[id]/100);
   row.querySelector('.fin-plus-cell').textContent = '$' + fM(Math.ceil(plus));
   // Update summary totals
   let totalSpend = 0, totalPlus = 0;
   financeRows.forEach(r => {
-    const s = r.spend||0;
-    const m = finRowMarkups[r.acc.id] !== undefined ? finRowMarkups[r.acc.id] : (parseFloat(document.getElementById('financeMarkupDefault')?.value)||0);
+    const s = r.spend !== undefined ? r.spend : (+getIns(r.camp).spend || 0);
+    const rowId = r.acc ? r.acc.id : r.camp.id;
+    const m = finRowMarkups[rowId] !== undefined ? finRowMarkups[rowId] : defaultMarkup;
     totalSpend += s; totalPlus += s*(1+m/100);
   });
   document.getElementById('fin-kpi-spend').textContent = '$' + fM(totalSpend);
