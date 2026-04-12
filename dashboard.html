@@ -1537,11 +1537,18 @@ async function toggleCamp(e, id) {
   }
   expandedCamps.add(id);
   renderTree();
-  // Load adsets if not cached
-  if(!adsetData[id]) {
+  if(!adsetData[id] || !adsetData[id].length) {
     const dp = getDateParams();
-    const res = await fetch(`${API}/api/campaigns/${id}/adsets?${dp}`).then(r=>r.json());
-    adsetData[id] = res.data || [];
+    try {
+      const r = await fetch(`${API}/api/campaigns/${id}/adsets?${dp}`);
+      const res = await r.json();
+      if(r.ok && res.data) {
+        adsetData[id] = res.data;
+      } else {
+        // API error — don't cache so it retries next click
+        delete adsetData[id];
+      }
+    } catch(e) { delete adsetData[id]; }
     renderTree();
   }
 }
@@ -1555,14 +1562,17 @@ async function toggleAdset(e, id) {
   }
   expandedAdsets.add(id);
   renderTree();
-  if(!adData[id]) {
+  if(!adData[id] || !adData[id].length) {
     const dp = getDateParams();
     try {
-      const res = await fetch(`${API}/api/adsets/${id}/ads?${dp}`).then(r=>r.json());
-      adData[id] = res.data || [];
-    } catch(e) {
-      adData[id] = [];
-    }
+      const r = await fetch(`${API}/api/adsets/${id}/ads?${dp}`);
+      const res = await r.json();
+      if(r.ok && res.data) {
+        adData[id] = res.data;
+      } else {
+        delete adData[id];
+      }
+    } catch(e) { delete adData[id]; }
     renderTree();
   }
 }
