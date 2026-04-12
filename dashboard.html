@@ -3058,29 +3058,22 @@ function renderFinanceTable() {
     return;
   }
 
-  // ── Account summary mode (全部帳戶) ──────────────────────────────────
-  let accountRows = visible.map(acc => {
-    const allCamps = finCampData[acc.id] || [];
-    const activeCamps = allCamps.filter(c => +getIns(c).spend > 0);
-    // Use accurate account-level insight spend if available
-    const spend = finInsightData[acc.id]?.spend ? +finInsightData[acc.id].spend
-                  : activeCamps.reduce((s,c) => s + (+getIns(c).spend||0), 0);
-    return { acc, campCount: activeCamps.length, spend };
-  }).filter(r => finCampData[r.acc.id] !== undefined || finInsightData[r.acc.id] !== undefined);
-
-  if(hideZero) accountRows = accountRows.filter(r => r.spend > 0);
-  if(q) accountRows = accountRows.filter(r => r.acc.name.toLowerCase().includes(q));
+  // ── All accounts mode (全部帳戶) — show all campaigns combined ─────────
+  const accsToShow = visible.filter(a => finCampData[a.id] !== undefined);
+  let camps = accsToShow.flatMap(acc => finCampData[acc.id] || []);
+  if(hideZero) camps = camps.filter(c => +getIns(c).spend > 0);
+  if(q) camps = camps.filter(c => c.name.toLowerCase().includes(q) || (c._accountName||'').toLowerCase().includes(q));
 
   const sortFn = (a, b) => {
     if(!finSort.key) return 0;
-    const getVal = r => {
-      const m = finRowMarkups[r.acc.id] !== undefined ? finRowMarkups[r.acc.id] : defaultMarkup;
+    const getVal = c => {
+      const m = finRowMarkups[c.id] !== undefined ? finRowMarkups[c.id] : defaultMarkup;
       switch(finSort.key) {
-        case 'name': return r.acc.name;
-        case 'count': return r.campCount;
-        case 'spend': return r.spend;
+        case 'name': return c.name;
+        case 'acct': return c._accountName || '';
+        case 'spend': return +getIns(c).spend || 0;
         case 'markup': return m;
-        case 'plus': return r.spend*(1+m/100);
+        case 'plus': return (+getIns(c).spend||0)*(1+m/100);
         default: return 0;
       }
     };
@@ -3088,14 +3081,15 @@ function renderFinanceTable() {
     const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
     return finSort.dir === 'asc' ? cmp : -cmp;
   };
-  const pinned = accountRows.filter(r=>finPinnedIds.includes(r.acc.id)).sort(sortFn);
-  const unpinned = accountRows.filter(r=>!finPinnedIds.includes(r.acc.id)).sort(sortFn);
-  financeRows = [...pinned, ...unpinned];
+  const pinned = camps.filter(c=>finPinnedIds.includes(c.id)).sort(sortFn);
+  const unpinned = camps.filter(c=>!finPinnedIds.includes(c.id)).sort(sortFn);
+  financeRows = [...pinned, ...unpinned].map(c => ({ camp: c, acc: visible.find(a=>a.id===c._accountId) }));
 
   document.getElementById('financeTableHead').innerHTML = `<tr>
-    ${fsTh('No.', '')}
-    ${fsTh('廣告帳號', 'name')}
-    ${fsTh('數量', 'count', 'right')}
+    <th style="width:40px;user-select:none">No.</th>
+    <th style="width:80px;user-select:none">狀態</th>
+    ${fsTh('廣告帳號', 'acct')}
+    ${fsTh('行銷活動名稱', 'name')}
     ${fsTh('花費', 'spend', 'right')}
     ${fsTh('月%', 'markup', 'right')}
     ${fsTh('花費+%', 'plus', 'right')}
@@ -3104,31 +3098,41 @@ function renderFinanceTable() {
 
   const body = document.getElementById('financeTableBody');
   if(!financeRows.length) {
-    body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--gray-300)">無資料</td></tr>';
+    const allLoaded = accsToShow.length > 0;
+    body.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--gray-300)">${allLoaded?'無花費資料':'載入中...'}</td></tr>`;
     return;
   }
 
-  let totalSpend = 0, totalPlus = 0;
-  body.innerHTML = financeRows.map((r, i) => {
-    const isPinned = finPinnedIds.includes(r.acc.id);
-    const rowMarkup = finRowMarkups[r.acc.id] !== undefined ? finRowMarkups[r.acc.id] : defaultMarkup;
-    const plus = r.spend * (1 + rowMarkup/100);
-    totalSpend += r.spend; totalPlus += plus;
+  let campSpendSum = 0;
+  body.innerHTML = financeRows.map(({camp}, i) => {
+    const isPinned = finPinnedIds.includes(camp.id);
+    const sp = +getIns(camp).spend || 0;
+    const rowMarkup = finRowMarkups[camp.id] !== undefined ? finRowMarkups[camp.id] : defaultMarkup;
+    const plus = sp * (1 + rowMarkup/100);
+    campSpendSum += sp;
+    const statusLabel = camp.status === 'ACTIVE'
+      ? `<span style="display:inline-block;padding:2px 7px;border-radius:10px;background:#E8F5E9;color:#2E7D32;font-size:11px;font-weight:600">進行中</span>`
+      : camp.status === 'PAUSED'
+      ? `<span style="display:inline-block;padding:2px 7px;border-radius:10px;background:#F5F5F5;color:#757575;font-size:11px;font-weight:600">暫停</span>`
+      : camp.status === 'ARCHIVED'
+      ? `<span style="display:inline-block;padding:2px 7px;border-radius:10px;background:#EEEEEE;color:#9E9E9E;font-size:11px;font-weight:600">已封存</span>`
+      : `<span style="display:inline-block;padding:2px 7px;border-radius:10px;background:#FFEBEE;color:#B71C1C;font-size:11px;font-weight:600">已刪除</span>`;
     return `<tr style="${isPinned?'border-left:3px solid var(--orange);background:var(--orange-bg);':''}">
       <td style="color:var(--gray-500);width:40px">${i+1}</td>
-      <td style="font-weight:600">${r.acc.name}</td>
-      <td class="num" style="color:var(--gray-500)">${r.campCount}</td>
-      <td class="num">$${fM(r.spend)}</td>
-      <td class="num"><input class="fin-markup-input" type="number" value="${rowMarkup}" min="0" max="999" step="0.5" data-acct-id="${r.acc.id}" oninput="onRowMarkupChange(this)" style="width:52px;height:26px;border:1.5px solid var(--border);border-radius:4px;text-align:center;font-size:12px;font-family:inherit;padding:0 4px">%</td>
+      <td style="width:80px">${statusLabel}</td>
+      <td style="color:var(--gray-500);font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${camp._accountName||''}">${camp._accountName||''}</td>
+      <td style="font-weight:500" title="${camp.name}"><div style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${camp.name}</div></td>
+      <td style="font-variant-numeric:tabular-nums">$${fM(sp)}</td>
+      <td class="num"><input class="fin-markup-input" type="number" value="${rowMarkup}" min="0" max="999" step="0.5" data-camp-id="${camp.id}" oninput="onRowMarkupChange(this)" style="width:52px;height:26px;border:1.5px solid var(--border);border-radius:4px;text-align:center;font-size:12px;font-family:inherit;padding:0 4px">%</td>
       <td class="num fin-plus-cell" style="color:var(--orange);font-weight:600">$${fM(Math.ceil(plus))}</td>
       <td style="text-align:center">
-        <button onclick="toggleFinPin('${r.acc.id}')" title="${isPinned?'取消置頂':'置頂'}" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 6px;opacity:${isPinned?'1':'0.25'};transition:opacity 0.15s">📌</button>
+        <button onclick="toggleFinPin('${camp.id}')" title="${isPinned?'取消置頂':'置頂'}" style="background:none;border:none;cursor:pointer;font-size:16px;padding:2px 6px;opacity:${isPinned?'1':'0.25'};transition:opacity 0.15s">📌</button>
       </td>
     </tr>`;
   }).join('');
 
-  document.getElementById('fin-kpi-spend').textContent = '$' + fM(totalSpend);
-  document.getElementById('fin-kpi-plus').textContent = '$' + fM(Math.ceil(totalPlus));
+  document.getElementById('fin-kpi-spend').textContent = '$' + fM(campSpendSum);
+  document.getElementById('fin-kpi-plus').textContent = '$' + fM(Math.ceil(campSpendSum * (1 + defaultMarkup/100)));
 }
 
 function onRowMarkupChange(inp) {
@@ -3139,9 +3143,9 @@ function onRowMarkupChange(inp) {
   const defaultMarkup = parseFloat(document.getElementById('financeMarkupDefault')?.value) || 0;
   // Update the plus cell in same row
   const row = inp.closest('tr');
-  // In drill-down mode spend is at cell[2]; in account mode at cell[3]
-  const isDrillDown = finSelectedAcctIds.length === 1;
-  const spendCell = row.cells[isDrillDown ? 2 : 3].textContent.replace(/[$,]/g,'');
+  // Spend is at cell index 4 (No.|狀態|帳號|名稱|花費) for all-acct; cell[3] for single acct (No.|狀態|名稱|花費)
+  const spendCellIdx = finSelectedAcctIds.length === 1 ? 3 : 4;
+  const spendCell = row.cells[spendCellIdx].textContent.replace(/[$,]/g,'');
   const spend = parseFloat(spendCell) || 0;
   const plus = spend * (1 + finRowMarkups[id]/100);
   row.querySelector('.fin-plus-cell').textContent = '$' + fM(Math.ceil(plus));
@@ -3161,24 +3165,17 @@ function downloadFinanceCsv() {
   const defaultMarkup = parseFloat(document.getElementById('financeMarkupDefault')?.value) || 0;
   const { start, end } = getFinanceDateRange();
   let rows, filename;
-  if(finSelectedAcctIds.length === 1) {
-    // Campaign drill-down mode
-    rows = [['No.','狀態','行銷活動名稱','花費','月%','花費+%']];
-    financeRows.forEach(({camp}, i) => {
-      const sp = +getIns(camp).spend || 0;
-      const rowMarkup = finRowMarkups[camp.id] !== undefined ? finRowMarkups[camp.id] : defaultMarkup;
-      rows.push([i+1, camp.status, camp.name, sp.toFixed(0), rowMarkup+'%', Math.ceil(sp*(1+rowMarkup/100))]);
-    });
-    filename = `財務報表_行銷活動_${start}_${end}.csv`;
-  } else {
-    // Account summary mode
-    rows = [['No.','廣告帳號','數量','花費','月%','花費+%']];
-    financeRows.forEach((r,i) => {
-      const rowMarkup = finRowMarkups[r.acc.id] !== undefined ? finRowMarkups[r.acc.id] : defaultMarkup;
-      rows.push([i+1, r.acc.name, r.campCount, r.spend.toFixed(0), rowMarkup+'%', Math.ceil(r.spend*(1+rowMarkup/100))]);
-    });
-    filename = `財務報表_${start}_${end}.csv`;
-  }
+  // All modes now use campaign rows
+  const hasAcctCol = finSelectedAcctIds.length !== 1;
+  rows = [hasAcctCol ? ['No.','狀態','廣告帳號','行銷活動名稱','花費','月%','花費+%'] : ['No.','狀態','行銷活動名稱','花費','月%','花費+%']];
+  financeRows.forEach(({camp}, i) => {
+    const sp = +getIns(camp).spend || 0;
+    const rowMarkup = finRowMarkups[camp.id] !== undefined ? finRowMarkups[camp.id] : defaultMarkup;
+    const row = [i+1, camp.status, camp.name, sp.toFixed(0), rowMarkup+'%', Math.ceil(sp*(1+rowMarkup/100))];
+    if(hasAcctCol) row.splice(2, 0, camp._accountName||'');
+    rows.push(row);
+  });
+  filename = `財務報表_行銷活動_${start}_${end}.csv`;
   const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
