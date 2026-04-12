@@ -247,7 +247,7 @@ input:checked + .slider:before { transform: translateX(14px); }
 
 /* ── Finance View ──────────────────────────────────────────── */
 .finance-body { display: flex; flex: 1; overflow: hidden; }
-.finance-acct-panel { width: 200px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--white); overflow: hidden; }
+.finance-acct-panel { width: 240px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--white); overflow: hidden; }
 .finance-acct-header { padding: 12px 14px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .finance-acct-title { font-size: 11px; font-weight: 700; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
 .finance-acct-list { flex: 1; overflow-y: auto; }
@@ -773,20 +773,34 @@ input:checked + .slider:before { transform: translateX(14px); }
     <button class="btn btn-blue btn-sm" onclick="downloadFinanceCsv()">下載資料</button>
   </div>
   <div class="finance-body">
-    <!-- Left: Account Selector -->
+    <!-- Left: Account Summary Panel -->
     <div class="finance-acct-panel">
-      <div class="finance-acct-header">
-        <div class="finance-acct-title">廣告帳戶</div>
+      <!-- Summary Stats -->
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);background:var(--white)">
+        <div style="font-size:10px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">總計</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px">
+          <div><span style="color:var(--gray-500)">帳號數量</span> <strong id="fin-acct-count">0</strong></div>
+          <div><span style="color:var(--gray-500)">總花費</span> <strong id="fin-total-spend">—</strong></div>
+          <div><span style="color:var(--gray-500)">%</span> <strong id="fin-total-markup">—</strong></div>
+          <div><span style="color:var(--gray-500)">總花費+%</span> <strong id="fin-total-plus" style="color:var(--orange)">—</strong></div>
+        </div>
       </div>
+      <!-- Account Table Header -->
+      <div style="padding:6px 14px;border-bottom:1px solid var(--border);background:var(--warm-white);display:flex;font-size:10px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.5px">
+        <div style="font-size:10px;font-weight:700;color:var(--gray-300)">廣告帳號</div>
+      </div>
+      <div style="padding:4px 0;border-bottom:1px solid var(--border);background:var(--warm-white);display:flex;font-size:10px;font-weight:600;color:var(--gray-500);padding:0 14px">
+        <span style="width:28px;flex-shrink:0">No.</span>
+        <span style="flex:1">名稱</span>
+        <span style="width:36px;text-align:right">數量</span>
+        <span style="width:70px;text-align:right">花費</span>
+        <span style="width:70px;text-align:right">花費+%</span>
+      </div>
+      <!-- Account List -->
       <div class="finance-acct-list" id="financeAcctList">
         <div class="loading" style="padding:20px"><div class="spinner"></div></div>
       </div>
     </div>
-    <!-- Hidden summary targets (for JS updates, no visible panel) -->
-    <span id="fin-acct-count" style="display:none"></span>
-    <span id="fin-total-spend" style="display:none"></span>
-    <span id="fin-total-markup" style="display:none"></span>
-    <span id="fin-total-plus" style="display:none"></span>
     <!-- Right: KPIs + Table -->
     <div class="finance-main">
       <div class="finance-kpi-row">
@@ -1221,7 +1235,12 @@ function renderDashAcctList() {
   if(!visible.length) { el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--gray-300)">請先在設定中啟用帳戶</div>'; return; }
   const q = (document.getElementById('dashAcctSearch')?.value||'').toLowerCase();
   let list = visible.filter(a => !q || a.name.toLowerCase().includes(q) || a.id.includes(q));
-  list = list.sort((a,b) => a.name.localeCompare(b.name, 'zh-TW'));
+  list = list.sort((a,b) => {
+    const ia = acctOrder.indexOf(a.id), ib = acctOrder.indexOf(b.id);
+    if(ia>=0 && ib>=0) return ia-ib;
+    if(ia>=0) return -1; if(ib>=0) return 1;
+    return a.name.localeCompare(b.name, 'zh-TW');
+  });
   el.innerHTML = list.map(a => {
     const isActive = selectedAccounts.some(s=>s.id===a.id);
     const dotClass = a.account_status===1?'on':'off';
@@ -1693,7 +1712,13 @@ function renderSettingsAcctList() {
   el.innerHTML = list.map(a => {
     const checked = checkedIds.has(a.id);
     const statusLabel = acctStatusLabel(a.account_status);
-    return `<div class="settings-acct-item" onclick="toggleAcctCheck('${a.id}')">
+    return `<div class="settings-acct-item" draggable="true" data-acct-id="${a.id}"
+        onclick="toggleAcctCheck('${a.id}')"
+        ondragstart="settingsDragStart(event,'${a.id}')"
+        ondragover="settingsDragOver(event)"
+        ondrop="settingsDragDrop(event,'${a.id}')"
+        ondragend="settingsDragEnd(event)">
+      <span style="cursor:grab;color:var(--gray-300);font-size:12px;padding:0 4px;flex-shrink:0" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">⠿</span>
       <input type="checkbox" class="custom-cb" ${checked?'checked':''} id="set-${a.id}" data-id="${a.id}" onclick="event.stopPropagation()" onchange="updateSelCount();renderSettingsBmList()">
       <div style="flex:1;min-width:0">
         <div class="account-list-name">${escHtml(a.name)}</div>
@@ -2164,7 +2189,8 @@ function renderFinanceAcctList(accounts) {
   }
   const defaultMarkup = parseFloat(document.getElementById('financeMarkupDefault')?.value) || 0;
   const getAcctSpend = (accId) => (finCampData[accId]||[]).reduce((s,c)=>s+(+getIns(c).spend||0),0);
-  const getAcctPlus = (accId, spend) => {
+  const getAcctCampCount = (accId) => (finCampData[accId]||[]).filter(c=>+getIns(c).spend>0).length;
+  const getAcctPlus = (accId) => {
     const camps = finCampData[accId]||[];
     return camps.reduce((s,c)=>{
       const sp=+getIns(c).spend||0;
@@ -2174,24 +2200,40 @@ function renderFinanceAcctList(accounts) {
   };
   const totalSpend = accounts.reduce((s,a)=>s+getAcctSpend(a.id),0);
   const totalPlus = accounts.reduce((s,a)=>s+getAcctPlus(a.id),0);
+  const totalCount = accounts.reduce((s,a)=>s+getAcctCampCount(a.id),0);
 
-  const allBtn = `<div class="finance-acct-item ${finSelectedAcctIds.length===0?'active':''}" onclick="finSelectAcct('__all__')">
-    <div style="flex:1;min-width:0">
-      <div class="finance-acct-name">全部帳戶</div>
-      ${totalSpend>0?`<div style="font-size:12px;color:var(--orange);font-weight:600;margin-top:2px">$${fM(Math.ceil(totalPlus))}</div>`:''}
-    </div>
+  // Update summary stats
+  document.getElementById('fin-acct-count').textContent = accounts.length;
+  document.getElementById('fin-total-spend').textContent = '$'+fM(totalSpend);
+  document.getElementById('fin-total-markup').textContent = '$'+fM(Math.ceil(totalPlus-totalSpend));
+  document.getElementById('fin-total-plus').textContent = '$'+fM(Math.ceil(totalPlus));
+
+  const rowStyle = 'display:flex;align-items:center;padding:6px 14px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px;';
+  const activeStyle = 'background:var(--orange-bg);';
+
+  const allRow = `<div style="${rowStyle}${finSelectedAcctIds.length===0?activeStyle:''}" onclick="finSelectAcct('__all__')">
+    <span style="width:28px;flex-shrink:0;color:var(--gray-300)"></span>
+    <span style="flex:1;font-weight:600;color:var(--orange);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">全部帳戶</span>
+    <span style="width:36px;text-align:right;font-weight:600">${totalCount}</span>
+    <span style="width:70px;text-align:right;font-variant-numeric:tabular-nums">${fM(totalSpend)}</span>
+    <span style="width:70px;text-align:right;font-variant-numeric:tabular-nums;color:var(--orange);font-weight:600">${fM(Math.ceil(totalPlus))}</span>
   </div>`;
-  const items = accounts.map(acc => {
+
+  const rows = accounts.map((acc, i) => {
     const spend = getAcctSpend(acc.id);
-    const plus = getAcctPlus(acc.id, spend);
-    return `<div class="finance-acct-item ${finSelectedAcctIds.includes(acc.id)?'active':''}" onclick="finSelectAcct('${acc.id}')">
-      <div style="flex:1;min-width:0">
-        <div class="finance-acct-name" title="${escHtml(acc.name)}">${escHtml(acc.name)}</div>
-        ${spend>0?`<div style="font-size:12px;color:var(--orange);font-weight:600;margin-top:2px">$${fM(Math.ceil(plus))}</div>`:'<div style="font-size:11px;color:var(--gray-300);margin-top:2px">載入中...</div>'}
-      </div>
+    const plus = getAcctPlus(acc.id);
+    const count = getAcctCampCount(acc.id);
+    const isActive = finSelectedAcctIds.includes(acc.id);
+    return `<div style="${rowStyle}${isActive?activeStyle:''}" onclick="finSelectAcct('${acc.id}')" title="${escHtml(acc.name)}">
+      <span style="width:28px;flex-shrink:0;color:var(--gray-300)">${i+1}</span>
+      <span style="flex:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(acc.name)}</span>
+      <span style="width:36px;text-align:right">${count}</span>
+      <span style="width:70px;text-align:right;font-variant-numeric:tabular-nums">${spend>0?fM(spend):'—'}</span>
+      <span style="width:70px;text-align:right;font-variant-numeric:tabular-nums;color:var(--orange);font-weight:600">${plus>0?fM(Math.ceil(plus)):'—'}</span>
     </div>`;
   }).join('');
-  list.innerHTML = allBtn + items;
+
+  list.innerHTML = allRow + rows;
 }
 
 function finSelectAcct(id) {
@@ -2347,33 +2389,22 @@ function downloadFinanceCsv() {
   a.click();
 }
 
-// ── Drag to Sort ────────────────────────────────────────────
-function dragStart(e, id) {
+// ── Settings Drag to Sort ────────────────────────────────────
+function settingsDragStart(e, id) {
   _dragId = id;
   e.dataTransfer.effectAllowed = 'move';
   e.currentTarget.style.opacity = '0.4';
 }
-function dragOver(e) {
+function settingsDragOver(e) {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   e.currentTarget.style.background = 'var(--orange-bg)';
 }
-function dragDrop(e, targetId) {
+function settingsDragDrop(e, targetId) {
   e.preventDefault();
   e.currentTarget.style.background = '';
   if(!_dragId || _dragId === targetId) return;
-  // Get current order from the rendered list
-  const items = [...document.querySelectorAll('.dash-acct-item,[data-drag-id]')];
-  const ids = items.map(el => {
-    const cb = el.querySelector('[data-id]');
-    return cb ? cb.dataset.id : el.dataset.dragId || el.querySelector('.dash-acct-dot')?.nextElementSibling?.getAttribute('title');
-  }).filter(Boolean);
-  // Build order from current rendered order
-  const currentOrder = [...document.getElementById('dashAcctList').querySelectorAll('[draggable]')].map(el => {
-    const onclick = el.getAttribute('onclick') || '';
-    const m = onclick.match(/'([^']+)'/);
-    return m ? m[1] : null;
-  }).filter(Boolean);
+  const currentOrder = [...document.getElementById('settingsAcctList').querySelectorAll('[data-acct-id]')].map(el => el.dataset.acctId);
   const fromIdx = currentOrder.indexOf(_dragId);
   const toIdx = currentOrder.indexOf(targetId);
   if(fromIdx < 0 || toIdx < 0) return;
@@ -2381,12 +2412,11 @@ function dragDrop(e, targetId) {
   currentOrder.splice(toIdx, 0, _dragId);
   acctOrder = currentOrder;
   localStorage.setItem('acct_order', JSON.stringify(acctOrder));
-  syncToCloud();
-  renderDashAcctList();
+  renderSettingsAcctList();
 }
-function dragEnd() {
+function settingsDragEnd(e) {
   _dragId = null;
-  document.querySelectorAll('.dash-acct-item,[data-drag-id]').forEach(el => {
+  document.querySelectorAll('.settings-acct-item').forEach(el => {
     el.style.opacity = '';
     el.style.background = '';
   });
