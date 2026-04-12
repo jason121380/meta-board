@@ -1517,7 +1517,14 @@ async function loadAllAccounts() {
 function getVisibleAccounts() {
   // 只顯示設定頁勾選的帳戶；未設定 = 無資料
   if(!savedSelectedIds.length) return [];
-  return allAccounts.filter(a => savedSelectedIds.includes(a.id));
+  const list = allAccounts.filter(a => savedSelectedIds.includes(a.id));
+  // Apply user-defined drag-sort order (same as dashboard + settings)
+  return list.sort((a, b) => {
+    const ia = acctOrder.indexOf(a.id), ib = acctOrder.indexOf(b.id);
+    if(ia >= 0 && ib >= 0) return ia - ib;
+    if(ia >= 0) return -1; if(ib >= 0) return 1;
+    return a.name.localeCompare(b.name, 'zh-TW');
+  });
 }
 
 // ── Date (handled by DatePicker instances) ──────────────────
