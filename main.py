@@ -289,12 +289,23 @@ async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Opti
             "fields": f"id,name,status,creative{{thumbnail_url,title,body}},{ins}",
             "limit": "100"
         })
+        return data
     except Exception:
-        # Fallback: query without creative sub-fields if it fails
+        pass
+    try:
+        # Fallback 1: without creative
         data = await fb_get(f"{adset_id}/ads", {
             "fields": f"id,name,status,{ins}",
             "limit": "100"
         })
+        return data
+    except Exception:
+        pass
+    # Fallback 2: basic fields only, no insights
+    data = await fb_get(f"{adset_id}/ads", {
+        "fields": "id,name,status",
+        "limit": "100"
+    })
     return data
 
 

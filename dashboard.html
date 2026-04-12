@@ -407,7 +407,7 @@ input:checked + .slider:before { transform: translateX(14px); }
   .launch-wrap h2 { font-size: 18px; }
 
   /* ── AI View ── */
-  #aiChartGrid { grid-template-columns: 1fr !important; }
+  #aiChartGrid { grid-template-columns: repeat(2,1fr) !important; }
   .ai-kpi-value { font-size: 20px; }
   .ai-kpi-card { padding: 12px 14px; }
 
@@ -477,6 +477,7 @@ input:checked + .slider:before { transform: translateX(14px); }
   background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius);
   box-shadow: var(--shadow-md); width: 210px; z-index: 999; padding: 6px;
 }
+.sidebar .user-dropdown { top: auto; bottom: calc(100% + 8px); right: auto; left: 0; }
 .user-dropdown.open { display: block; }
 .user-dropdown-name { padding: 8px 10px 6px; font-size: 12px; font-weight: 700; color: var(--black); border-bottom: 1px solid var(--border); margin-bottom: 4px; }
 .user-dropdown-meta { font-size: 11px; color: var(--gray-300); font-weight: 400; }
@@ -682,6 +683,21 @@ input:checked + .slider:before { transform: translateX(14px); }
       <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> 設定
     </div>
   </nav>
+  <!-- User account at bottom of sidebar -->
+  <div style="margin-top:auto;padding:10px 8px;border-top:1px solid var(--border)">
+    <div class="topbar-user" id="topbarUser" onclick="toggleUserMenu(event)" style="width:100%;border-radius:var(--radius-sm);padding:8px 10px;gap:8px">
+      <div class="topbar-avatar" id="topbarAvatar"></div>
+      <span class="topbar-username" id="topbarName" style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <span style="font-size:10px;color:var(--gray-300)">▾</span>
+      <div class="user-dropdown" id="userDropdown">
+        <div class="user-dropdown-name" id="dropdownName">
+          <div id="dropdownFullName"></div>
+          <div class="user-dropdown-meta">Facebook 帳號</div>
+        </div>
+        <div class="user-dropdown-item" onclick="fbLogout()">登出</div>
+      </div>
+    </div>
+  </div>
 </aside>
 
 <!-- ── Main ────────────────────────────────────────────────── -->
@@ -698,23 +714,10 @@ input:checked + .slider:before { transform: translateX(14px); }
     <div id="dpDash"></div>
     <div class="topbar-sep"></div>
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--gray-500);white-space:nowrap">
-      <input type="checkbox" class="custom-cb" id="filterActiveOnly" onchange="saveFilterPref()"> 只顯示進行中
+      <input type="checkbox" class="custom-cb" id="filterActiveOnly" onchange="saveFilterPref()"> 只顯示有花費
     </label>
     <div class="topbar-sep"></div>
     <button class="btn btn-ghost btn-sm" onclick="refreshDashboard()">↻ 重新整理</button>
-    <div class="topbar-sep"></div>
-    <div class="topbar-user" id="topbarUser" onclick="toggleUserMenu(event)">
-      <div class="topbar-avatar" id="topbarAvatar"></div>
-      <span class="topbar-username" id="topbarName"></span>
-      <span style="font-size:10px;color:var(--gray-300)">▾</span>
-      <div class="user-dropdown" id="userDropdown">
-        <div class="user-dropdown-name" id="dropdownName">
-          <div id="dropdownFullName"></div>
-          <div class="user-dropdown-meta">Facebook 帳號</div>
-        </div>
-        <div class="user-dropdown-item" onclick="fbLogout()">登出</div>
-      </div>
-    </div>
   </div>
 
   <!-- Two-column body -->
@@ -795,7 +798,7 @@ input:checked + .slider:before { transform: translateX(14px); }
     </div>
 
     <!-- Charts Grid -->
-    <div id="aiChartGrid" style="display:none;gap:16px;grid-template-columns:1fr 1fr;margin-bottom:20px">
+    <div id="aiChartGrid" style="display:none;gap:16px;grid-template-columns:repeat(4,1fr);margin-bottom:20px">
       <div class="ai-chart-card">
         <div class="ai-chart-title">各帳戶花費分布</div>
         <canvas id="chartSpendByAccount" height="220"></canvas>
@@ -868,10 +871,18 @@ input:checked + .slider:before { transform: translateX(14px); }
     <div class="topbar-sep"></div>
     <button class="btn btn-blue btn-sm" onclick="_cacheClear('alert');alertCampData={};loadAiAlerts()">重新分析</button>
   </div>
-  <div style="padding:20px 24px;overflow-y:auto;flex:1">
-    <div id="alertEmpty" class="empty-state" style="display:none">請先在設定中啟用廣告帳戶</div>
-    <div id="alertLoading" class="loading" style="display:none"><div class="spinner"></div>分析中...</div>
-    <div id="alertTextCards" style="display:none;gap:0;grid-template-columns:1fr"></div>
+  <div style="display:flex;flex:1;overflow:hidden">
+    <!-- Account selector left panel -->
+    <div style="width:200px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;background:var(--warm-white)">
+      <div style="padding:10px 12px 6px;font-size:11px;font-weight:700;color:var(--gray-300);letter-spacing:0.5px;text-transform:uppercase">廣告帳戶</div>
+      <div id="alertAcctList"></div>
+    </div>
+    <!-- Main alert content -->
+    <div style="flex:1;overflow-y:auto;padding:20px 24px">
+      <div id="alertEmpty" class="empty-state" style="display:none">請先在設定中啟用廣告帳戶</div>
+      <div id="alertLoading" class="loading" style="display:none"><div class="spinner"></div>分析中...</div>
+      <div id="alertTextCards" style="display:none;gap:0;grid-template-columns:1fr"></div>
+    </div>
   </div>
 </div>
 
@@ -910,8 +921,8 @@ input:checked + .slider:before { transform: translateX(14px); }
       <div class="finance-toolbar">
         <input id="financeSearch" placeholder="搜尋活動名稱..." oninput="renderFinanceTable()" style="flex:1;height:32px;padding:0 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit">
         <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--gray-500);cursor:pointer;white-space:nowrap">
-          <input type="checkbox" id="finHideZero" checked onchange="renderFinanceTable()" style="width:14px;height:14px;accent-color:var(--orange);cursor:pointer">
-          隱藏花費為零
+          <input type="checkbox" class="custom-cb" id="finHideZero" checked onchange="renderFinanceTable()">
+          只顯示有花費
         </label>
         <span style="font-size:12px;color:var(--gray-500)">預設月%：</span>
         <input type="number" id="financeMarkupDefault" value="5" min="0" max="100" step="0.5" oninput="applyDefaultMarkup();localStorage.setItem('fin_default_markup',this.value)" style="width:54px;height:32px;border:1.5px solid var(--border);border-radius:var(--radius-sm);text-align:center;font-size:13px;font-family:inherit;padding:0 4px">
@@ -1051,6 +1062,7 @@ input:checked + .slider:before { transform: translateX(14px); }
 
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 
 <!-- FB SDK -->
 <div id="fb-root"></div>
@@ -1654,7 +1666,7 @@ async function loadOverviewStats() {
     (i.actions||[]).forEach(a=>{
       if(a.action_type==='purchase') totals.purchase += +a.value;
       if(a.action_type==='lead') totals.lead += +a.value;
-      if(['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'].includes(a.action_type))
+      if(['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d'].includes(a.action_type))
         totals.msg += +a.value;
     });
   }));
@@ -1709,9 +1721,8 @@ function renderTree() {
   let allCamps = selectedAccounts.flatMap(acc => campData[acc.id] || []);
 
   // Filter
-  if(filterActiveOnly) allCamps = allCamps.filter(c => c.status === 'ACTIVE');
+  if(filterActiveOnly) allCamps = allCamps.filter(c => +getIns(c).spend > 0);
   if(search) allCamps = allCamps.filter(c => c.name.toLowerCase().includes(search));
-  if(filterActiveOnly) allCamps = allCamps.filter(c => c.status === 'ACTIVE');
 
   // Sort campaigns
   if(treeSort.key) {
@@ -1731,7 +1742,7 @@ function renderTree() {
     return;
   }
 
-  const MSG_TYPES_TREE = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'];
+  const MSG_TYPES_TREE = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d'];
   const getMsgTree = item => { const acts = getIns(item).actions||[]; for(const t of MSG_TYPES_TREE){const a=acts.find(x=>x.action_type===t);if(a)return +a.value||0;} return 0; };
   let campNo = 0;
   const cols = [
@@ -1833,7 +1844,9 @@ function renderTree() {
           </tr>`;
 
           if(adsetOpen) {
-            if(!ads) {
+            if(ads === null) {
+              rows += `<tr class="ad-row"><td colspan="${cols.length}"><div style="padding:10px 72px;color:var(--red,#c0392b);font-size:12px">無法載入廣告（點擊廣告組合重試）</div></td></tr>`;
+            } else if(ads === undefined) {
               rows += `<tr class="ad-row"><td colspan="${cols.length}"><div style="padding:10px 72px;color:var(--gray-300);font-size:12px;display:flex;align-items:center;gap:8px"><div class="spinner" style="width:14px;height:14px;border-width:2px"></div>載入廣告...</div></td></tr>`;
             } else if(!ads.length) {
               rows += `<tr class="ad-row"><td colspan="${cols.length}"><div style="padding:10px 72px;color:var(--gray-300);font-size:12px">無廣告</div></td></tr>`;
@@ -1908,7 +1921,10 @@ async function toggleAdset(e, id) {
   }
   expandedAdsets.add(id);
   renderTree();
-  if(!adData[id] || !adData[id].length) {
+  // null = error sentinel; undefined = not yet fetched; [] = empty; [...] = loaded
+  // Allow retry on null by clearing on second click (open→close→open cycle resets)
+  if(adData[id] === undefined || adData[id] === null) {
+    adData[id] = undefined; // reset to loading state for re-render
     const dp = getDateParams();
     try {
       const r = await fetch(`${API}/api/adsets/${id}/ads?${dp}`);
@@ -1916,9 +1932,9 @@ async function toggleAdset(e, id) {
       if(r.ok && res.data) {
         adData[id] = res.data;
       } else {
-        delete adData[id];
+        adData[id] = null; // error sentinel — stops retry
       }
-    } catch(e) { delete adData[id]; }
+    } catch(e) { adData[id] = null; }
     renderTree();
   }
 }
@@ -2241,7 +2257,7 @@ async function loadAiAnalysis() {
   }
 
   // ── KPI Summary ────────────────────────────────────────────
-  const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'];
+  const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d'];
   const getMsgCount = c => {
     const acts = getIns(c).actions || [];
     for(const t of MSG_TYPES) { const a = acts.find(x=>x.action_type===t); if(a) return +a.value||0; }
@@ -2256,7 +2272,8 @@ async function loadAiAnalysis() {
   const avgCtr = ctrVals.length ? ctrVals.reduce((a,b)=>a+b,0)/ctrVals.length : 0;
   const avgCpc = cpcVals.length ? cpcVals.reduce((a,b)=>a+b,0)/cpcVals.length : 0;
   const totalMsg = allCamps.reduce((s,c)=>s+getMsgCount(c), 0);
-  const avgCostPerMsg = totalMsg > 0 ? totalSpend / totalMsg : 0;
+  const msgSpend = allCamps.filter(c=>getMsgCount(c)>0).reduce((s,c)=>s+(+getIns(c).spend||0), 0);
+  const avgCostPerMsg = totalMsg > 0 ? msgSpend / totalMsg : 0;
 
   const aiPresetLabel = dpAi ? dpAi.getLabel() : '本月';
   document.getElementById('kpi-spend').innerHTML = `<div class="ai-kpi-label">總花費</div><div class="ai-kpi-value">$${fM(totalSpend)}</div><div class="ai-kpi-sub">${visible.length} 個帳戶・${aiPresetLabel}</div>`;
@@ -2280,11 +2297,12 @@ async function loadAiAnalysis() {
   })).filter(a=>a.spend>0).sort((a,b)=>b.spend-a.spend).slice(0,10);
   aiCharts.spend = new Chart(document.getElementById('chartSpendByAccount'), {
     type: 'bar',
+    plugins: [ChartDataLabels],
     data: {
       labels: acctSpend.map(a => a.name.length>16?a.name.slice(0,16)+'…':a.name),
       datasets: [{ data: acctSpend.map(a=>a.spend), backgroundColor: O, borderRadius: 6, borderSkipped: false }]
     },
-    options: { indexAxis:'y', plugins:{legend:{display:false}}, scales:{x:{grid:{color:'#F5F5F5'},ticks:{callback:v=>'$'+fM(v)}},y:{grid:{display:false}}}, responsive:true }
+    options: { indexAxis:'y', plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right',formatter:v=>'$'+fM(v),font:{size:10},color:'#555'}}, scales:{x:{grid:{color:'#F5F5F5'},ticks:{callback:v=>'$'+fM(v)}},y:{grid:{display:false}}}, layout:{padding:{right:60}}, responsive:true }
   });
 
   // Chart 2: Messages by account
@@ -2295,11 +2313,12 @@ async function loadAiAnalysis() {
   if(acctMsg.length) {
     aiCharts.msg = new Chart(document.getElementById('chartMsgByAccount'), {
       type: 'bar',
+      plugins: [ChartDataLabels],
       data: {
         labels: acctMsg.map(a => a.name.length>16?a.name.slice(0,16)+'…':a.name),
         datasets: [{ data: acctMsg.map(a=>a.msg), backgroundColor: '#2E7D32', borderRadius: 6, borderSkipped: false }]
       },
-      options: { indexAxis:'y', plugins:{legend:{display:false}}, scales:{x:{grid:{color:'#F5F5F5'},ticks:{precision:0}},y:{grid:{display:false}}}, responsive:true }
+      options: { indexAxis:'y', plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right',formatter:v=>fN(v),font:{size:10},color:'#555'}}, scales:{x:{grid:{color:'#F5F5F5'},ticks:{precision:0}},y:{grid:{display:false}}}, layout:{padding:{right:50}}, responsive:true }
     });
   } else {
     document.getElementById('chartMsgByAccount').parentElement.innerHTML += '<div style="text-align:center;color:var(--gray-300);font-size:13px;padding:40px 0">無私訊數據（可能未追蹤私訊轉換）</div>';
@@ -2314,11 +2333,12 @@ async function loadAiAnalysis() {
   });
   aiCharts.ctr = new Chart(document.getElementById('chartCtrDist'), {
     type: 'bar',
+    plugins: [ChartDataLabels],
     data: {
       labels: Object.keys(ctrBuckets),
       datasets: [{ data: Object.values(ctrBuckets), backgroundColor: ['#E0E0E0','#FFB899','#FF9A62',O,'#2E7D32','#1B5E20'], borderRadius: 6, borderSkipped: false }]
     },
-    options: { plugins:{legend:{display:false}}, scales:{x:{grid:{display:false}},y:{grid:{color:'#F5F5F5'},ticks:{precision:0}}}, responsive:true }
+    options: { plugins:{legend:{display:false},datalabels:{anchor:'end',align:'top',formatter:v=>v>0?v:'',font:{size:10,weight:'bold'},color:'#555'}}, scales:{x:{grid:{display:false}},y:{grid:{color:'#F5F5F5'},ticks:{precision:0}}}, layout:{padding:{top:16}}, responsive:true }
   });
 
   // Chart 5: 私訊成本分布（只顯示有私訊數據的活動）
@@ -2340,11 +2360,12 @@ async function loadAiAnalysis() {
     if(hasAny) {
       aiCharts.msgCost = new Chart(msgCostEl, {
         type: 'bar',
+        plugins: [ChartDataLabels],
         data: {
           labels: Object.keys(msgCostBuckets),
           datasets: [{ data: Object.values(msgCostBuckets), backgroundColor: ['#1B5E20','#2E7D32',O,'#FF9A62','#FF6B2C'], borderRadius: 6, borderSkipped: false }]
         },
-        options: { plugins:{legend:{display:false}}, scales:{x:{grid:{display:false}},y:{grid:{color:'#F5F5F5'},ticks:{precision:0}}}, responsive:true }
+        options: { plugins:{legend:{display:false},datalabels:{anchor:'end',align:'top',formatter:v=>v>0?v:'',font:{size:10,weight:'bold'},color:'#555'}}, scales:{x:{grid:{display:false}},y:{grid:{color:'#F5F5F5'},ticks:{precision:0}}}, layout:{padding:{top:16}}, responsive:true }
       });
     } else {
       msgCostEl.parentElement.innerHTML += '<div style="text-align:center;color:var(--gray-300);font-size:13px;padding:40px 0">無私訊成本數據</div>';
@@ -2376,8 +2397,8 @@ async function loadAiAnalysis() {
   const topMsg = [...campsWithMsg].sort((a,b)=>getMsgCount(b)-getMsgCount(a)).slice(0,10);
   if(topMsg.length) {
     aiCharts.topMsg = new Chart(document.getElementById('chartTopMsg'), {
-      type:'bar', data:{ labels:topMsg.map(c=>shortName(c.name)), datasets:[{data:topMsg.map(getMsgCount),backgroundColor:'#2E7D32',borderRadius:4,borderSkipped:false}]},
-      options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{color:'#F5F5F5'},ticks:{precision:0}},y:{grid:{display:false},ticks:{font:{size:10}}}},responsive:true}
+      type:'bar', plugins:[ChartDataLabels], data:{ labels:topMsg.map(c=>shortName(c.name)), datasets:[{data:topMsg.map(getMsgCount),backgroundColor:'#2E7D32',borderRadius:4,borderSkipped:false}]},
+      options:{indexAxis:'y',plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right',formatter:v=>fN(v),font:{size:10},color:'#555'}},scales:{x:{grid:{color:'#F5F5F5'},ticks:{precision:0}},y:{grid:{display:false},ticks:{font:{size:10}}}},layout:{padding:{right:45}},responsive:true}
     });
   } else document.getElementById('chartTopMsg').parentElement.innerHTML += '<div style="text-align:center;color:var(--gray-300);font-size:13px;padding:40px 0">無私訊數據</div>';
 
@@ -2385,8 +2406,8 @@ async function loadAiAnalysis() {
   const bestCpm = [...campsWithMsg].map(c=>({c, cost:+getIns(c).spend/getMsgCount(c)})).sort((a,b)=>a.cost-b.cost).slice(0,10);
   if(bestCpm.length) {
     aiCharts.bestCpm = new Chart(document.getElementById('chartBestCpm'), {
-      type:'bar', data:{labels:bestCpm.map(r=>shortName(r.c.name)),datasets:[{data:bestCpm.map(r=>+r.cost.toFixed(0)),backgroundColor:'#1B5E20',borderRadius:4,borderSkipped:false}]},
-      options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{color:'#F5F5F5'},ticks:{callback:v=>'$'+fM(v)}},y:{grid:{display:false},ticks:{font:{size:10}}}},responsive:true}
+      type:'bar', plugins:[ChartDataLabels], data:{labels:bestCpm.map(r=>shortName(r.c.name)),datasets:[{data:bestCpm.map(r=>+r.cost.toFixed(0)),backgroundColor:'#1B5E20',borderRadius:4,borderSkipped:false}]},
+      options:{indexAxis:'y',plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right',formatter:v=>'$'+fM(v),font:{size:10},color:'#555'}},scales:{x:{grid:{color:'#F5F5F5'},ticks:{callback:v=>'$'+fM(v)}},y:{grid:{display:false},ticks:{font:{size:10}}}},layout:{padding:{right:55}},responsive:true}
     });
   } else document.getElementById('chartBestCpm').parentElement.innerHTML += '<div style="text-align:center;color:var(--gray-300);font-size:13px;padding:40px 0">無私訊數據</div>';
 
@@ -2400,8 +2421,8 @@ async function loadAiAnalysis() {
   }).filter(Boolean).sort((a,b)=>a.cost-b.cost);
   if(acctMsgCost.length) {
     aiCharts.acctMsgCost = new Chart(document.getElementById('chartAcctMsgCost'), {
-      type:'bar', data:{labels:acctMsgCost.map(a=>shortName(a.name)),datasets:[{data:acctMsgCost.map(a=>+a.cost.toFixed(0)),backgroundColor:O,borderRadius:4,borderSkipped:false}]},
-      options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{color:'#F5F5F5'},ticks:{callback:v=>'$'+fM(v)}},y:{grid:{display:false},ticks:{font:{size:10}}}},responsive:true}
+      type:'bar', plugins:[ChartDataLabels], data:{labels:acctMsgCost.map(a=>shortName(a.name)),datasets:[{data:acctMsgCost.map(a=>+a.cost.toFixed(0)),backgroundColor:O,borderRadius:4,borderSkipped:false}]},
+      options:{indexAxis:'y',plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right',formatter:v=>'$'+fM(v),font:{size:10},color:'#555'}},scales:{x:{grid:{color:'#F5F5F5'},ticks:{callback:v=>'$'+fM(v)}},y:{grid:{display:false},ticks:{font:{size:10}}}},layout:{padding:{right:55}},responsive:true}
     });
   } else document.getElementById('chartAcctMsgCost').parentElement.innerHTML += '<div style="text-align:center;color:var(--gray-300);font-size:13px;padding:40px 0">無私訊數據</div>';
 
@@ -2415,8 +2436,8 @@ async function loadAiAnalysis() {
   }).filter(Boolean).sort((a,b)=>b.ctr-a.ctr);
   if(acctCtr.length) {
     aiCharts.acctCtr = new Chart(document.getElementById('chartAcctCtr'), {
-      type:'bar', data:{labels:acctCtr.map(a=>shortName(a.name)),datasets:[{data:acctCtr.map(a=>+a.ctr.toFixed(2)),backgroundColor:'#1565C0',borderRadius:4,borderSkipped:false}]},
-      options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{color:'#F5F5F5'},ticks:{callback:v=>v+'%'}},y:{grid:{display:false},ticks:{font:{size:10}}}},responsive:true}
+      type:'bar', plugins:[ChartDataLabels], data:{labels:acctCtr.map(a=>shortName(a.name)),datasets:[{data:acctCtr.map(a=>+a.ctr.toFixed(2)),backgroundColor:'#1565C0',borderRadius:4,borderSkipped:false}]},
+      options:{indexAxis:'y',plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right',formatter:v=>v+'%',font:{size:10},color:'#555'}},scales:{x:{grid:{color:'#F5F5F5'},ticks:{callback:v=>v+'%'}},y:{grid:{display:false},ticks:{font:{size:10}}}},layout:{padding:{right:40}},responsive:true}
     });
   } else document.getElementById('chartAcctCtr').parentElement.innerHTML += '<div style="text-align:center;color:var(--gray-300);font-size:13px;padding:40px 0">無數據</div>';
 
@@ -2427,8 +2448,8 @@ async function loadAiAnalysis() {
     if(cpc<5) cpcBuckets['$0-5']++; else if(cpc<10) cpcBuckets['$5-10']++; else if(cpc<20) cpcBuckets['$10-20']++; else if(cpc<50) cpcBuckets['$20-50']++; else cpcBuckets['>$50']++;
   });
   aiCharts.cpcDist = new Chart(document.getElementById('chartCpcDist'), {
-    type:'bar', data:{labels:Object.keys(cpcBuckets),datasets:[{data:Object.values(cpcBuckets),backgroundColor:['#1B5E20','#2E7D32',O,'#FF9A62','#FF6B2C'],borderRadius:6,borderSkipped:false}]},
-    options:{plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{color:'#F5F5F5'},ticks:{precision:0}}},responsive:true}
+    type:'bar', plugins:[ChartDataLabels], data:{labels:Object.keys(cpcBuckets),datasets:[{data:Object.values(cpcBuckets),backgroundColor:['#1B5E20','#2E7D32',O,'#FF9A62','#FF6B2C'],borderRadius:6,borderSkipped:false}]},
+    options:{plugins:{legend:{display:false},datalabels:{anchor:'end',align:'top',formatter:v=>v>0?v:'',font:{size:10,weight:'bold'},color:'#555'}},scales:{x:{grid:{display:false}},y:{grid:{color:'#F5F5F5'},ticks:{precision:0}}},layout:{padding:{top:16}},responsive:true}
   });
 
   // Chart 11: Spend per campaign distribution
@@ -2438,8 +2459,8 @@ async function loadAiAnalysis() {
     if(sp<1000) spendBuckets['$0-1K']++; else if(sp<5000) spendBuckets['$1K-5K']++; else if(sp<10000) spendBuckets['$5K-10K']++; else if(sp<50000) spendBuckets['$10K-50K']++; else spendBuckets['>$50K']++;
   });
   aiCharts.spendDist = new Chart(document.getElementById('chartSpendDist'), {
-    type:'bar', data:{labels:Object.keys(spendBuckets),datasets:[{data:Object.values(spendBuckets),backgroundColor:['#E0E0E0','#FFB899','#FF9A62',O,'#CC4400'],borderRadius:6,borderSkipped:false}]},
-    options:{plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{color:'#F5F5F5'},ticks:{precision:0}}},responsive:true}
+    type:'bar', plugins:[ChartDataLabels], data:{labels:Object.keys(spendBuckets),datasets:[{data:Object.values(spendBuckets),backgroundColor:['#E0E0E0','#FFB899','#FF9A62',O,'#CC4400'],borderRadius:6,borderSkipped:false}]},
+    options:{plugins:{legend:{display:false},datalabels:{anchor:'end',align:'top',formatter:v=>v>0?v:'',font:{size:10,weight:'bold'},color:'#555'}},scales:{x:{grid:{display:false}},y:{grid:{color:'#F5F5F5'},ticks:{precision:0}}},layout:{padding:{top:16}},responsive:true}
   });
 
   // Chart 12: Campaigns with/without msg data (doughnut)
@@ -2464,8 +2485,8 @@ async function loadAiAnalysis() {
   const msgRoi = [...campsWithMsg].map(c=>({c,ratio:getMsgCount(c)/(+getIns(c).spend/1000)})).sort((a,b)=>b.ratio-a.ratio).slice(0,10);
   if(msgRoi.length) {
     aiCharts.msgRoi = new Chart(document.getElementById('chartMsgRoi'), {
-      type:'bar', data:{labels:msgRoi.map(r=>shortName(r.c.name)),datasets:[{data:msgRoi.map(r=>+r.ratio.toFixed(1)),backgroundColor:'#1B5E20',borderRadius:4,borderSkipped:false}]},
-      options:{indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.raw} 則/千元`}}},scales:{x:{grid:{color:'#F5F5F5'},ticks:{callback:v=>v+' 則'}},y:{grid:{display:false},ticks:{font:{size:10}}}},responsive:true}
+      type:'bar', plugins:[ChartDataLabels], data:{labels:msgRoi.map(r=>shortName(r.c.name)),datasets:[{data:msgRoi.map(r=>+r.ratio.toFixed(1)),backgroundColor:'#1B5E20',borderRadius:4,borderSkipped:false}]},
+      options:{indexAxis:'y',plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right',formatter:v=>v+' 則',font:{size:10},color:'#555'},tooltip:{callbacks:{label:ctx=>`${ctx.raw} 則/千元`}}},scales:{x:{grid:{color:'#F5F5F5'},ticks:{callback:v=>v+' 則'}},y:{grid:{display:false},ticks:{font:{size:10}}}},layout:{padding:{right:50}},responsive:true}
     });
   } else document.getElementById('chartMsgRoi').parentElement.innerHTML += '<div style="text-align:center;color:var(--gray-300);font-size:13px;padding:40px 0">無私訊數據</div>';
 
@@ -2474,6 +2495,7 @@ async function loadAiAnalysis() {
 // ── AI Alerts ────────────────────────────────────────────────
 let alertCampData = {};
 let alertDateConfig = { preset: 'last_month', from: null, to: null };
+let alertSelectedAcctId = null; // null = all accounts
 
 function onAlertDateChange() {
   const val = document.getElementById('alertDatePreset').value;
@@ -2498,11 +2520,31 @@ const getAlertDateParams = () => {
   return `date_preset=${alertDateConfig.preset}`;
 };
 
+function renderAlertAcctList() {
+  const el = document.getElementById('alertAcctList');
+  if(!el) return;
+  const all = getVisibleAccounts();
+  const allActive = alertSelectedAcctId === null;
+  el.innerHTML = `<div onclick="alertSelectAcct(null)" style="padding:9px 12px;font-size:13px;cursor:pointer;font-weight:600;border-left:3px solid ${allActive?'var(--orange)':'transparent'};background:${allActive?'var(--orange-bg)':'transparent'};color:${allActive?'var(--orange)':'var(--black)'};transition:all 0.1s">全部帳戶</div>`
+    + all.map(a => {
+      const isActive = alertSelectedAcctId === a.id;
+      return `<div onclick="alertSelectAcct('${a.id}')" style="padding:9px 12px;font-size:12px;cursor:pointer;border-left:3px solid ${isActive?'var(--orange)':'transparent'};background:${isActive?'var(--orange-bg)':'transparent'};color:${isActive?'var(--orange)':'var(--black)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:all 0.1s" title="${a.name}">${a.name}</div>`;
+    }).join('');
+}
+
+function alertSelectAcct(id) {
+  alertSelectedAcctId = id;
+  renderAlertAcctList();
+  loadAiAlerts();
+}
+
 async function loadAiAlerts() {
-  const visible = getVisibleAccounts();
+  const allVisible = getVisibleAccounts();
+  const visible = alertSelectedAcctId ? allVisible.filter(a => a.id === alertSelectedAcctId) : allVisible;
+  renderAlertAcctList();
   const showEl = (id, display) => { const el = document.getElementById(id); if(el) el.style.display = display; };
 
-  if(!visible.length) {
+  if(!allVisible.length) {
     showEl('alertEmpty', 'block'); showEl('alertLoading', 'none'); showEl('alertTextCards', 'none');
     return;
   }
@@ -2527,7 +2569,7 @@ async function loadAiAlerts() {
     return;
   }
 
-  const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'];
+  const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d'];
   const getMsgCount = c => {
     const acts = getIns(c).actions || [];
     for(const t of MSG_TYPES) { const a = acts.find(x=>x.action_type===t); if(a) return +a.value||0; }
@@ -2541,7 +2583,8 @@ async function loadAiAlerts() {
   const avgCtr = ctrVals.length ? ctrVals.reduce((a,b)=>a+b,0)/ctrVals.length : 0;
   const avgCpc = cpcVals.length ? cpcVals.reduce((a,b)=>a+b,0)/cpcVals.length : 0;
   const totalMsg = allCamps.reduce((s,c)=>s+getMsgCount(c), 0);
-  const avgCostPerMsg = totalMsg > 0 ? totalSpend / totalMsg : 0;
+  const msgSpend = allCamps.filter(c=>getMsgCount(c)>0).reduce((s,c)=>s+(+getIns(c).spend||0), 0);
+  const avgCostPerMsg = totalMsg > 0 ? msgSpend / totalMsg : 0;
 
   const issues = { priority: [], warning: [], good: [] };
 
@@ -2623,74 +2666,83 @@ async function loadAiAlerts() {
   const allRows = [
     ...issues.priority.map(i=>({...i, section:'優先處理', sectionColor:'#FF6B2C', tagColor:'#E55A1C'})),
     ...issues.warning.map(i=>({...i, section:'警示', sectionColor:'#F59E0B', tagColor:'#B45309'})),
-    ...issues.good.map(i=>({...i, section:'表現優秀', sectionColor:'#2E7D32', tagColor:'#1B5E20'})),
-  ];
+  ].map((r, i) => ({...r, _gIdx: i}));
 
   const tcEl = document.getElementById('alertTextCards');
   if(!allRows.length) {
     tcEl.innerHTML = '<div style="text-align:center;padding:32px;color:var(--gray-300);font-size:13px">無特別需要關注的項目</div>';
   } else {
-    const ins = c => getIns(c);
-    tcEl.innerHTML = `<div style="overflow-x:auto;border-radius:8px;border:1px solid var(--border);background:var(--white)">
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead>
-          <tr style="background:var(--warm-white);border-bottom:2px solid var(--border)">
-            <th style="padding:10px 12px;text-align:left;font-weight:700;color:var(--gray-500);white-space:nowrap">分類</th>
-            <th style="padding:10px 12px;text-align:left;font-weight:700;color:var(--gray-500);white-space:nowrap">標籤</th>
-            <th style="padding:10px 12px;text-align:left;font-weight:700;color:var(--gray-500)">廣告帳戶</th>
-            <th style="padding:10px 12px;text-align:left;font-weight:700;color:var(--gray-500)">行銷活動</th>
-            <th style="padding:10px 12px;text-align:right;font-weight:700;color:var(--gray-500);white-space:nowrap">花費</th>
-            <th style="padding:10px 12px;text-align:right;font-weight:700;color:var(--gray-500);white-space:nowrap">CTR</th>
-            <th style="padding:10px 12px;text-align:right;font-weight:700;color:var(--gray-500);white-space:nowrap">CPC</th>
-            <th style="padding:10px 12px;text-align:right;font-weight:700;color:var(--gray-500);white-space:nowrap">頻次</th>
-            <th style="padding:10px 12px;text-align:right;font-weight:700;color:var(--gray-500);white-space:nowrap">私訊數</th>
-            <th style="padding:10px 12px;text-align:right;font-weight:700;color:var(--gray-500);white-space:nowrap">私訊成本</th>
-            <th style="padding:10px 12px;text-align:left;font-weight:700;color:var(--gray-500)">建議說明</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${allRows.map((item, idx) => {
-            const c = item.camp;
-            const ci = ins(c);
-            const spend = +ci.spend||0;
-            const ctr = +ci.ctr||0;
-            const msgs = getMsgCount(c);
-            const msgCost = msgs>0 ? spend/msgs : 0;
-            return `<tr style="border-bottom:1px solid var(--border);${idx%2===1?'background:var(--warm-white)':''}">
-              <td style="padding:10px 12px;white-space:nowrap">
-                <span style="background:${item.sectionColor}20;color:${item.sectionColor};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px">${item.section}</span>
-              </td>
-              <td style="padding:10px 12px;white-space:nowrap">
-                <span style="background:${item.tagColor};color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9999px">${item.tag}</span>
-              </td>
-              <td style="padding:10px 12px;color:var(--gray-500);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c._accountName}</td>
-              <td style="padding:10px 12px;font-weight:600;color:var(--black);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.name}">${c.name}</td>
-              <td style="padding:10px 12px;text-align:right;font-variant-numeric:tabular-nums">$${fM(spend)}</td>
-              <td style="padding:10px 12px;text-align:right">${ctr>0?fP(ctr):'—'}</td>
-              <td style="padding:10px 12px;text-align:right">${+ci.cpc>0?'$'+fM(ci.cpc):'—'}</td>
-              <td style="padding:10px 12px;text-align:right;${+ci.frequency>5?'color:var(--orange);font-weight:600':''}">${+ci.frequency>0?(+ci.frequency).toFixed(1):'—'}</td>
-              <td style="padding:10px 12px;text-align:right">${msgs>0?fN(msgs):'—'}</td>
-              <td style="padding:10px 12px;text-align:right">${msgCost>0?'$'+fM(msgCost):'—'}</td>
-              <td id="alert-rec-${idx}" style="padding:10px 12px;color:var(--gray-500);min-width:200px;font-size:12px">
-                <span style="color:var(--gray-300);font-style:italic">AI 分析中...</span>
-              </td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
+    const msgRows  = allRows.filter(r => r.tag.includes('私訊成本'));
+    const cpcRows  = allRows.filter(r => r.tag.includes('CPC'));
+    const freqRows = allRows.filter(r => r.tag.includes('頻次'));
+
+    function buildAlertCard(title, titleColor, rows) {
+      const thStyle = (right) => `padding:8px 10px;text-align:${right?'right':'left'};font-weight:700;color:var(--gray-500);white-space:nowrap;font-size:11px`;
+      const tdBase = (right, extra='') => `padding:8px 10px;text-align:${right?'right':'left'};font-size:12px;${extra}`;
+      const rows_html = rows.map((item) => {
+        const c = item.camp;
+        const ci = getIns(c);
+        const spend = +ci.spend||0;
+        const msgs = getMsgCount(c);
+        const msgCost = msgs>0 ? spend/msgs : 0;
+        const globalIdx = item._gIdx;
+        return `<tr style="border-bottom:1px solid var(--border)">
+          <td style="${tdBase(false,'white-space:nowrap')}">
+            <span style="background:${item.sectionColor}20;color:${item.sectionColor};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px">${item.section}</span>
+          </td>
+          <td style="${tdBase(false,'color:var(--gray-500);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap')}">${c._accountName}</td>
+          <td style="${tdBase(false,'font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap')}" title="${c.name}">${c.name}</td>
+          <td style="${tdBase(true,'font-variant-numeric:tabular-nums')}">$${fM(spend)}</td>
+          <td style="${tdBase(true)}">${+ci.cpc>0?'$'+fM(ci.cpc):'—'}</td>
+          <td style="${tdBase(true,+ci.frequency>5?'color:var(--orange);font-weight:600':'')}">${+ci.frequency>0?(+ci.frequency).toFixed(1):'—'}</td>
+          <td style="${tdBase(true)}">${msgs>0?fN(msgs):'—'}</td>
+          <td style="${tdBase(true)}">${msgCost>0?'$'+fM(msgCost):'—'}</td>
+          <td id="alert-rec-${globalIdx}" style="${tdBase(false,'min-width:140px')}">
+            <span style="color:var(--gray-300);font-style:italic">AI 分析中...</span>
+          </td>
+        </tr>`;
+      }).join('');
+      const emptyRow = `<tr><td colspan="9" style="padding:20px;text-align:center;color:var(--gray-300);font-size:12px">無異常項目</td></tr>`;
+      return `<div style="flex:1;min-width:0;border-radius:8px;border:1px solid var(--border);background:var(--white);overflow:hidden;display:flex;flex-direction:column">
+        <div style="padding:10px 14px;border-bottom:2px solid ${titleColor};background:${titleColor}10;font-weight:700;font-size:13px;color:${titleColor}">${title}</div>
+        <div style="overflow-x:auto;flex:1">
+          <table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr style="background:var(--warm-white);border-bottom:1px solid var(--border)">
+                <th style="${thStyle(false)}">分類</th>
+                <th style="${thStyle(false)}">帳戶</th>
+                <th style="${thStyle(false)}">行銷活動</th>
+                <th style="${thStyle(true)}">花費</th>
+                <th style="${thStyle(true)}">CPC</th>
+                <th style="${thStyle(true)}">頻次</th>
+                <th style="${thStyle(true)}">私訊數</th>
+                <th style="${thStyle(true)}">私訊成本</th>
+                <th style="${thStyle(false)}">建議</th>
+              </tr>
+            </thead>
+            <tbody>${rows.length ? rows_html : emptyRow}</tbody>
+          </table>
+        </div>
+      </div>`;
+    }
+
+    tcEl.innerHTML = `<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+      ${buildAlertCard('私訊成本過高', '#FF6B2C', msgRows)}
+      ${buildAlertCard('CPC 過高', '#F59E0B', cpcRows)}
+      ${buildAlertCard('頻次過高', '#6366F1', freqRows)}
     </div>`;
 
-    // Async: fetch AI recommendations for all rows
+    // Async: fetch AI recommendations for all rows (preserve global index mapping)
     fetchAiRecommendations(allRows, 'alert-rec-');
   }
 
-  showEl('alertTextCards', 'grid');
+  showEl('alertTextCards', 'block');
 }
 
 async function fetchAiRecommendations(rows, idPrefix) {
   if(!rows.length) return;
   idPrefix = idPrefix || 'alert-rec-';
-  const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'];
+  const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d'];
   const getMsgC = item => { const acts = getIns(item.camp).actions||[]; for(const t of MSG_TYPES){const a=acts.find(x=>x.action_type===t);if(a)return +a.value||0;} return 0; };
 
   const lines = rows.map((item, i) => {
@@ -2898,8 +2950,9 @@ function renderFinanceTable() {
 
     document.getElementById('financeTableHead').innerHTML = `<tr>
       <th style="width:40px;user-select:none">No.</th>
+      <th style="width:80px;user-select:none">狀態</th>
       <th style="cursor:pointer;user-select:none;${finSort.key==='name'?'color:var(--orange)':''}" onclick="finSortBy('name')">行銷活動名稱${finSort.key==='name'?(finSort.dir==='asc'?' ↑':' ↓'):''}</th>
-      <th class="num" style="width:110px;cursor:pointer;user-select:none;${finSort.key==='spend'?'color:var(--orange)':''}" onclick="finSortBy('spend')">花費${finSort.key==='spend'?(finSort.dir==='asc'?' ↑':' ↓'):''}</th>
+      <th style="width:110px;cursor:pointer;user-select:none;${finSort.key==='spend'?'color:var(--orange)':''}" onclick="finSortBy('spend')">花費${finSort.key==='spend'?(finSort.dir==='asc'?' ↑':' ↓'):''}</th>
       <th class="num" style="width:110px;cursor:pointer;user-select:none;${finSort.key==='markup'?'color:var(--orange)':''}" onclick="finSortBy('markup')">月%${finSort.key==='markup'?(finSort.dir==='asc'?' ↑':' ↓'):''}</th>
       <th class="num" style="width:110px;cursor:pointer;user-select:none;${finSort.key==='plus'?'color:var(--orange)':''}" onclick="finSortBy('plus')">花費+%${finSort.key==='plus'?(finSort.dir==='asc'?' ↑':' ↓'):''}</th>
       <th style="text-align:center;width:48px">Pin</th>
@@ -2908,7 +2961,7 @@ function renderFinanceTable() {
     const body = document.getElementById('financeTableBody');
     if(!financeRows.length) {
       const loaded = finCampData[accId] !== undefined;
-      body.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--gray-300)">${loaded?'無花費資料':'載入中...'}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--gray-300)">${loaded?'無花費資料':'載入中...'}</td></tr>`;
       return;
     }
 
@@ -2921,15 +2974,18 @@ function renderFinanceTable() {
       const rowMarkup = finRowMarkups[camp.id] !== undefined ? finRowMarkups[camp.id] : defaultMarkup;
       const plus = sp * (1 + rowMarkup/100);
       campSpendSum += sp;
-      const statusDot = camp.status === 'ACTIVE'
-        ? `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:5px;vertical-align:middle"></span>`
-        : camp.status === 'ARCHIVED' || camp.status === 'DELETED'
-        ? `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#ccc;margin-right:5px;vertical-align:middle;opacity:0.5"></span>`
-        : `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--gray-300);margin-right:5px;vertical-align:middle"></span>`;
+      const statusLabel = camp.status === 'ACTIVE'
+        ? `<span style="display:inline-block;padding:2px 7px;border-radius:10px;background:#E8F5E9;color:#2E7D32;font-size:11px;font-weight:600">進行中</span>`
+        : camp.status === 'PAUSED'
+        ? `<span style="display:inline-block;padding:2px 7px;border-radius:10px;background:#F5F5F5;color:#757575;font-size:11px;font-weight:600">暫停</span>`
+        : camp.status === 'ARCHIVED'
+        ? `<span style="display:inline-block;padding:2px 7px;border-radius:10px;background:#EEEEEE;color:#9E9E9E;font-size:11px;font-weight:600">已封存</span>`
+        : `<span style="display:inline-block;padding:2px 7px;border-radius:10px;background:#FFEBEE;color:#B71C1C;font-size:11px;font-weight:600">已刪除</span>`;
       return `<tr style="${isPinned?'border-left:3px solid var(--orange);background:var(--orange-bg);':''}">
         <td style="color:var(--gray-500);width:40px">${i+1}</td>
-        <td style="font-weight:500" title="${camp.name}"><div style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center">${statusDot}<span>${camp.name}</span></div></td>
-        <td class="num">$${fM(sp)}</td>
+        <td style="width:80px">${statusLabel}</td>
+        <td style="font-weight:500" title="${camp.name}"><div style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${camp.name}</div></td>
+        <td style="font-variant-numeric:tabular-nums">$${fM(sp)}</td>
         <td class="num"><input class="fin-markup-input" type="number" value="${rowMarkup}" min="0" max="999" step="0.5" data-camp-id="${camp.id}" oninput="onRowMarkupChange(this)" style="width:52px;height:26px;border:1.5px solid var(--border);border-radius:4px;text-align:center;font-size:12px;font-family:inherit;padding:0 4px">%</td>
         <td class="num fin-plus-cell" style="color:var(--orange);font-weight:600">$${fM(Math.ceil(plus))}</td>
         <td style="text-align:center">
@@ -3047,15 +3103,29 @@ function onRowMarkupChange(inp) {
 function downloadFinanceCsv() {
   const defaultMarkup = parseFloat(document.getElementById('financeMarkupDefault')?.value) || 0;
   const { start, end } = getFinanceDateRange();
-  const rows = [['No.','廣告帳號','數量','花費','月%','花費+%']];
-  financeRows.forEach((r,i) => {
-    const rowMarkup = finRowMarkups[r.acc.id] !== undefined ? finRowMarkups[r.acc.id] : defaultMarkup;
-    rows.push([i+1, r.acc.name, r.campCount, r.spend.toFixed(0), rowMarkup+'%', Math.ceil(r.spend*(1+rowMarkup/100))]);
-  });
+  let rows, filename;
+  if(finSelectedAcctIds.length === 1) {
+    // Campaign drill-down mode
+    rows = [['No.','狀態','行銷活動名稱','花費','月%','花費+%']];
+    financeRows.forEach(({camp}, i) => {
+      const sp = +getIns(camp).spend || 0;
+      const rowMarkup = finRowMarkups[camp.id] !== undefined ? finRowMarkups[camp.id] : defaultMarkup;
+      rows.push([i+1, camp.status, camp.name, sp.toFixed(0), rowMarkup+'%', Math.ceil(sp*(1+rowMarkup/100))]);
+    });
+    filename = `財務報表_行銷活動_${start}_${end}.csv`;
+  } else {
+    // Account summary mode
+    rows = [['No.','廣告帳號','數量','花費','月%','花費+%']];
+    financeRows.forEach((r,i) => {
+      const rowMarkup = finRowMarkups[r.acc.id] !== undefined ? finRowMarkups[r.acc.id] : defaultMarkup;
+      rows.push([i+1, r.acc.name, r.campCount, r.spend.toFixed(0), rowMarkup+'%', Math.ceil(r.spend*(1+rowMarkup/100))]);
+    });
+    filename = `財務報表_${start}_${end}.csv`;
+  }
   const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
-  a.download = `財務報表_${start}_${end}.csv`;
+  a.download = filename;
   a.click();
 }
 
