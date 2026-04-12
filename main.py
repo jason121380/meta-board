@@ -1,12 +1,14 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, List
 import httpx
 import os
 from dotenv import load_dotenv
 from pathlib import Path
+from pydantic import BaseModel
 
 load_dotenv()
 
@@ -20,16 +22,25 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 
 # Runtime token override (from FB Login)
 _runtime_token: Optional[str] = None
+# Shared httpx client (created in lifespan)
+_http_client: Optional[httpx.AsyncClient] = None
+
 
 def get_token() -> str:
     return _runtime_token or _ACCESS_TOKEN or ""
 
+
 DASHBOARD_HTML = Path(__file__).parent / "dashboard.html"
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _http_client
+    _http_client = httpx.AsyncClient(timeout=30)
     yield
+    await _http_client.aclose()
+    _http_client = None
 
 
 app = FastAPI(title="FB Ads Dashboard", lifespan=lifespan)
@@ -41,34 +52,68 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Serve static files (PWA manifest, service worker, icons)
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-async def fb_get(path: str, params: dict = {}) -> dict:
+
+# ── Helpers ─────────────────────────────────────────────────────────
+
+async def fb_get(path: str, params: Optional[dict] = None) -> dict:
+    if params is None:
+        params = {}
     params = {"access_token": get_token(), **params}
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.get(f"{BASE_URL}/{path}", params=params)
+    r = await _http_client.get(f"{BASE_URL}/{path}", params=params)
     data = r.json()
     if "error" in data:
         raise HTTPException(status_code=400, detail=data["error"].get("message", "FB API Error"))
     return data
 
 
-async def fb_post(path: str, payload: dict = {}) -> dict:
-    payload["access_token"] = get_token()
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(f"{BASE_URL}/{path}", data=payload)
+async def fb_post(path: str, payload: Optional[dict] = None) -> dict:
+    if payload is None:
+        payload = {}
+    payload = {"access_token": get_token(), **payload}
+    r = await _http_client.post(f"{BASE_URL}/{path}", data=payload)
     data = r.json()
     if "error" in data:
         raise HTTPException(status_code=400, detail=data["error"].get("message", "FB API Error"))
     return data
 
+
+def _insights_clause(fields: str, date_preset: str = "last_30d", time_range: Optional[str] = None) -> str:
+    """Build FB insights sub-field with correct date parameter."""
+    if time_range:
+        return f"insights.time_range({time_range}){{{fields}}}"
+    return f"insights.date_preset({date_preset}){{{fields}}}"
+
+
+# ── Pages ───────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
     return DASHBOARD_HTML.read_text(encoding="utf-8")
 
 
+@app.get("/sw.js")
+async def service_worker():
+    """Serve service worker from root scope."""
+    sw_path = STATIC_DIR / "sw.js"
+    if sw_path.exists():
+        return HTMLResponse(content=sw_path.read_text(encoding="utf-8"), media_type="application/javascript")
+    return HTMLResponse(content="// no service worker", media_type="application/javascript")
+
+
+@app.get("/manifest.json")
+async def manifest():
+    """Serve PWA manifest from root."""
+    mf_path = STATIC_DIR / "manifest.json"
+    if mf_path.exists():
+        return HTMLResponse(content=mf_path.read_text(encoding="utf-8"), media_type="application/manifest+json")
+    return JSONResponse(content={})
+
+
 # ── Auth ─────────────────────────────────────────────────────────────
-from pydantic import BaseModel
 
 class TokenPayload(BaseModel):
     token: str
@@ -77,7 +122,6 @@ class TokenPayload(BaseModel):
 async def set_token(payload: TokenPayload):
     global _runtime_token
     _runtime_token = payload.token
-    # Verify token
     try:
         me = await fb_get("me", {"fields": "id,name,picture"})
         return {"ok": True, "name": me.get("name"), "id": me.get("id")}
@@ -101,6 +145,7 @@ async def get_me():
 
 
 # ── Quick Launch ──────────────────────────────────────────────────────
+
 class CampaignCreate(BaseModel):
     account_id: str
     name: str
@@ -110,7 +155,6 @@ class CampaignCreate(BaseModel):
 
 @app.post("/api/quick-launch/campaign")
 async def quick_launch_campaign(payload: CampaignCreate):
-    """快速建立行銷活動"""
     return await fb_post(f"{payload.account_id}/campaigns", {
         "name": payload.name,
         "objective": payload.objective,
@@ -121,9 +165,9 @@ async def quick_launch_campaign(payload: CampaignCreate):
 
 
 # ── 廣告帳戶 ─────────────────────────────────────────────────────────
+
 @app.get("/api/accounts")
 async def get_accounts():
-    """取得所有廣告帳戶"""
     accounts = []
     next_url = f"{BASE_URL}/me/adaccounts"
     params = {
@@ -131,23 +175,24 @@ async def get_accounts():
         "access_token": get_token(),
         "limit": "100"
     }
-    async with httpx.AsyncClient(timeout=30) as client:
-        while next_url:
-            r = await client.get(next_url, params=params)
-            data = r.json()
-            if "error" in data:
-                raise HTTPException(status_code=400, detail=data["error"].get("message", "FB API Error"))
-            accounts.extend(data.get("data", []))
-            next_url = data.get("paging", {}).get("next")
-            params = {}  # next_url already contains all params
+    while next_url:
+        r = await _http_client.get(next_url, params=params)
+        data = r.json()
+        if "error" in data:
+            raise HTTPException(status_code=400, detail=data["error"].get("message", "FB API Error"))
+        accounts.extend(data.get("data", []))
+        next_url = data.get("paging", {}).get("next")
+        params = {}  # next_url already contains all params
     return {"data": accounts}
 
 
 # ── 行銷活動 ─────────────────────────────────────────────────────────
+
 @app.get("/api/accounts/{account_id}/campaigns")
-async def get_campaigns(account_id: str, date_preset: str = "last_30d"):
+async def get_campaigns(account_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None):
+    ins = _insights_clause("spend,impressions,clicks,ctr,cpc,cpm,frequency,reach,actions", date_preset, time_range)
     data = await fb_get(f"{account_id}/campaigns", {
-        "fields": "id,name,status,objective,daily_budget,lifetime_budget,insights.date_preset(" + date_preset + "){spend,impressions,clicks,ctr,cpc,cpm,frequency,reach,actions}",
+        "fields": f"id,name,status,objective,daily_budget,lifetime_budget,{ins}",
         "limit": "100"
     })
     return data
@@ -155,7 +200,6 @@ async def get_campaigns(account_id: str, date_preset: str = "last_30d"):
 
 @app.post("/api/campaigns/{campaign_id}/status")
 async def update_campaign_status(campaign_id: str, status: str = Query(...)):
-    """開啟/暫停行銷活動 status: ACTIVE | PAUSED"""
     return await fb_post(campaign_id, {"status": status})
 
 
@@ -163,17 +207,19 @@ async def update_campaign_status(campaign_id: str, status: str = Query(...)):
 async def update_campaign_budget(campaign_id: str, daily_budget: int = Query(None), lifetime_budget: int = Query(None)):
     payload = {}
     if daily_budget:
-        payload["daily_budget"] = str(daily_budget * 100)  # cents
+        payload["daily_budget"] = str(daily_budget * 100)
     if lifetime_budget:
         payload["lifetime_budget"] = str(lifetime_budget * 100)
     return await fb_post(campaign_id, payload)
 
 
 # ── 廣告組合 ─────────────────────────────────────────────────────────
+
 @app.get("/api/campaigns/{campaign_id}/adsets")
-async def get_adsets(campaign_id: str, date_preset: str = "last_30d"):
+async def get_adsets(campaign_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None):
+    ins = _insights_clause("spend,impressions,clicks,ctr,cpc,cpm,frequency,actions", date_preset, time_range)
     data = await fb_get(f"{campaign_id}/adsets", {
-        "fields": "id,name,status,daily_budget,lifetime_budget,insights.date_preset(" + date_preset + "){spend,impressions,clicks,ctr,cpc,cpm}",
+        "fields": f"id,name,status,daily_budget,lifetime_budget,{ins}",
         "limit": "100"
     })
     return data
@@ -193,10 +239,12 @@ async def update_adset_budget(adset_id: str, daily_budget: int = Query(None)):
 
 
 # ── 廣告 ─────────────────────────────────────────────────────────────
+
 @app.get("/api/adsets/{adset_id}/ads")
-async def get_ads(adset_id: str, date_preset: str = "last_30d"):
+async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None):
+    ins = _insights_clause("spend,impressions,clicks,ctr,cpc,cpm,actions", date_preset, time_range)
     data = await fb_get(f"{adset_id}/ads", {
-        "fields": "id,name,status,creative{thumbnail_url,title,body},insights.date_preset(" + date_preset + "){spend,impressions,clicks,ctr,cpc,cpm}",
+        "fields": f"id,name,status,creative{{thumbnail_url,title,body}},{ins}",
         "limit": "100"
     })
     return data
@@ -208,17 +256,21 @@ async def update_ad_status(ad_id: str, status: str = Query(...)):
 
 
 # ── 帳戶整體成效 ──────────────────────────────────────────────────────
+
 @app.get("/api/accounts/{account_id}/insights")
-async def get_account_insights(account_id: str, date_preset: str = "last_30d"):
-    data = await fb_get(f"{account_id}/insights", {
+async def get_account_insights(account_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None):
+    params = {
         "fields": "spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions",
-        "date_preset": date_preset,
-    })
+    }
+    if time_range:
+        params["time_range"] = time_range
+    else:
+        params["date_preset"] = date_preset
+    data = await fb_get(f"{account_id}/insights", params)
     return data
 
 
 # ── AI Chat (Gemini) ──────────────────────────────────────────
-from typing import List
 
 class ChatMessage(BaseModel):
     role: str   # "user" | "model"
@@ -240,7 +292,6 @@ async def ai_chat(req: ChatRequest):
     if req.context:
         system_prompt += f"\n\n目前廣告數據摘要：\n{req.context}"
 
-    # Build Gemini contents array
     contents = []
     for m in req.messages:
         contents.append({
@@ -258,8 +309,7 @@ async def ai_chat(req: ChatRequest):
     }
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(url, json=payload)
+    r = await _http_client.post(url, json=payload)
     data = r.json()
 
     if "error" in data:
