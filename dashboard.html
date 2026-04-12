@@ -481,6 +481,8 @@ input:checked + .slider:before { transform: translateX(14px); }
   box-shadow: var(--shadow-md); width: 210px; z-index: 999; padding: 6px;
 }
 .sidebar .user-dropdown { top: auto; bottom: calc(100% + 8px); right: auto; left: 0; }
+.sidebar .topbar-user { border: none !important; }
+.sidebar .topbar-user:hover { background: transparent !important; border-color: transparent !important; }
 .user-dropdown.open { display: block; }
 .user-dropdown-name { padding: 8px 10px 6px; font-size: 12px; font-weight: 700; color: var(--black); border-bottom: 1px solid var(--border); margin-bottom: 4px; }
 .user-dropdown-meta { font-size: 11px; color: var(--gray-300); font-weight: 400; }
@@ -688,10 +690,9 @@ input:checked + .slider:before { transform: translateX(14px); }
   </nav>
   <!-- User account at bottom of sidebar -->
   <div style="margin-top:auto;padding:10px 8px;border-top:1px solid var(--border)">
-    <div class="topbar-user" id="topbarUser" onclick="toggleUserMenu(event)" style="width:100%;border-radius:var(--radius-sm);padding:8px 10px;gap:8px">
+    <div class="topbar-user" id="topbarUser" onclick="toggleUserMenu(event)" style="width:100%;border-radius:var(--radius-sm);padding:8px 10px;gap:8px;border:none !important;background:transparent !important">
       <div class="topbar-avatar" id="topbarAvatar"></div>
       <span class="topbar-username" id="topbarName" style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-      <span style="font-size:10px;color:var(--gray-300)">▾</span>
       <div class="user-dropdown" id="userDropdown">
         <div class="user-dropdown-name" id="dropdownName">
           <div id="dropdownFullName"></div>
