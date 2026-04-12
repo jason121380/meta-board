@@ -2676,64 +2676,56 @@ async function loadAiAlerts() {
     const cpcRows  = allRows.filter(r => r.tag.includes('CPC'));
     const freqRows = allRows.filter(r => r.tag.includes('頻次'));
 
-    function buildAlertCard(title, titleColor, rows) {
-      const thStyle = (right) => `padding:8px 10px;text-align:${right?'right':'left'};font-weight:700;color:var(--gray-500);white-space:nowrap;font-size:11px`;
-      const tdBase = (right, extra='') => `padding:8px 10px;text-align:${right?'right':'left'};font-size:12px;${extra}`;
+    // cols: array of {label, right, fn}
+    function buildAlertCard(title, titleColor, rows, cols) {
+      const th = (c) => `<th style="padding:8px 10px;text-align:${c.right?'right':'left'};font-weight:700;color:var(--gray-500);white-space:nowrap;font-size:11px">${c.label}</th>`;
+      const colCount = cols.length;
       const rows_html = rows.map((item) => {
         const c = item.camp;
         const ci = getIns(c);
         const spend = +ci.spend||0;
         const msgs = getMsgCount(c);
         const msgCost = msgs>0 ? spend/msgs : 0;
-        const globalIdx = item._gIdx;
+        const ctx = {c, ci, spend, msgs, msgCost, item};
         return `<tr style="border-bottom:1px solid var(--border)">
-          <td style="${tdBase(false,'white-space:nowrap')}">
-            <span style="background:${item.sectionColor}20;color:${item.sectionColor};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px">${item.section}</span>
-          </td>
-          <td style="${tdBase(false,'color:var(--gray-500);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap')}">${c._accountName}</td>
-          <td style="${tdBase(false,'font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap')}" title="${c.name}">${c.name}</td>
-          <td style="${tdBase(true,'font-variant-numeric:tabular-nums')}">$${fM(spend)}</td>
-          <td style="${tdBase(true)}">${+ci.cpc>0?'$'+fM(ci.cpc):'—'}</td>
-          <td style="${tdBase(true,+ci.frequency>5?'color:var(--orange);font-weight:600':'')}">${+ci.frequency>0?(+ci.frequency).toFixed(1):'—'}</td>
-          <td style="${tdBase(true)}">${msgs>0?fN(msgs):'—'}</td>
-          <td style="${tdBase(true)}">${msgCost>0?'$'+fM(msgCost):'—'}</td>
-          <td id="alert-rec-${globalIdx}" style="${tdBase(false,'min-width:140px')}">
-            <span style="color:var(--gray-300);font-style:italic">AI 分析中...</span>
-          </td>
+          ${cols.map(col => `<td style="padding:8px 10px;text-align:${col.right?'right':'left'};font-size:12px;${col.extra||''}">${col.fn(ctx)}</td>`).join('')}
         </tr>`;
       }).join('');
-      const emptyRow = `<tr><td colspan="9" style="padding:20px;text-align:center;color:var(--gray-300);font-size:12px">無異常項目</td></tr>`;
+      const emptyRow = `<tr><td colspan="${colCount}" style="padding:20px;text-align:center;color:var(--gray-300);font-size:12px">無異常項目</td></tr>`;
       return `<div style="flex:1;min-width:0;border-radius:8px;border:1px solid var(--border);background:var(--white);overflow:hidden;display:flex;flex-direction:column">
         <div style="padding:10px 14px;border-bottom:2px solid ${titleColor};background:${titleColor}10;font-weight:700;font-size:13px;color:${titleColor}">${title}</div>
         <div style="overflow-x:auto;flex:1">
           <table style="width:100%;border-collapse:collapse">
-            <thead>
-              <tr style="background:var(--warm-white);border-bottom:1px solid var(--border)">
-                <th style="${thStyle(false)}">分類</th>
-                <th style="${thStyle(false)}">帳戶</th>
-                <th style="${thStyle(false)}">行銷活動</th>
-                <th style="${thStyle(true)}">花費</th>
-                <th style="${thStyle(true)}">CPC</th>
-                <th style="${thStyle(true)}">頻次</th>
-                <th style="${thStyle(true)}">私訊數</th>
-                <th style="${thStyle(true)}">私訊成本</th>
-                <th style="${thStyle(false)}">建議</th>
-              </tr>
-            </thead>
+            <thead><tr style="background:var(--warm-white);border-bottom:1px solid var(--border)">${cols.map(th).join('')}</tr></thead>
             <tbody>${rows.length ? rows_html : emptyRow}</tbody>
           </table>
         </div>
       </div>`;
     }
 
-    tcEl.innerHTML = `<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
-      ${buildAlertCard('私訊成本過高', '#FF6B2C', msgRows)}
-      ${buildAlertCard('CPC 過高', '#F59E0B', cpcRows)}
-      ${buildAlertCard('頻次過高', '#6366F1', freqRows)}
-    </div>`;
+    const campCol = {label:'行銷活動', right:false, extra:'font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', fn:({c})=>`<span title="${c.name}">${c.name}</span>`};
+    const acctCol = {label:'帳戶', right:false, extra:'color:var(--gray-500);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', fn:({c})=>c._accountName};
 
-    // Async: fetch AI recommendations for all rows (preserve global index mapping)
-    fetchAiRecommendations(allRows, 'alert-rec-');
+    const msgCols = [
+      acctCol, campCol,
+      {label:'花費', right:true, fn:({spend})=>`$${fM(spend)}`},
+      {label:'私訊數', right:true, fn:({msgs})=>msgs>0?fN(msgs):'—'},
+      {label:'私訊成本', right:true, fn:({msgCost})=>msgCost>0?'$'+fM(msgCost):'—'},
+    ];
+    const cpcCols = [
+      acctCol, campCol,
+      {label:'CPC', right:true, fn:({ci})=>+ci.cpc>0?'$'+fM(ci.cpc):'—'},
+    ];
+    const freqCols = [
+      acctCol, campCol,
+      {label:'頻次', right:true, extra:'', fn:({ci})=>+ci.frequency>0?`<span style="${+ci.frequency>5?'color:var(--orange);font-weight:600':''}">${(+ci.frequency).toFixed(1)}</span>`:'—'},
+    ];
+
+    tcEl.innerHTML = `<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+      ${buildAlertCard('私訊成本過高', '#FF6B2C', msgRows, msgCols)}
+      ${buildAlertCard('CPC 過高', '#F59E0B', cpcRows, cpcCols)}
+      ${buildAlertCard('頻次過高', '#6366F1', freqRows, freqCols)}
+    </div>`;
   }
 
   showEl('alertTextCards', 'block');
