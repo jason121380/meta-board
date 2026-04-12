@@ -688,6 +688,24 @@ input:checked + .slider:before { transform: translateX(14px); }
 </head>
 <body>
 
+<!-- Finance Account Picker Modal -->
+<div class="overlay" id="finAcctModal" onclick="if(event.target===this)closeFinAcctModal()">
+  <div class="modal" style="width:520px;max-height:75vh;padding:0;display:flex;flex-direction:column">
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+      <span style="font-weight:700;font-size:15px">選擇廣告帳戶</span>
+      <button onclick="closeFinAcctModal()" style="background:none;border:none;cursor:pointer;color:var(--gray-400);font-size:18px;line-height:1;padding:2px 6px">✕</button>
+    </div>
+    <div style="display:flex;padding:7px 14px;border-bottom:1px solid var(--border);background:var(--warm-white);font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.5px;flex-shrink:0">
+      <span style="flex:1">廣告帳號</span>
+      <span style="width:110px;text-align:right">花費</span>
+      <span style="width:120px;text-align:right">花費+%</span>
+    </div>
+    <div id="financeAcctList" style="overflow-y:auto;flex:1">
+      <div class="loading" style="padding:20px"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
 <!-- Custom Confirm Modal -->
 <div class="overlay" id="confirmModal">
   <div class="modal" style="width:320px;text-align:center">
@@ -991,27 +1009,16 @@ input:checked + .slider:before { transform: translateX(14px); }
   <div class="topbar">
     <button class="hamburger" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
     <div class="page-title">財務專區</div>
+    <div class="topbar-sep"></div>
+    <button id="finAcctBtn" class="btn btn-ghost btn-sm" onclick="openFinAcctModal()" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;gap:4px">全部帳戶 <span style="color:var(--gray-300)">▾</span></button>
     <div class="topbar-spacer"></div>
     <div id="dpFin"></div>
     <div class="topbar-sep"></div>
     <button class="btn btn-ghost btn-sm" title="下載資料" onclick="downloadFinanceCsv()" style="padding:0 10px;font-size:16px">⬇</button>
   </div>
   <div class="finance-body">
-    <!-- Left: Account Summary Panel -->
-    <div class="finance-acct-panel">
-      <!-- Account Table Header -->
-      <div style="display:flex;padding:7px 14px;border-bottom:1px solid var(--border);background:var(--warm-white);font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.5px;user-select:none">
-        <span style="flex:1">廣告帳號</span>
-        <span style="width:110px;text-align:right">花費</span>
-        <span style="width:120px;text-align:right">花費+%</span>
-      </div>
-      <!-- Account List -->
-      <div class="finance-acct-list" id="financeAcctList">
-        <div class="loading" style="padding:20px"><div class="spinner"></div></div>
-      </div>
-    </div>
-    <!-- Right: KPIs + Table -->
-    <div class="finance-main">
+    <!-- Right: KPIs + Table (full width now) -->
+    <div class="finance-main" style="flex:1">
       <div id="fin-kpi-spend" style="display:none"></div>
       <div id="fin-kpi-plus" style="display:none"></div>
       <div class="finance-toolbar">
@@ -2102,6 +2109,20 @@ async function toggleStatus(endpoint, id, checkbox, isCampaign) {
   });
 }
 
+// ── Finance Account Modal ───────────────────────────────────
+function openFinAcctModal() { document.getElementById('finAcctModal').classList.add('open'); }
+function closeFinAcctModal() { document.getElementById('finAcctModal').classList.remove('open'); }
+function _updateFinAcctBtn() {
+  const btn = document.getElementById('finAcctBtn');
+  if(!btn) return;
+  if(finSelectedAcctIds.length === 0) {
+    btn.innerHTML = '全部帳戶 <span style="color:var(--gray-300)">▾</span>';
+  } else {
+    const acc = getVisibleAccounts().find(a => a.id === finSelectedAcctIds[0]);
+    btn.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis">${acc?.name||'帳戶'}</span> <span style="color:var(--gray-300)">▾</span>`;
+  }
+}
+
 // ── Custom Confirm ──────────────────────────────────────────
 function showConfirm(msg, onOk, { title = '確認操作', icon = '⚠️' } = {}) {
   const modal = document.getElementById('confirmModal');
@@ -2648,7 +2669,7 @@ function _renderAlertCardRows(cardKey) {
   const s = _alertSort[cardKey];
   let rows = [...(_alertRows[cardKey]||[])];
   // Apply keyword filters
-  if(_alertFilter.msg && cardKey === 'msg') rows = rows.filter(r => r.camp.name.includes('私訊'));
+  if(_alertFilter.msg && cardKey === 'msg') rows = rows.filter(r => r.camp.name.includes('私訊') && !r.camp.name.includes('接'));
   if(_alertFilter.cpc && cardKey === 'cpc') rows = rows.filter(r => !r.camp.name.includes('私訊'));
   if(s.col) {
     const col = cols.find(c=>c.label===s.col);
@@ -2868,7 +2889,7 @@ async function loadAiAlerts() {
     const cpcRows  = allRows.filter(r => r.tag.includes('CPC'));
     const freqRows = allRows.filter(r => r.tag.includes('頻次'));
 
-    const fbLink = (c) => { const act = (c._accountId||'').replace('act_',''); return act ? `<a href="https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${act}&selected_campaign_ids=${c.id}" target="_blank" style="margin-left:6px;color:var(--gray-300);font-size:11px;text-decoration:none;flex-shrink:0" title="開啟臉書後台">↗</a>` : ''; };
+    const fbLink = (c) => { const act = (c._accountId||'').replace('act_',''); if(!act) return ''; const acct = allAccounts.find(a=>a.id===c._accountId); const bizParam = acct?.business?.id ? `&business_id=${acct.business.id}` : ''; return `<a href="https://adsmanager.facebook.com/adsmanager/manage/campaigns/edit/standalone?act=${act}${bizParam}&selected_campaign_ids=${c.id}&current_step=0" target="_blank" style="margin-left:6px;color:var(--gray-300);font-size:11px;text-decoration:none;flex-shrink:0" title="開啟臉書後台">↗</a>`; };
     const campCol = {label:'行銷活動', right:false, extra:'', fn:({c})=>`<div style="display:flex;align-items:center;gap:0;max-width:220px"><span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${c.name}">${c.name}</span>${fbLink(c)}</div>`};
 
     _alertCols.msg = [
@@ -3075,7 +3096,8 @@ function finSelectAcct(id) {
   } else {
     finSelectedAcctIds = [id];
   }
-  // Re-render account list and table
+  closeFinAcctModal();
+  _updateFinAcctBtn();
   const visible = getVisibleAccounts();
   renderFinanceAcctList(visible);
   renderFinanceTable();
