@@ -429,9 +429,14 @@ input:checked + .slider:before { transform: translateX(14px); }
   .stat-value { font-size: 13px; }
   .stat-label { font-size: 8px; }
   #loginPage { flex-direction: column; background: var(--white); }
-  .login-panel-left { flex: none; min-height: 180px; padding: 36px 28px; align-items: center; justify-content: center; text-align: center; border-radius: 0; }
+  .login-panel-left { flex: none; min-height: 200px; padding: 40px 28px 36px; align-items: center; justify-content: center; text-align: center; border-radius: 0; }
+  .login-panel-left > div[style] { display: flex; flex-direction: column; align-items: center; }
+  .login-brand-mark { margin-bottom: 16px; }
   .login-brand-desc { display: none; }
-  .login-brand-name { font-size: 26px; margin-bottom: 0; }
+  .login-brand-name { font-size: 28px; margin-bottom: 0; }
+  .login-blob-1 { width: 280px; height: 280px; top: -80px; left: -60px; }
+  .login-blob-2 { width: 220px; height: 220px; bottom: -40px; right: -40px; }
+  .login-blob-3 { width: 140px; height: 140px; }
   .login-card { width: 100%; flex: 1; padding: 32px 28px; }
   .login-logo { font-size: 20px; }
   .fb-login-big { height: 44px; font-size: 14px; }
@@ -455,19 +460,46 @@ input:checked + .slider:before { transform: translateX(14px); }
 }
 #loginPage.hidden { display: none; }
 .login-panel-left {
-  flex: 1; background: #1A1A1A; display: flex; flex-direction: column;
+  flex: 1; background: #1C1410; display: flex; flex-direction: column;
   align-items: flex-start; justify-content: flex-end; padding: 56px 60px;
   position: relative; overflow: hidden;
 }
-.login-panel-left::before {
-  content: ''; position: absolute; top: -120px; right: -120px;
-  width: 400px; height: 400px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(255,107,44,0.18) 0%, transparent 70%);
+/* Animated gradient blobs */
+.login-blob {
+  position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.55;
+  pointer-events: none;
 }
-.login-panel-left::after {
-  content: ''; position: absolute; bottom: -60px; left: -60px;
-  width: 240px; height: 240px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(255,107,44,0.1) 0%, transparent 70%);
+.login-blob-1 {
+  width: 420px; height: 420px; background: radial-gradient(circle, #FF6B2C 0%, #FF3D00 60%, transparent 100%);
+  top: -100px; left: -80px;
+  animation: blobFloat1 9s ease-in-out infinite alternate;
+}
+.login-blob-2 {
+  width: 320px; height: 320px; background: radial-gradient(circle, #FF8C42 0%, #E55A1C 70%, transparent 100%);
+  bottom: -60px; right: -60px;
+  animation: blobFloat2 11s ease-in-out infinite alternate;
+}
+.login-blob-3 {
+  width: 200px; height: 200px; background: radial-gradient(circle, #FFB347 0%, #FF6B2C 70%, transparent 100%);
+  top: 40%; left: 35%;
+  animation: blobFloat3 13s ease-in-out infinite alternate;
+}
+@keyframes blobFloat1 {
+  0%   { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(40px, 50px) scale(1.1); }
+}
+@keyframes blobFloat2 {
+  0%   { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(-30px, -40px) scale(1.15); }
+}
+@keyframes blobFloat3 {
+  0%   { transform: translate(0, 0) scale(0.9); opacity: 0.35; }
+  100% { transform: translate(-20px, 30px) scale(1.1); opacity: 0.55; }
+}
+/* Noise overlay for depth */
+.login-panel-left::before {
+  content: ''; position: absolute; inset: 0; z-index: 1;
+  background: rgba(20, 10, 5, 0.25);
 }
 .login-brand-mark {
   width: 44px; height: 4px; background: var(--orange); border-radius: 2px; margin-bottom: 24px;
@@ -667,9 +699,14 @@ input:checked + .slider:before { transform: translateX(14px); }
 <div id="loginPage">
   <!-- Left brand panel -->
   <div class="login-panel-left">
-    <div class="login-brand-mark"></div>
-    <div class="login-brand-name">METADASH <span>by LURE</span></div>
-    <div class="login-brand-desc">統一管理所有 Meta 廣告帳戶，即時掌握成效數據與異常警示。</div>
+    <div class="login-blob login-blob-1"></div>
+    <div class="login-blob login-blob-2"></div>
+    <div class="login-blob login-blob-3"></div>
+    <div style="position:relative;z-index:2">
+      <div class="login-brand-mark"></div>
+      <div class="login-brand-name">METADASH <span>by LURE</span></div>
+      <div class="login-brand-desc">統一管理所有 Meta 廣告帳戶，即時掌握成效數據與異常警示。</div>
+    </div>
   </div>
   <!-- Right login panel -->
   <div class="login-card">
