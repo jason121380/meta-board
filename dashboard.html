@@ -2259,12 +2259,6 @@ async function loadAiAnalysis() {
   }
 
   // ── KPI Summary ────────────────────────────────────────────
-  const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d'];
-  const getMsgCount = c => {
-    const acts = getIns(c).actions || [];
-    for(const t of MSG_TYPES) { const a = acts.find(x=>x.action_type===t); if(a) return +a.value||0; }
-    return 0;
-  };
 
   const active = allCamps.filter(c=>c.status==='ACTIVE');
   // Use account-level insight spend (accurate, includes archived campaigns)
@@ -2503,6 +2497,12 @@ let _alertRows = {}; // {msg:[], cpc:[], freq:[]}
 let _alertSort = {msg:{col:null,dir:-1}, cpc:{col:null,dir:-1}, freq:{col:null,dir:-1}};
 let _alertCols = {};
 let _alertFilter = {msg: true, cpc: true}; // true = filter active
+const _MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d'];
+function getMsgCount(c) {
+  const acts = getIns(c).actions || [];
+  for(const t of _MSG_TYPES) { const a = acts.find(x=>x.action_type===t); if(a) return +a.value||0; }
+  return 0;
+}
 
 function alertFilterToggle(cardKey) {
   _alertFilter[cardKey] = !_alertFilter[cardKey];
@@ -2639,12 +2639,6 @@ async function loadAiAlerts() {
     return;
   }
 
-  const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d'];
-  const getMsgCount = c => {
-    const acts = getIns(c).actions || [];
-    for(const t of MSG_TYPES) { const a = acts.find(x=>x.action_type===t); if(a) return +a.value||0; }
-    return 0;
-  };
   const hasMsgData = allCamps.some(c=>getMsgCount(c)>0);
 
   const totalSpend = allCamps.reduce((s,c)=>s+(+getIns(c).spend||0), 0);
