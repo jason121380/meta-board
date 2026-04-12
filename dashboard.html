@@ -1176,8 +1176,8 @@ async function loadAllAccounts() {
 }
 
 function getVisibleAccounts() {
-  // Accounts enabled in settings; if none configured show all
-  if(!savedSelectedIds.length) return allAccounts;
+  // 只顯示設定頁勾選的帳戶；未設定 = 無資料
+  if(!savedSelectedIds.length) return [];
   return allAccounts.filter(a => savedSelectedIds.includes(a.id));
 }
 
