@@ -108,8 +108,9 @@ nav { padding: 10px 10px; flex: 1; }
 }
 .stat { background: var(--white); padding: 16px 20px; border-radius: 16px; border: 1px solid var(--border); }
 .stat-label { font-size: 11px; font-weight: 600; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.5px; }
-.stat-value { font-size: 22px; font-weight: 700; color: var(--black); margin-top: 4px; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.stat-value { font-size: 22px; font-weight: 700; color: var(--black); margin-top: 4px; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; min-height: 28px; display: flex; align-items: center; }
 .stat-sub { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 
 /* ── Dashboard Two-Column ──────────────────────────────────── */
 .dash-body { display: flex; flex: 1; overflow: hidden; }
@@ -1107,6 +1108,11 @@ async function loadDashboard() {
 }
 
 async function loadOverviewStats() {
+  // Show loading state
+  ['spend','imp','reach','clicks','ctr','cpc','cpm','freq','purchase','lead','msg','cpm-msg'].forEach(k => {
+    const el = document.getElementById('st-'+k);
+    if(el) el.innerHTML = '<span style="display:inline-block;width:60px;height:18px;background:linear-gradient(90deg,var(--border) 25%,var(--warm-white) 50%,var(--border) 75%);background-size:200% 100%;border-radius:4px;animation:shimmer 1.2s infinite"></span>';
+  });
   const dp = getDateParams();
   let totals = { spend:0, impressions:0, reach:0, clicks:0, purchase:0, lead:0, msg:0 };
   let ctrVals=[], cpcVals=[], cpmVals=[], freqVals=[];
