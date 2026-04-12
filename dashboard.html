@@ -681,6 +681,19 @@ input:checked + .slider:before { transform: translateX(14px); }
 </head>
 <body>
 
+<!-- Custom Confirm Modal -->
+<div class="overlay" id="confirmModal">
+  <div class="modal" style="width:320px;text-align:center">
+    <div style="font-size:28px;margin-bottom:12px" id="confirmIcon">⚠️</div>
+    <h3 id="confirmTitle" style="margin-bottom:8px"></h3>
+    <p id="confirmMsg" style="font-size:13px;color:var(--gray-500);margin-bottom:20px;line-height:1.6"></p>
+    <div class="modal-actions" style="justify-content:center;gap:10px">
+      <button class="btn btn-ghost btn-sm" style="min-width:80px" id="confirmCancel">取消</button>
+      <button class="btn btn-blue btn-sm" style="min-width:80px" id="confirmOk">確定</button>
+    </div>
+  </div>
+</div>
+
 <!-- Budget Modal -->
 <div class="overlay" id="budgetModal">
   <div class="modal">
@@ -2048,10 +2061,10 @@ async function toggleStatus(endpoint, id, checkbox, isCampaign) {
   const entityType = isCampaign ? '行銷活動' : endpoint === 'adsets' ? '廣告組合' : '廣告';
   // Revert UI while confirming
   checkbox.checked = !checkbox.checked;
-  if(!confirm(`確定要${action}此${entityType}？`)) return;
-  checkbox.checked = status === 'ACTIVE';
-  try {
-    const r = await fetch(`${API}/api/${endpoint}/${id}/status?status=${status}`, { method: 'POST' });
+  showConfirm(`確定要${action}此${entityType}？`, async () => {
+    checkbox.checked = status === 'ACTIVE';
+    try {
+      const r = await fetch(`${API}/api/${endpoint}/${id}/status?status=${status}`, { method: 'POST' });
     if(!r.ok) throw new Error();
     // Update local data
     if(isCampaign) {
@@ -2071,10 +2084,25 @@ async function toggleStatus(endpoint, id, checkbox, isCampaign) {
       });
     }
     renderTree();
-  } catch {
-    checkbox.checked = !checkbox.checked;
-    alert('更新失敗');
-  }
+    } catch {
+      checkbox.checked = !checkbox.checked;
+      alert('更新失敗');
+    }
+  });
+}
+
+// ── Custom Confirm ──────────────────────────────────────────
+function showConfirm(msg, onOk, { title = '確認操作', icon = '⚠️' } = {}) {
+  const modal = document.getElementById('confirmModal');
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmMsg').textContent = msg;
+  document.getElementById('confirmIcon').textContent = icon;
+  modal.classList.add('open');
+  const ok = document.getElementById('confirmOk');
+  const cancel = document.getElementById('confirmCancel');
+  const close = () => modal.classList.remove('open');
+  ok.onclick = () => { close(); onOk(); };
+  cancel.onclick = close;
 }
 
 // ── Budget ──────────────────────────────────────────────────
@@ -2091,10 +2119,12 @@ function closeBudget() {
 async function saveBudget() {
   const val = parseInt(document.getElementById('budgetInput').value);
   if(!val||val<=0) return alert('請輸入有效金額');
-  if(!confirm(`確定將每日預算更改為 $${val.toLocaleString()}？`)) return;
-  const ep = budgetTarget.type==='campaign'?'campaigns':'adsets';
-  await fetch(`${API}/api/${ep}/${budgetTarget.id}/budget?daily_budget=${val}`,{method:'POST'});
+  const target = {...budgetTarget};
   closeBudget();
+  showConfirm(`確定將每日預算更改為 $${val.toLocaleString()}？`, async () => {
+    const ep = target.type==='campaign'?'campaigns':'adsets';
+    await fetch(`${API}/api/${ep}/${target.id}/budget?daily_budget=${val}`,{method:'POST'});
+  });
   // Refresh
   if(budgetTarget.type==='campaign') {
     campData = {}; adsetData = {}; adData = {};
