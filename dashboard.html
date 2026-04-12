@@ -2786,7 +2786,7 @@ async function loadAiAlerts() {
   if(!allRows.length) {
     tcEl.innerHTML = '<div style="text-align:center;padding:32px;color:var(--gray-300);font-size:13px">無特別需要關注的項目</div>';
   } else {
-    const msgRows  = allRows.filter(r => r.tag.includes('私訊成本'));
+    const msgRows  = allRows.filter(r => r.tag === '私訊成本過高');
     const cpcRows  = allRows.filter(r => r.tag.includes('CPC'));
     const freqRows = allRows.filter(r => r.tag.includes('頻次'));
 
@@ -2825,7 +2825,7 @@ async function loadAiAlerts() {
       freq: '',
     };
     const cardDesc = {
-      msg: '示警 &gt;$150 ／ 過高 &gt;$200',
+      msg: '私訊成本 &gt; $200',
       cpc: '示警 &gt;$4 ／ 過高 &gt;$5',
       freq: '示警 &gt;4 ／ 過高 &gt;5',
     };
