@@ -1221,22 +1221,11 @@ function renderDashAcctList() {
   if(!visible.length) { el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--gray-300)">請先在設定中啟用帳戶</div>'; return; }
   const q = (document.getElementById('dashAcctSearch')?.value||'').toLowerCase();
   let list = visible.filter(a => !q || a.name.toLowerCase().includes(q) || a.id.includes(q));
-  // Apply custom drag-sort order
-  list = list.sort((a,b) => {
-    const ia = acctOrder.indexOf(a.id), ib = acctOrder.indexOf(b.id);
-    if(ia>=0 && ib>=0) return ia-ib;
-    if(ia>=0) return -1; if(ib>=0) return 1;
-    return 0;
-  });
+  list = list.sort((a,b) => a.name.localeCompare(b.name, 'zh-TW'));
   el.innerHTML = list.map(a => {
     const isActive = selectedAccounts.some(s=>s.id===a.id);
     const dotClass = a.account_status===1?'on':'off';
-    return `<div class="dash-acct-item${isActive?' active':''}" draggable="true"
-        onclick="selectAccount('${a.id}')"
-        ondragstart="dragStart(event,'${a.id}')"
-        ondragover="dragOver(event)"
-        ondrop="dragDrop(event,'${a.id}')"
-        ondragend="dragEnd()">
+    return `<div class="dash-acct-item${isActive?' active':''}" onclick="selectAccount('${a.id}')">
       <div class="dash-acct-dot ${dotClass}"></div>
       <span class="dash-acct-name" title="${escHtml(a.name)}">${escHtml(a.name)}</span>
     </div>`;
@@ -1379,7 +1368,9 @@ function renderTree() {
 
   const MSG_TYPES_TREE = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'];
   const getMsgTree = item => { const acts = getIns(item).actions||[]; for(const t of MSG_TYPES_TREE){const a=acts.find(x=>x.action_type===t);if(a)return +a.value||0;} return 0; };
+  let campNo = 0;
   const cols = [
+    { key:'no', label:'No.' },
     { key:'name', label:'名稱' },
     ...(multiAcct ? [{ key:'account', label:'帳戶' }] : []),
     { key:'status', label:'狀態' },
@@ -1403,11 +1394,14 @@ function renderTree() {
   let rows = '';
 
   allCamps.forEach(camp => {
+    campNo++;
     const ins = getIns(camp);
     const isOpen = expandedCamps.has(camp.id);
     const adsets = adsetData[camp.id];
+    const campBudget = camp.daily_budget || camp.lifetime_budget ? budgetStr(camp) : '<span style="font-size:11px;color:var(--orange-muted)">廣告組合預算</span>';
 
     rows += `<tr class="campaign-row" data-camp="${camp.id}" onclick="toggleCamp(event,'${camp.id}')" style="cursor:pointer">
+      <td style="color:var(--gray-300);font-size:12px;text-align:center;width:40px">${campNo}</td>
       <td>
         <div class="name-cell indent-0">
           <span class="expand-btn ${isOpen?'open':''}" style="pointer-events:none">
@@ -1425,7 +1419,7 @@ function renderTree() {
       <td class="num">${fM(ins.cpc)}</td>
       <td class="num">${(()=>{const m=getMsgTree(camp);return m>0?fN(m):'—';})()}</td>
       <td class="num">${(()=>{const m=getMsgTree(camp),s=+ins.spend||0;return m>0?'$'+fM(s/m):'—';})()}</td>
-      <td class="num">${budgetStr(camp)}</td>
+      <td class="num">${campBudget}</td>
       <td onclick="event.stopPropagation()">
         <div style="display:flex;align-items:center;gap:6px">
           <label class="toggle"><input type="checkbox" ${camp.status==='ACTIVE'?'checked':''} onchange="toggleStatus('campaigns','${camp.id}',this,true)"><span class="slider"></span></label>
@@ -1446,6 +1440,7 @@ function renderTree() {
           const ads = adData[adset.id];
 
           rows += `<tr class="adset-row" data-adset="${adset.id}" onclick="toggleAdset(event,'${adset.id}')" style="cursor:pointer">
+            <td></td>
             <td>
               <div class="name-cell indent-1">
                 <span class="expand-btn ${adsetOpen?'open':''}" style="pointer-events:none">
@@ -1482,6 +1477,7 @@ function renderTree() {
                 const adi = getIns(ad);
                 const thumb = ad.creative?.thumbnail_url;
                 rows += `<tr class="ad-row">
+                  <td></td>
                   <td>
                     <div class="name-cell indent-2" style="padding-left:72px">
                       ${thumb ? `<img class="thumb" src="${thumb}" alt="">` : '<div style="width:30px;height:30px;background:var(--warm-white);border-radius:3px;flex-shrink:0"></div>'}
