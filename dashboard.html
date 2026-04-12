@@ -816,6 +816,42 @@ input:checked + .slider:before { transform: translateX(14px); }
         <div class="ai-chart-title">私訊成本分布</div>
         <canvas id="chartMsgCostDist" height="220"></canvas>
       </div>
+      <div class="ai-chart-card">
+        <div class="ai-chart-title">私訊數 Top 10 活動</div>
+        <canvas id="chartTopMsg" height="220"></canvas>
+      </div>
+      <div class="ai-chart-card">
+        <div class="ai-chart-title">最低私訊成本 Top 10 活動</div>
+        <canvas id="chartBestCpm" height="220"></canvas>
+      </div>
+      <div class="ai-chart-card">
+        <div class="ai-chart-title">各帳戶平均私訊成本</div>
+        <canvas id="chartAcctMsgCost" height="220"></canvas>
+      </div>
+      <div class="ai-chart-card">
+        <div class="ai-chart-title">各帳戶 CTR 比較</div>
+        <canvas id="chartAcctCtr" height="220"></canvas>
+      </div>
+      <div class="ai-chart-card">
+        <div class="ai-chart-title">CPC 分布區間</div>
+        <canvas id="chartCpcDist" height="220"></canvas>
+      </div>
+      <div class="ai-chart-card">
+        <div class="ai-chart-title">花費規模分布（各活動）</div>
+        <canvas id="chartSpendDist" height="220"></canvas>
+      </div>
+      <div class="ai-chart-card">
+        <div class="ai-chart-title">有 / 無私訊活動比例</div>
+        <canvas id="chartMsgRatio" height="220"></canvas>
+      </div>
+      <div class="ai-chart-card">
+        <div class="ai-chart-title">私訊數佔比（各帳戶）</div>
+        <canvas id="chartMsgShare" height="220"></canvas>
+      </div>
+      <div class="ai-chart-card">
+        <div class="ai-chart-title">高私訊效益活動 Top 10（私訊/千元花費）</div>
+        <canvas id="chartMsgRoi" height="220"></canvas>
+      </div>
     </div>
 
   </div>
@@ -2346,6 +2382,107 @@ async function loadAiAnalysis() {
       responsive:true
     }
   });
+
+  // ── Charts 6-15: Messaging-focused ──────────────────────────
+  const campsWithMsg = allCamps.filter(c => getMsgCount(c) > 0 && +getIns(c).spend > 0);
+  const shortName = s => s.length > 22 ? s.slice(0,22)+'…' : s;
+
+  // Chart 6: Top 10 campaigns by msg count
+  const topMsg = [...campsWithMsg].sort((a,b)=>getMsgCount(b)-getMsgCount(a)).slice(0,10);
+  if(topMsg.length) {
+    aiCharts.topMsg = new Chart(document.getElementById('chartTopMsg'), {
+      type:'bar', data:{ labels:topMsg.map(c=>shortName(c.name)), datasets:[{data:topMsg.map(getMsgCount),backgroundColor:'#2E7D32',borderRadius:4,borderSkipped:false}]},
+      options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{color:'#F5F5F5'},ticks:{precision:0}},y:{grid:{display:false},ticks:{font:{size:10}}}},responsive:true}
+    });
+  } else document.getElementById('chartTopMsg').parentElement.innerHTML += '<div style="text-align:center;color:var(--gray-300);font-size:13px;padding:40px 0">無私訊數據</div>';
+
+  // Chart 7: Top 10 lowest msg cost (best efficiency)
+  const bestCpm = [...campsWithMsg].map(c=>({c, cost:+getIns(c).spend/getMsgCount(c)})).sort((a,b)=>a.cost-b.cost).slice(0,10);
+  if(bestCpm.length) {
+    aiCharts.bestCpm = new Chart(document.getElementById('chartBestCpm'), {
+      type:'bar', data:{labels:bestCpm.map(r=>shortName(r.c.name)),datasets:[{data:bestCpm.map(r=>+r.cost.toFixed(0)),backgroundColor:'#1B5E20',borderRadius:4,borderSkipped:false}]},
+      options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{color:'#F5F5F5'},ticks:{callback:v=>'$'+fM(v)}},y:{grid:{display:false},ticks:{font:{size:10}}}},responsive:true}
+    });
+  } else document.getElementById('chartBestCpm').parentElement.innerHTML += '<div style="text-align:center;color:var(--gray-300);font-size:13px;padding:40px 0">無私訊數據</div>';
+
+  // Chart 8: Avg msg cost by account
+  const acctMsgCost = visible.map(acc => {
+    const cs = (aiCampData[acc.id]||[]).filter(c=>getMsgCount(c)>0&&+getIns(c).spend>0);
+    if(!cs.length) return null;
+    const totalSp = cs.reduce((s,c)=>s+(+getIns(c).spend||0),0);
+    const totalM = cs.reduce((s,c)=>s+getMsgCount(c),0);
+    return { name: acc.name, cost: totalSp/totalM };
+  }).filter(Boolean).sort((a,b)=>a.cost-b.cost);
+  if(acctMsgCost.length) {
+    aiCharts.acctMsgCost = new Chart(document.getElementById('chartAcctMsgCost'), {
+      type:'bar', data:{labels:acctMsgCost.map(a=>shortName(a.name)),datasets:[{data:acctMsgCost.map(a=>+a.cost.toFixed(0)),backgroundColor:O,borderRadius:4,borderSkipped:false}]},
+      options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{color:'#F5F5F5'},ticks:{callback:v=>'$'+fM(v)}},y:{grid:{display:false},ticks:{font:{size:10}}}},responsive:true}
+    });
+  } else document.getElementById('chartAcctMsgCost').parentElement.innerHTML += '<div style="text-align:center;color:var(--gray-300);font-size:13px;padding:40px 0">無私訊數據</div>';
+
+  // Chart 9: Avg CTR by account (weighted by impressions)
+  const acctCtr = visible.map(acc => {
+    const cs = (aiCampData[acc.id]||[]).filter(c=>+getIns(c).impressions>0);
+    if(!cs.length) return null;
+    const totalClicks = cs.reduce((s,c)=>s+(+getIns(c).clicks||0),0);
+    const totalImpr = cs.reduce((s,c)=>s+(+getIns(c).impressions||0),0);
+    return { name: acc.name, ctr: totalImpr>0?totalClicks/totalImpr*100:0 };
+  }).filter(Boolean).sort((a,b)=>b.ctr-a.ctr);
+  if(acctCtr.length) {
+    aiCharts.acctCtr = new Chart(document.getElementById('chartAcctCtr'), {
+      type:'bar', data:{labels:acctCtr.map(a=>shortName(a.name)),datasets:[{data:acctCtr.map(a=>+a.ctr.toFixed(2)),backgroundColor:'#1565C0',borderRadius:4,borderSkipped:false}]},
+      options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{color:'#F5F5F5'},ticks:{callback:v=>v+'%'}},y:{grid:{display:false},ticks:{font:{size:10}}}},responsive:true}
+    });
+  } else document.getElementById('chartAcctCtr').parentElement.innerHTML += '<div style="text-align:center;color:var(--gray-300);font-size:13px;padding:40px 0">無數據</div>';
+
+  // Chart 10: CPC distribution
+  const cpcBuckets = {'$0-5':0,'$5-10':0,'$10-20':0,'$20-50':0,'>$50':0};
+  allCamps.forEach(c => {
+    const cpc = +getIns(c).cpc||0; if(!cpc) return;
+    if(cpc<5) cpcBuckets['$0-5']++; else if(cpc<10) cpcBuckets['$5-10']++; else if(cpc<20) cpcBuckets['$10-20']++; else if(cpc<50) cpcBuckets['$20-50']++; else cpcBuckets['>$50']++;
+  });
+  aiCharts.cpcDist = new Chart(document.getElementById('chartCpcDist'), {
+    type:'bar', data:{labels:Object.keys(cpcBuckets),datasets:[{data:Object.values(cpcBuckets),backgroundColor:['#1B5E20','#2E7D32',O,'#FF9A62','#FF6B2C'],borderRadius:6,borderSkipped:false}]},
+    options:{plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{color:'#F5F5F5'},ticks:{precision:0}}},responsive:true}
+  });
+
+  // Chart 11: Spend per campaign distribution
+  const spendBuckets = {'$0-1K':0,'$1K-5K':0,'$5K-10K':0,'$10K-50K':0,'>$50K':0};
+  allCamps.forEach(c => {
+    const sp = +getIns(c).spend||0; if(!sp) return;
+    if(sp<1000) spendBuckets['$0-1K']++; else if(sp<5000) spendBuckets['$1K-5K']++; else if(sp<10000) spendBuckets['$5K-10K']++; else if(sp<50000) spendBuckets['$10K-50K']++; else spendBuckets['>$50K']++;
+  });
+  aiCharts.spendDist = new Chart(document.getElementById('chartSpendDist'), {
+    type:'bar', data:{labels:Object.keys(spendBuckets),datasets:[{data:Object.values(spendBuckets),backgroundColor:['#E0E0E0','#FFB899','#FF9A62',O,'#CC4400'],borderRadius:6,borderSkipped:false}]},
+    options:{plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{color:'#F5F5F5'},ticks:{precision:0}}},responsive:true}
+  });
+
+  // Chart 12: Campaigns with/without msg data (doughnut)
+  const withMsg = allCamps.filter(c=>getMsgCount(c)>0&&+getIns(c).spend>0).length;
+  const withoutMsg = allCamps.filter(c=>+getIns(c).spend>0).length - withMsg;
+  aiCharts.msgRatio = new Chart(document.getElementById('chartMsgRatio'), {
+    type:'doughnut', data:{labels:['有私訊數據','無私訊數據'],datasets:[{data:[withMsg,withoutMsg],backgroundColor:['#2E7D32','#E0E0E0'],borderWidth:0}]},
+    options:{plugins:{legend:{position:'bottom',labels:{font:{size:12}}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw} 個`}}},responsive:true,cutout:'60%'}
+  });
+
+  // Chart 13: Msg share by account (doughnut, top 8)
+  const msgByAcct = visible.map(acc=>({name:acc.name.replace(/（.*）/,'').replace(/ - 月結/,''), msg:(aiCampData[acc.id]||[]).reduce((s,c)=>s+getMsgCount(c),0)})).filter(a=>a.msg>0).sort((a,b)=>b.msg-a.msg).slice(0,8);
+  if(msgByAcct.length) {
+    const palette = ['#1B5E20','#2E7D32','#388E3C','#43A047',O,'#FF9A62','#FF6B2C','#CC4400'];
+    aiCharts.msgShare = new Chart(document.getElementById('chartMsgShare'), {
+      type:'doughnut', data:{labels:msgByAcct.map(a=>a.name),datasets:[{data:msgByAcct.map(a=>a.msg),backgroundColor:palette.slice(0,msgByAcct.length),borderWidth:0}]},
+      options:{plugins:{legend:{position:'right',labels:{font:{size:10},boxWidth:12}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${fN(ctx.raw)} 則`}}},responsive:true,cutout:'55%'}
+    });
+  } else document.getElementById('chartMsgShare').parentElement.innerHTML += '<div style="text-align:center;color:var(--gray-300);font-size:13px;padding:40px 0">無私訊數據</div>';
+
+  // Chart 14: Top 10 by msg per $1K spend (ROI efficiency)
+  const msgRoi = [...campsWithMsg].map(c=>({c,ratio:getMsgCount(c)/(+getIns(c).spend/1000)})).sort((a,b)=>b.ratio-a.ratio).slice(0,10);
+  if(msgRoi.length) {
+    aiCharts.msgRoi = new Chart(document.getElementById('chartMsgRoi'), {
+      type:'bar', data:{labels:msgRoi.map(r=>shortName(r.c.name)),datasets:[{data:msgRoi.map(r=>+r.ratio.toFixed(1)),backgroundColor:'#1B5E20',borderRadius:4,borderSkipped:false}]},
+      options:{indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.raw} 則/千元`}}},scales:{x:{grid:{color:'#F5F5F5'},ticks:{callback:v=>v+' 則'}},y:{grid:{display:false},ticks:{font:{size:10}}}},responsive:true}
+    });
+  } else document.getElementById('chartMsgRoi').parentElement.innerHTML += '<div style="text-align:center;color:var(--gray-300);font-size:13px;padding:40px 0">無私訊數據</div>';
 
 }
 
