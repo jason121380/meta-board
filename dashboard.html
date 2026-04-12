@@ -117,49 +117,47 @@ nav { padding: 8px 8px; flex: 1; }
 
 /* ── Stats ─────────────────────────────────────────────────── */
 .stats-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap: 1px;
-  background: var(--border); border: 1px solid var(--border); border-radius: var(--radius);
-  overflow: hidden; margin: 20px 24px 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); gap: 1px;
+  background: var(--border); border-bottom: 1px solid var(--border);
+  overflow: hidden;
 }
 .stat { background: var(--white); padding: 14px 16px; }
 .stat-label { font-size: 11px; font-weight: 600; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.5px; }
 .stat-value { font-size: 20px; font-weight: 700; color: var(--black); margin-top: 3px; letter-spacing: -0.3px; font-variant-numeric: tabular-nums; }
 .stat-sub { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
 
-/* ── Account Selector ──────────────────────────────────────── */
-.account-bar {
-  margin: 14px 24px 0; padding: 10px 14px; background: var(--warm-white);
-  border: 1px solid var(--border); border-radius: var(--radius);
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+/* ── Dashboard Two-Column ──────────────────────────────────── */
+.dash-body { display: flex; height: calc(100vh - 52px); overflow: hidden; }
+.dash-accounts-panel {
+  width: 240px; flex-shrink: 0; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; background: var(--warm-white);
 }
-.account-bar-label { font-size: 12px; font-weight: 600; color: var(--gray-500); white-space: nowrap; }
-.account-tags { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-height: 28px; align-items: center; }
-.account-tag {
-  display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 9999px;
-  background: var(--blue-bg); color: var(--blue); font-size: 12px; font-weight: 600; border: 1px solid rgba(0,117,222,0.2);
+.dash-accounts-header {
+  padding: 10px 12px 8px; border-bottom: 1px solid var(--border); background: var(--white);
 }
-.account-tag .remove { cursor: pointer; color: var(--gray-300); font-size: 14px; line-height: 1; }
-.account-tag .remove:hover { color: var(--red); }
-.account-add-btn { font-size: 12px; color: var(--blue); cursor: pointer; font-weight: 500; white-space: nowrap; }
-.account-add-btn:hover { text-decoration: underline; }
+.dash-accounts-header h4 { font-size: 11px; font-weight: 700; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+.dash-acct-search { width: 100%; height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; background: var(--white); }
+.dash-acct-search:focus { outline: none; border-color: var(--blue); }
+.dash-acct-sel-info { font-size: 11px; color: var(--gray-300); margin-top: 5px; }
+.dash-acct-list { flex: 1; overflow-y: auto; }
+.dash-acct-item {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  border-bottom: 1px solid var(--border); cursor: pointer; user-select: none;
+}
+.dash-acct-item:hover { background: rgba(0,0,0,0.02); }
+.dash-acct-item.active { background: var(--blue-bg); }
+.dash-acct-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dash-acct-dot.on { background: var(--green); }
+.dash-acct-dot.off { background: var(--gray-300); }
+.dash-acct-name { flex: 1; font-size: 12px; font-weight: 500; color: var(--black); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-acct-item.active .dash-acct-name { color: var(--blue); font-weight: 600; }
+.dash-acct-check { width: 14px; height: 14px; accent-color: var(--blue); flex-shrink: 0; }
+.dash-content { flex: 1; overflow-y: auto; }
 
-/* ── Account Picker Dropdown ───────────────────────────────── */
-.acct-dropdown {
-  display: none; position: fixed; background: var(--white); border: 1px solid var(--border);
-  border-radius: var(--radius); box-shadow: var(--shadow-md); width: 280px; max-height: 320px;
-  overflow-y: auto; z-index: 999; padding: 6px;
-}
-.acct-dropdown.open { display: block; }
-.acct-search { width: 100%; height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; margin-bottom: 6px; }
-.acct-search:focus { outline: none; border-color: var(--blue); }
-.acct-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; }
-.acct-item:hover { background: var(--warm-white); }
-.acct-item input[type=checkbox] { accent-color: var(--blue); width: 14px; height: 14px; flex-shrink: 0; }
-.acct-item-name { flex: 1; font-size: 12px; }
-.acct-status-1 { } .acct-status-2 { color: var(--gray-300); text-decoration: line-through; }
+.acct-status-2 { color: var(--gray-300); }
 
 /* ── Tree Table ────────────────────────────────────────────── */
-.tree-wrap { margin: 14px 24px 24px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.tree-wrap { border-top: none; border-left: none; border-right: none; border-bottom: none; overflow: hidden; flex: 1; }
 .tree-toolbar { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; background: var(--warm-white); }
 .tree-search { flex: 1; max-width: 260px; height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; background: var(--white); }
 .tree-search:focus { outline: none; border-color: var(--blue); }
@@ -426,6 +424,7 @@ input:checked + .slider:before { transform: translateX(14px); }
      VIEW: Dashboard
 ═══════════════════════════════════════════════════════════ -->
 <div class="view active" id="view-dashboard">
+  <!-- Topbar -->
   <div class="topbar">
     <div class="page-title">儀表板</div>
     <div class="topbar-spacer"></div>
@@ -462,41 +461,50 @@ input:checked + .slider:before { transform: translateX(14px); }
     </div>
   </div>
 
-  <!-- Stats -->
-  <div class="stats-grid" id="statsGrid">
-    <div class="stat"><div class="stat-label">花費</div><div class="stat-value" id="st-spend">—</div></div>
-    <div class="stat"><div class="stat-label">曝光</div><div class="stat-value" id="st-imp">—</div></div>
-    <div class="stat"><div class="stat-label">觸及</div><div class="stat-value" id="st-reach">—</div></div>
-    <div class="stat"><div class="stat-label">點擊</div><div class="stat-value" id="st-clicks">—</div></div>
-    <div class="stat"><div class="stat-label">CTR</div><div class="stat-value" id="st-ctr">—</div></div>
-    <div class="stat"><div class="stat-label">CPC</div><div class="stat-value" id="st-cpc">—</div></div>
-    <div class="stat"><div class="stat-label">CPM</div><div class="stat-value" id="st-cpm">—</div></div>
-    <div class="stat"><div class="stat-label">頻率</div><div class="stat-value" id="st-freq">—</div></div>
-    <div class="stat"><div class="stat-label">購買數</div><div class="stat-value" id="st-purchase">—</div></div>
-    <div class="stat"><div class="stat-label">名單數</div><div class="stat-value" id="st-lead">—</div></div>
-  </div>
-
-  <!-- Account Bar -->
-  <div class="account-bar">
-    <span class="account-bar-label">廣告帳戶</span>
-    <div class="account-tags" id="accountTags">
-      <span style="color:var(--gray-300);font-size:12px">尚未選擇帳戶</span>
-    </div>
-    <span class="account-add-btn" id="addAccountBtn" onclick="toggleAcctDropdown(event)">+ 新增帳戶</span>
-  </div>
-
-  <!-- Tree Table -->
-  <div class="tree-wrap">
-    <div class="tree-toolbar">
-      <input class="tree-search" id="treeSearch" placeholder="🔍 搜尋行銷活動..." oninput="renderTree()">
-      <span class="tree-count" id="treeCount"></span>
-      <div class="tree-actions">
-        <button class="btn btn-ghost btn-sm" onclick="expandAll()">展開全部</button>
-        <button class="btn btn-ghost btn-sm" onclick="collapseAll()">收合全部</button>
+  <!-- Two-column body -->
+  <div class="dash-body">
+    <!-- Left: Account Panel -->
+    <div class="dash-accounts-panel">
+      <div class="dash-accounts-header">
+        <h4>廣告帳戶</h4>
+        <input class="dash-acct-search" id="dashAcctSearch" placeholder="搜尋帳戶..." oninput="renderDashAcctList()">
+        <div class="dash-acct-sel-info" id="dashAcctSelInfo">尚未選擇帳戶</div>
+      </div>
+      <div class="dash-acct-list" id="dashAcctList">
+        <div class="loading"><div class="spinner"></div></div>
       </div>
     </div>
-    <div id="treeContainer">
-      <div class="empty-state"><div class="empty-icon">📢</div>請新增廣告帳戶</div>
+
+    <!-- Right: Dashboard Content -->
+    <div class="dash-content">
+      <!-- Stats -->
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat"><div class="stat-label">花費</div><div class="stat-value" id="st-spend">—</div></div>
+        <div class="stat"><div class="stat-label">曝光</div><div class="stat-value" id="st-imp">—</div></div>
+        <div class="stat"><div class="stat-label">觸及</div><div class="stat-value" id="st-reach">—</div></div>
+        <div class="stat"><div class="stat-label">點擊</div><div class="stat-value" id="st-clicks">—</div></div>
+        <div class="stat"><div class="stat-label">CTR</div><div class="stat-value" id="st-ctr">—</div></div>
+        <div class="stat"><div class="stat-label">CPC</div><div class="stat-value" id="st-cpc">—</div></div>
+        <div class="stat"><div class="stat-label">CPM</div><div class="stat-value" id="st-cpm">—</div></div>
+        <div class="stat"><div class="stat-label">頻率</div><div class="stat-value" id="st-freq">—</div></div>
+        <div class="stat"><div class="stat-label">購買數</div><div class="stat-value" id="st-purchase">—</div></div>
+        <div class="stat"><div class="stat-label">名單數</div><div class="stat-value" id="st-lead">—</div></div>
+      </div>
+
+      <!-- Tree Table -->
+      <div class="tree-wrap">
+        <div class="tree-toolbar">
+          <input class="tree-search" id="treeSearch" placeholder="🔍 搜尋行銷活動..." oninput="renderTree()">
+          <span class="tree-count" id="treeCount"></span>
+          <div class="tree-actions">
+            <button class="btn btn-ghost btn-sm" onclick="expandAll()">展開全部</button>
+            <button class="btn btn-ghost btn-sm" onclick="collapseAll()">收合全部</button>
+          </div>
+        </div>
+        <div id="treeContainer">
+          <div class="empty-state"><div class="empty-icon">👈</div>從左側選擇廣告帳戶</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -771,13 +779,13 @@ async function init() {
 async function loadAllAccounts() {
   const res = await fetch(`${API}/api/accounts`).then(r=>r.json());
   allAccounts = res.data || [];
-  renderAccountDropdown();
+  renderDashAcctList();
   renderSettingsAccountList();
   renderLaunchAccountSelect();
   // Restore saved selection
   if(savedSelectedIds.length) {
     selectedAccounts = allAccounts.filter(a => savedSelectedIds.includes(a.id));
-    renderAccountTags();
+    renderDashAcctList();
     await loadDashboard();
   }
 }
@@ -802,38 +810,25 @@ function applyCustomDate() {
   refreshDashboard();
 }
 
-// ── Account Picker ──────────────────────────────────────────
-function renderAccountDropdown() {
-  const list = document.getElementById('acctList');
-  list.innerHTML = allAccounts.map(a => {
-    const checked = selectedAccounts.some(s=>s.id===a.id);
-    const cls = a.account_status===1?'':'acct-status-2';
-    const statusTip = ACCT_STATUS[a.account_status]||`狀態${a.account_status}`;
-    return `<div class="acct-item" onclick="toggleAccount('${a.id}')">
-      <input type="checkbox" ${checked?'checked':''} id="acct-chk-${a.id}" onchange="toggleAccount('${a.id}')">
-      <div class="acct-item-name ${cls}">${a.name}</div>
+// ── Dashboard Account Panel ─────────────────────────────────
+function renderDashAcctList() {
+  const el = document.getElementById('dashAcctList');
+  if(!allAccounts.length) { el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--gray-300)">無廣告帳戶</div>'; return; }
+  const q = (document.getElementById('dashAcctSearch')?.value||'').toLowerCase();
+  const list = allAccounts.filter(a => !q || a.name.toLowerCase().includes(q) || a.id.includes(q));
+  el.innerHTML = list.map(a => {
+    const isActive = selectedAccounts.some(s=>s.id===a.id);
+    const dotClass = a.account_status===1?'on':'off';
+    return `<div class="dash-acct-item${isActive?' active':''}" onclick="toggleAccount('${a.id}')">
+      <div class="dash-acct-dot ${dotClass}"></div>
+      <span class="dash-acct-name" title="${a.name}">${a.name}</span>
+      ${isActive?'<span style="font-size:10px;color:var(--blue)">✓</span>':''}
     </div>`;
   }).join('');
+  const info = document.getElementById('dashAcctSelInfo');
+  if(info) info.textContent = selectedAccounts.length ? `已選 ${selectedAccounts.length} 個帳戶` : '點選帳戶加入儀表板';
 }
-function filterAcctList() {
-  const q = document.getElementById('acctSearch').value.toLowerCase();
-  document.querySelectorAll('.acct-item').forEach(el => {
-    el.style.display = el.querySelector('.acct-item-name').textContent.toLowerCase().includes(q) ? '' : 'none';
-  });
-}
-function toggleAcctDropdown(e) {
-  e.stopPropagation();
-  const d = document.getElementById('acctDropdown');
-  const btn = document.getElementById('addAccountBtn');
-  const rect = btn.getBoundingClientRect();
-  d.style.top = (rect.bottom + 6) + 'px';
-  d.style.left = rect.left + 'px';
-  d.classList.toggle('open');
-}
-document.addEventListener('click', e => {
-  if(!e.target.closest('#acctDropdown') && !e.target.closest('#addAccountBtn'))
-    document.getElementById('acctDropdown').classList.remove('open');
-});
+
 async function toggleAccount(id) {
   const acc = allAccounts.find(a=>a.id===id);
   if(!acc) return;
@@ -844,20 +839,9 @@ async function toggleAccount(id) {
   } else {
     selectedAccounts.push(acc);
   }
-  renderAccountDropdown();
-  renderAccountTags();
+  renderDashAcctList();
   saveSelectedIds();
   await loadDashboard();
-}
-function renderAccountTags() {
-  const el = document.getElementById('accountTags');
-  if(!selectedAccounts.length) {
-    el.innerHTML = '<span style="color:var(--gray-300);font-size:12px">尚未選擇帳戶</span>';
-    return;
-  }
-  el.innerHTML = selectedAccounts.map(a =>
-    `<span class="account-tag">${a.name}<span class="remove" onclick="toggleAccount('${a.id}')">×</span></span>`
-  ).join('');
 }
 function saveSelectedIds() {
   savedSelectedIds = selectedAccounts.map(a=>a.id);
@@ -1310,8 +1294,7 @@ function saveSettings() {
   localStorage.setItem('fb_selected_accounts', JSON.stringify(savedSelectedIds));
   selectedAccounts = allAccounts.filter(a=>checked.includes(a.id));
   campData={}; adsetData={}; adData={};
-  renderAccountTags();
-  renderAccountDropdown();
+  renderDashAcctList();
   loadDashboard();
   showView('dashboard');
 }
