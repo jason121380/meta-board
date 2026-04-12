@@ -44,7 +44,7 @@ body {
 a { color: var(--orange); text-decoration: none; }
 
 /* ── Layout ────────────────────────────────────────────────── */
-.layout { display: flex; min-height: 100vh; }
+.layout { display: flex; height: 100vh; overflow: hidden; }
 .sidebar {
   width: var(--sidebar-w); background: var(--white); border-right: 1px solid var(--border);
   display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh;
@@ -1951,7 +1951,7 @@ function renderFinanceAcctList(accounts) {
   const allBtn = `<div class="finance-acct-item ${finSelectedAcctIds.length===0?'active':''}" onclick="finSelectAcct('__all__')">
     <div style="flex:1;min-width:0">
       <div class="finance-acct-name">全部帳戶</div>
-      ${totalSpend>0?`<div style="font-size:11px;color:var(--gray-500);margin-top:2px">$${fM(totalSpend)} → <span style="color:var(--orange)">$${fM(totalPlus)}</span></div>`:''}
+      ${totalSpend>0?`<div style="font-size:11px;color:var(--gray-500);margin-top:2px">$${fM(totalSpend)} → <span style="color:var(--orange)">$${fM(Math.ceil(totalPlus))}</span></div>`:''}
     </div>
   </div>`;
   const items = accounts.map(acc => {
@@ -1960,7 +1960,7 @@ function renderFinanceAcctList(accounts) {
     return `<div class="finance-acct-item ${finSelectedAcctIds.includes(acc.id)?'active':''}" onclick="finSelectAcct('${acc.id}')">
       <div style="flex:1;min-width:0">
         <div class="finance-acct-name" title="${acc.name}">${acc.name}</div>
-        ${spend>0?`<div style="font-size:11px;color:var(--gray-500);margin-top:2px">$${fM(spend)} → <span style="color:var(--orange)">$${fM(plus)}</span></div>`:'<div style="font-size:11px;color:var(--gray-300);margin-top:2px">載入中...</div>'}
+        ${spend>0?`<div style="font-size:11px;color:var(--gray-500);margin-top:2px">$${fM(spend)} → <span style="color:var(--orange)">$${fM(Math.ceil(plus))}</span></div>`:'<div style="font-size:11px;color:var(--gray-300);margin-top:2px">載入中...</div>'}
       </div>
     </div>`;
   }).join('');
@@ -2036,7 +2036,7 @@ function renderFinanceTable() {
       <td style="color:var(--gray-500)">${end}</td>
       <td class="num">$${fM(spend)}</td>
       <td class="num"><input class="fin-markup-input" type="number" value="${rowMarkup}" min="0" max="999" step="0.5" data-camp-id="${c.id}" oninput="onRowMarkupChange(this)" style="width:52px;height:26px;border:1.5px solid var(--border);border-radius:4px;text-align:center;font-size:12px;font-family:inherit;padding:0 4px">%</td>
-      <td class="num fin-plus-cell" style="color:var(--orange);font-weight:600">$${fM(plus)}</td>
+      <td class="num fin-plus-cell" style="color:var(--orange);font-weight:600">$${fM(Math.ceil(plus))}</td>
       <td class="num">${fN(clicks)}</td>
       <td class="num">${cpc>0?'$'+fM(cpc):'—'}</td>
       <td class="num">${msgs>0?fN(msgs):'—'}</td>
@@ -2059,7 +2059,7 @@ function renderFinanceTable() {
   // Summary
   document.getElementById('fin-acct-count').textContent = filtered.length;
   document.getElementById('fin-total-spend').textContent = '$' + fM(totalSpend);
-  document.getElementById('fin-total-markup').textContent = '$' + fM(totalPlus - totalSpend);
+  document.getElementById('fin-total-markup').textContent = '$' + fM(Math.ceil(totalPlus - totalSpend));
   document.getElementById('fin-total-plus').textContent = '$' + fM(totalPlus);
 }
 
@@ -2071,7 +2071,7 @@ function onRowMarkupChange(inp) {
   const spendCell = row.cells[5].textContent.replace(/[$,]/g,'');
   const spend = parseFloat(spendCell) || 0;
   const plus = spend * (1 + finRowMarkups[id]/100);
-  row.querySelector('.fin-plus-cell').textContent = '$' + fM(plus);
+  row.querySelector('.fin-plus-cell').textContent = '$' + fM(Math.ceil(plus));
   // Update summary totals
   let totalSpend = 0, totalPlus = 0;
   financeRows.forEach(c => {
@@ -2080,7 +2080,7 @@ function onRowMarkupChange(inp) {
     totalSpend += s; totalPlus += s*(1+m/100);
   });
   document.getElementById('fin-total-spend').textContent = '$' + fM(totalSpend);
-  document.getElementById('fin-total-markup').textContent = '$' + fM(totalPlus - totalSpend);
+  document.getElementById('fin-total-markup').textContent = '$' + fM(Math.ceil(totalPlus - totalSpend));
   document.getElementById('fin-total-plus').textContent = '$' + fM(totalPlus);
   document.getElementById('fin-kpi-spend').textContent = '$' + fM(totalSpend);
   document.getElementById('fin-kpi-plus').textContent = '$' + fM(totalPlus);
@@ -2096,7 +2096,7 @@ function downloadFinanceCsv() {
     const spend = +ins.spend||0, clicks = +ins.clicks||0, cpc = +ins.cpc||0;
     const msgs = MSG_TYPES.reduce((s,t)=>{ const a=(ins.actions||[]).find(x=>x.action_type===t); return s+(a?+a.value:0); },0);
     const rowMarkup = finRowMarkups[c.id] !== undefined ? finRowMarkups[c.id] : defaultMarkup;
-    rows.push([i+1, c.name, c._accountName, start, end, spend.toFixed(0), rowMarkup+'%', (spend*(1+rowMarkup/100)).toFixed(0), clicks, cpc.toFixed(0), msgs||'', msgs>0?(spend/msgs).toFixed(0):'']);
+    rows.push([i+1, c.name, c._accountName, start, end, spend.toFixed(0), rowMarkup+'%', Math.ceil(spend*(1+rowMarkup/100)), clicks, cpc.toFixed(0), msgs||'', msgs>0?(spend/msgs).toFixed(0):'']);
   });
   const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
