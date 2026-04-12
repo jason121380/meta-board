@@ -503,7 +503,7 @@ input:checked + .slider:before { transform: translateX(14px); }
     </div>
     <div class="topbar-sep"></div>
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--gray-500);white-space:nowrap">
-      <input type="checkbox" id="filterActiveOnly" onchange="saveFilterPref()" style="accent-color:var(--orange);width:14px;height:14px"> 只顯示進行中
+      <input type="checkbox" class="custom-cb" id="filterActiveOnly" onchange="saveFilterPref()"> 只顯示進行中
     </label>
     <div class="topbar-sep"></div>
     <button class="btn btn-ghost btn-sm" onclick="refreshDashboard()">↻ 重新整理</button>
@@ -898,7 +898,7 @@ const fF = n => n==null||n==='' ? '—' : Number(n).toFixed(2);
 const getIns = item => item.insights?.data?.[0] || {};
 const getAct = (item,type) => getIns(item).actions?.find(a=>a.action_type===type)?.value||null;
 const statusBadge = s => {
-  if(s==='ACTIVE') return '<span class="badge badge-active">執行中</span>';
+  if(s==='ACTIVE') return '<span class="badge badge-active">進行中</span>';
   if(s==='PAUSED') return '<span class="badge badge-paused">已暫停</span>';
   return `<span class="badge badge-other">${s}</span>`;
 };
@@ -1674,7 +1674,7 @@ async function loadAiAnalysis() {
 
   const aiPresetLabel = document.getElementById('aiDatePreset')?.options[document.getElementById('aiDatePreset')?.selectedIndex]?.text || '';
   document.getElementById('kpi-spend').innerHTML = `<div class="ai-kpi-label">總花費</div><div class="ai-kpi-value">$${fM(totalSpend)}</div><div class="ai-kpi-sub">${visible.length} 個帳戶・${aiPresetLabel}</div>`;
-  document.getElementById('kpi-active').innerHTML = `<div class="ai-kpi-label">執行中活動</div><div class="ai-kpi-value">${active.length}</div><div class="ai-kpi-sub">共 ${allCamps.length} 個</div>`;
+  document.getElementById('kpi-active').innerHTML = `<div class="ai-kpi-label">進行中活動</div><div class="ai-kpi-value">${active.length}</div><div class="ai-kpi-sub">共 ${allCamps.length} 個</div>`;
   document.getElementById('kpi-ctr').innerHTML = `<div class="ai-kpi-label">平均 CTR</div><div class="ai-kpi-value">${avgCtr.toFixed(2)}%</div><div class="ai-kpi-sub">有數據活動 ${ctrVals.length} 個</div>`;
   document.getElementById('kpi-cpc').innerHTML = `<div class="ai-kpi-label">平均 CPC</div><div class="ai-kpi-value">$${fM(avgCpc)}</div><div class="ai-kpi-sub">TWD</div>`;
   document.getElementById('kpi-msg').innerHTML = `<div class="ai-kpi-label">總私訊數</div><div class="ai-kpi-value">${fM(totalMsg)}</div><div class="ai-kpi-sub">私訊對話</div>`;
@@ -1785,7 +1785,7 @@ async function loadAiAnalysis() {
   // ── 警示：效率偏低 ─────────────────────────────────────────────
   // W1: Active + zero impressions (no spend)
   allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).impressions===0&&+getIns(c).spend===0)
-    .forEach(c=>issues.warning.push({ label: '執行中但無曝光也無花費，可能審核中或出價太低', camp: c, tag:'無曝光' }));
+    .forEach(c=>issues.warning.push({ label: '進行中但無曝光也無花費，可能審核中或出價太低', camp: c, tag:'無曝光' }));
 
   // W2: Low CTR with moderate spend
   allCamps.filter(c=>c.status==='ACTIVE'&&+getIns(c).ctr>0&&+getIns(c).ctr<0.5&&+getIns(c).spend>=500&&+getIns(c).spend<=5000)
@@ -2173,6 +2173,8 @@ function showView(name) {
 function saveFilterPref() {
   filterActiveOnly = document.getElementById('filterActiveOnly').checked;
   localStorage.setItem('filter_active_only', filterActiveOnly);
+  campData = {}; adsetData = {}; adData = {}; // clear cache so re-fetch respects filter
+  refreshDashboard();
 }
 
 // ── Start ────────────────────────────────────────────────────
@@ -2238,7 +2240,7 @@ function getAdContext() {
     totalSpend += spend;
     if(spend > 0) lines.push(`  - ${acc.name}：花費 $${fM(spend)}`);
   });
-  lines.unshift(`總花費：$${fM(totalSpend)}，執行中活動 ${activeCamps}/${totalCamps} 個`);
+  lines.unshift(`總花費：$${fM(totalSpend)}，進行中活動 ${activeCamps}/${totalCamps} 個`);
   return lines.join('\n');
 }
 
