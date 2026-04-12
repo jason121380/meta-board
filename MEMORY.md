@@ -1,36 +1,58 @@
-# Project Memory — Meta Board
+# Project Memory — LURE Meta Platform
+
+## Branding
+
+- Product name: **LURE META PLATFORM**
+- GitHub repo: https://github.com/jason121380/meta-board
+- Design: Orange (#FF6B2C) system, matches Google-My-Business repo style
+- Font: Noto Sans TC
 
 ## FB App
 
 - App ID: `2780372365654462`
 - API Version: `v21.0`
 - Token type: Long-lived user token (60 days), stored in `.env`
+- Required scopes: `ads_read`, `ads_management`, `business_management`
+- Note: `business` field on ad accounts requires `business_management` scope in the token. The `.env` token may lack this — user needs to re-login via FB Login to get updated token with that scope.
 
 ## Ad Accounts
 
-- Jason has 80+ ad accounts
+- Jason has 80+ ad accounts across multiple Business Managers
 - All loaded via paginated `/me/adaccounts` endpoint
-- Selected accounts persisted to `localStorage`
+- Settings page: check accounts to show in dashboard left panel
+- Dashboard left panel: click account to toggle into active view
+- Two separate localStorage keys:
+  - `fb_selected_accounts` = accounts enabled in settings
+  - `fb_active_accounts` = accounts currently selected in dashboard
 
-## Design Decisions
+## Architecture
 
-- Notion white design system: `#f6f5f4` warm-white, `rgba(0,0,0,0.09)` borders, `#0075de` blue
-- Tree table default: collapsed (only campaigns visible)
-- Adsets/ads lazy-loaded on first expand
-- Multi-account stats: parallel fetch → sum spend/impressions/clicks, average CTR/CPC/CPM
+- **Backend**: FastAPI (Python 3.9), port 8001
+- **Frontend**: Single HTML file (`dashboard.html`), no build step
+- **Auth**: FB JS SDK (browser) → `POST /api/auth/token` → `_runtime_token` in memory
+- **No database**: all data live from FB API
+
+## Layout
+
+- Left sidebar: nav (220px)
+- Dashboard view: two-column (account list 240px | stats + tree)
+- Settings view: two-column master-detail (account list | detail panel)
+- Topbar: 60px fixed, date picker + user avatar dropdown
 
 ## Server
 
 - Port: `8001`
-- Python 3.9 compatible (use `Optional[str]` not `str | None`)
+- Python 3.9 — use `Optional[str]` not `str | None`
 
 ## GitHub
 
 - Repo: https://github.com/jason121380/meta-board
 - Branch: `main`
-- `.env` excluded from git
+- `.env` excluded from git (`.gitignore`)
 
 ## Known Issues / Notes
 
-- Python 3.9 on this machine — avoid union type syntax `X | Y`, use `Optional[X]`
-- FB JS SDK App ID is hardcoded in `dashboard.html` (line ~20)
+- `business` field on ad accounts: needs `business_management` in token scope
+- Personal ad accounts (not in any Business Manager) will never return a business field
+- FB JS SDK App ID hardcoded in `dashboard.html` (`appId: '2780372365654462'`)
+- Python 3.9 on this machine — avoid `X | Y` type syntax
