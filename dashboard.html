@@ -81,7 +81,7 @@ nav { padding: 10px 10px; flex: 1; }
 
 /* ── Top Bar ───────────────────────────────────────────────── */
 .topbar {
-  height: 60px; padding: 0 24px; border-bottom: 1px solid var(--border);
+  min-height: 60px; padding: 0 24px; border-bottom: 1px solid var(--border);
   display: flex; align-items: center; gap: 12px; flex-shrink: 0;
   background: var(--white); z-index: 50; box-shadow: 0 1px 0 var(--border);
 }
@@ -458,10 +458,14 @@ input:checked + .slider:before { transform: translateX(14px); }
   .finance-kpi-label { font-size: 8px; }
 }
 
-/* Safe area for notched devices */
+/* Safe area for notched devices (iPhone Dynamic Island / Home Bar) */
 @supports (padding: env(safe-area-inset-top)) {
   .sidebar { padding-top: env(safe-area-inset-top); }
-  .topbar { padding-top: env(safe-area-inset-top); }
+  .topbar {
+    padding-top: env(safe-area-inset-top);
+    min-height: calc(60px + env(safe-area-inset-top));
+  }
+  .main { padding-bottom: env(safe-area-inset-bottom); }
   #loginPage { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 }
 .hamburger { display: none; background: none; border: none; color: var(--black); font-size: 20px; cursor: pointer; padding: 4px 6px; flex-shrink: 0; line-height: 1; }
