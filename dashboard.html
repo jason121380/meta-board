@@ -776,7 +776,7 @@ input:checked + .slider:before { transform: translateX(14px); }
     <div class="topbar-spacer"></div>
     <div id="dpAi"></div>
     <div class="topbar-sep"></div>
-    <button class="btn btn-blue btn-sm" onclick="_cacheClear('ai');aiCampData={};loadAiAnalysis()">重新分析</button>
+    <button class="btn btn-blue btn-sm" onclick="_cacheClear('ai');_cacheClear('ai_ins');aiCampData={};aiInsightData={};loadAiAnalysis()">重新分析</button>
   </div>
   <div style="padding:20px 24px;overflow-y:auto;flex:1">
 
@@ -1073,6 +1073,7 @@ let budgetTarget = null;
 let dateConfig = { preset: 'this_month', from: null, to: null };
 let aiDateConfig = { preset: 'this_month', from: null, to: null };
 let aiCampData = {}; // separate cache for AI view (keyed by accountId)
+let aiInsightData = {}; // account-level insights for AI view (accurate spend)
 let finDateConfig = { preset: 'this_month', from: null, to: null };
 let finCampData = {}; // separate cache for finance view
 let finInsightData = {}; // account-level insights (accurate total spend)
@@ -1424,7 +1425,7 @@ async function init() {
   dpAi = new DatePicker('dpAi', {
     varName: 'dpAi',
     defaultPreset: 'this_month',
-    onApply: function(cfg) { aiDateConfig = cfg; aiCampData = {}; loadAiAnalysis(); }
+    onApply: function(cfg) { aiDateConfig = cfg; aiCampData = {}; aiInsightData = {}; loadAiAnalysis(); }
   });
   dpAlert = new DatePicker('dpAlert', {
     varName: 'dpAlert',
@@ -2166,18 +2167,32 @@ async function loadAiAnalysis() {
   show('aiEmpty', 'none'); show('aiLoading', 'flex');
   show('aiInsightRow', 'none'); show('aiChartGrid', 'none');
 
-  // Load campaign data for any visible account not yet cached (separate aiCampData cache)
+  // Load campaign data + account insights in parallel
   const dp = getAiDateParams();
   await Promise.all(visible.map(async acc => {
-    if(aiCampData[acc.id]?.length) return;
-    const cached = _cacheGet('ai', acc.id, dp);
-    if(cached) { aiCampData[acc.id] = cached; return; }
-    try {
-      const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
-      const camps = res.data || [];
-      aiCampData[acc.id] = camps.map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
-      _cacheSet('ai', acc.id, dp, aiCampData[acc.id]);
-    } catch(e) { /* retry next time */ }
+    const tasks = [];
+    if(!aiInsightData[acc.id]) {
+      const ci = _cacheGet('ai_ins', acc.id, dp);
+      if(ci) { aiInsightData[acc.id] = ci; }
+      else tasks.push(
+        fetch(`${API}/api/accounts/${acc.id}/insights?${dp}`).then(r=>r.json()).then(res => {
+          aiInsightData[acc.id] = res.data?.[0] || {};
+          _cacheSet('ai_ins', acc.id, dp, aiInsightData[acc.id]);
+        }).catch(() => { aiInsightData[acc.id] = {}; })
+      );
+    }
+    if(!aiCampData[acc.id]?.length) {
+      const cached = _cacheGet('ai', acc.id, dp);
+      if(cached) { aiCampData[acc.id] = cached; }
+      else tasks.push(
+        fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json()).then(res => {
+          const camps = res.data || [];
+          aiCampData[acc.id] = camps.map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+          _cacheSet('ai', acc.id, dp, aiCampData[acc.id]);
+        }).catch(() => {})
+      );
+    }
+    if(tasks.length) await Promise.all(tasks);
   }));
 
   const allCamps = visible.flatMap(acc => aiCampData[acc.id] || []);
@@ -2198,7 +2213,8 @@ async function loadAiAnalysis() {
   };
 
   const active = allCamps.filter(c=>c.status==='ACTIVE');
-  const totalSpend = allCamps.reduce((s,c)=>s+(+getIns(c).spend||0), 0);
+  // Use account-level insight spend (accurate, includes archived campaigns)
+  const totalSpend = visible.reduce((s, acc) => s + (aiInsightData[acc.id]?.spend ? +aiInsightData[acc.id].spend : (aiCampData[acc.id]||[]).reduce((x,c)=>x+(+getIns(c).spend||0),0)), 0);
   const ctrVals = allCamps.filter(c=>+getIns(c).ctr>0).map(c=>+getIns(c).ctr);
   const cpcVals = allCamps.filter(c=>+getIns(c).cpc>0).map(c=>+getIns(c).cpc);
   const avgCtr = ctrVals.length ? ctrVals.reduce((a,b)=>a+b,0)/ctrVals.length : 0;
@@ -2220,10 +2236,11 @@ async function loadAiAnalysis() {
   show('aiChartGrid', 'grid');
   const O = '#FF6B2C';
 
-  // Chart 1: Spend by account
+  // Chart 1: Spend by account (use account-level insights for accuracy)
   const acctSpend = visible.map(acc => ({
     name: acc.name,
-    spend: (aiCampData[acc.id]||[]).reduce((s,c)=>s+(+getIns(c).spend||0),0)
+    spend: aiInsightData[acc.id]?.spend ? +aiInsightData[acc.id].spend
+           : (aiCampData[acc.id]||[]).reduce((s,c)=>s+(+getIns(c).spend||0),0)
   })).filter(a=>a.spend>0).sort((a,b)=>b.spend-a.spend).slice(0,10);
   aiCharts.spend = new Chart(document.getElementById('chartSpendByAccount'), {
     type: 'bar',
