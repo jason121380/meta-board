@@ -237,6 +237,29 @@ input:checked + .slider:before { transform: translateX(14px); }
 .account-list-id { font-size: 11px; color: var(--gray-300); }
 .account-list-status { font-size: 11px; padding: 2px 6px; border-radius: 9999px; font-weight: 600; flex-shrink: 0; }
 
+/* ── Finance View ──────────────────────────────────────────── */
+.finance-body { display: flex; flex: 1; overflow: hidden; }
+.finance-summary { width: 180px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 20px 16px; background: var(--white); overflow-y: auto; }
+.finance-summary-title { font-size: 11px; font-weight: 700; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+.finance-summary-item { margin-bottom: 14px; }
+.finance-summary-label { font-size: 11px; color: var(--gray-500); margin-bottom: 2px; }
+.finance-summary-value { font-size: 18px; font-weight: 700; color: var(--black); letter-spacing: -0.3px; font-variant-numeric: tabular-nums; }
+.finance-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.finance-kpi-row { display: flex; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); background: var(--white); flex-shrink: 0; overflow-x: auto; }
+.finance-kpi { flex-shrink: 0; }
+.finance-kpi-val { font-size: 22px; font-weight: 700; color: var(--black); letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.finance-kpi-label { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
+.finance-kpi-sep { width: 1px; background: var(--border); flex-shrink: 0; margin: 0 4px; }
+.finance-toolbar { padding: 10px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; background: var(--white); flex-shrink: 0; }
+.finance-table-wrap { flex: 1; overflow: auto; }
+.finance-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.finance-table th { position: sticky; top: 0; background: var(--warm-white); padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 700; color: var(--gray-500); border-bottom: 1px solid var(--border); white-space: nowrap; z-index: 1; }
+.finance-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); color: var(--black); white-space: nowrap; }
+.finance-table tr:hover td { background: var(--orange-bg); }
+.finance-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.finance-table .markup-input { width: 52px; height: 26px; border: 1px solid var(--border); border-radius: var(--radius-sm); text-align: center; font-size: 12px; font-family: inherit; padding: 0 4px; }
+.finance-table .markup-input:focus { outline: none; border-color: var(--orange); }
+
 /* ── Quick Launch View ─────────────────────────────────────── */
 .launch-wrap { padding: 24px; max-width: 560px; }
 .launch-wrap h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.3px; }
@@ -396,6 +419,9 @@ input:checked + .slider:before { transform: translateX(14px); }
     <div class="nav-item" id="nav-ai" onclick="showView('ai')">
       <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span> AI 廣告分析
     </div>
+    <div class="nav-item" id="nav-finance" onclick="showView('finance')">
+      <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span> 財務專區
+    </div>
     <div class="nav-section" style="margin-top:8px">工具</div>
     <div class="nav-item" id="nav-launch" onclick="showView('launch')">
       <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span> 快速上架
@@ -547,6 +573,75 @@ input:checked + .slider:before { transform: translateX(14px); }
 
     <!-- Comprehensive Insights -->
     <div id="aiTextCards" style="display:none;gap:0;grid-template-columns:1fr"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     VIEW: 財務專區
+═══════════════════════════════════════════════════════════ -->
+<div class="view" id="view-finance">
+  <div class="topbar">
+    <div class="page-title">財務專區</div>
+    <div class="topbar-spacer"></div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--gray-500)">
+      月% 加成：
+      <input type="number" id="financeMarkup" value="5" min="0" max="100" step="0.5" oninput="renderFinanceTable()" style="width:60px;height:32px;border:1.5px solid var(--border);border-radius:var(--radius-sm);text-align:center;font-size:13px;font-family:inherit;padding:0 6px">
+      %
+    </label>
+    <div class="topbar-sep"></div>
+    <button class="btn btn-blue btn-sm" onclick="downloadFinanceCsv()">下載資料</button>
+  </div>
+  <div class="finance-body">
+    <!-- Left: Summary -->
+    <div class="finance-summary">
+      <div class="finance-summary-title">統計</div>
+      <div class="finance-summary-item"><div class="finance-summary-label">帳戶數</div><div class="finance-summary-value" id="fin-acct-count">—</div></div>
+      <div class="finance-summary-item"><div class="finance-summary-label">總花費</div><div class="finance-summary-value" id="fin-total-spend">—</div></div>
+      <div class="finance-summary-item"><div class="finance-summary-label">%</div><div class="finance-summary-value" id="fin-total-markup">—</div></div>
+      <div class="finance-summary-item"><div class="finance-summary-label">總花費+%</div><div class="finance-summary-value" id="fin-total-plus">—</div></div>
+    </div>
+    <!-- Right: KPIs + Table -->
+    <div class="finance-main">
+      <div class="finance-kpi-row">
+        <div class="finance-kpi"><div class="finance-kpi-val" id="fin-kpi-spend">—</div><div class="finance-kpi-label">總花費</div></div>
+        <div class="finance-kpi-sep"></div>
+        <div class="finance-kpi"><div class="finance-kpi-val" id="fin-kpi-plus">—</div><div class="finance-kpi-label">總花費+%</div></div>
+        <div class="finance-kpi-sep"></div>
+        <div class="finance-kpi"><div class="finance-kpi-val" id="fin-kpi-clicks">—</div><div class="finance-kpi-label">平均點擊次數</div></div>
+        <div class="finance-kpi-sep"></div>
+        <div class="finance-kpi"><div class="finance-kpi-val" id="fin-kpi-cpc">—</div><div class="finance-kpi-label">平均點擊成本</div></div>
+        <div class="finance-kpi-sep"></div>
+        <div class="finance-kpi"><div class="finance-kpi-val" id="fin-kpi-msg">—</div><div class="finance-kpi-label">平均私訊數</div></div>
+        <div class="finance-kpi-sep"></div>
+        <div class="finance-kpi"><div class="finance-kpi-val" id="fin-kpi-cpm">—</div><div class="finance-kpi-label">平均私訊成本</div></div>
+      </div>
+      <div class="finance-toolbar">
+        <input id="financeSearch" placeholder="搜尋活動名稱..." oninput="renderFinanceTable()" style="flex:1;height:32px;padding:0 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit">
+      </div>
+      <div class="finance-table-wrap">
+        <table class="finance-table">
+          <thead>
+            <tr>
+              <th>NO.</th>
+              <th>活動名稱</th>
+              <th>廣告帳戶</th>
+              <th>報告起始</th>
+              <th>報告截止</th>
+              <th class="num">花費金額</th>
+              <th class="num">月%</th>
+              <th class="num">金額+%</th>
+              <th class="num">連結點擊數</th>
+              <th class="num">點擊成本</th>
+              <th class="num">私訊數</th>
+              <th class="num">私訊成本</th>
+            </tr>
+          </thead>
+          <tbody id="financeTableBody">
+            <tr><td colspan="12" style="text-align:center;padding:32px;color:var(--gray-300)">請先在儀表板選擇帳戶，或等待資料載入</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1609,6 +1704,114 @@ async function loadAiAnalysis() {
 }
 
 // ── Navigation ───────────────────────────────────────────────
+// ── Finance ──────────────────────────────────────────────────
+let financeRows = []; // cached rows for download
+
+async function loadFinance() {
+  const visible = getVisibleAccounts();
+  if(!visible.length) return;
+  const dp = getDateParams();
+  // Load campaigns for visible accounts (use cache if available)
+  await Promise.all(visible.map(async acc => {
+    if(!campData[acc.id]) {
+      const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
+      campData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+    }
+  }));
+  renderFinanceTable();
+}
+
+function getFinanceDateRange() {
+  const today = new Date();
+  const fmt = d => d.toISOString().slice(0,10);
+  if(dateConfig.preset === 'custom' && dateConfig.from && dateConfig.to)
+    return { start: dateConfig.from, end: dateConfig.to };
+  const end = fmt(today);
+  const daysMap = { last_7d:7, last_14d:14, last_30d:30, last_90d:90, this_month:today.getDate(), last_month:30 };
+  const days = daysMap[dateConfig.preset] || 30;
+  const start = fmt(new Date(today - days*864e5));
+  return { start, end };
+}
+
+function renderFinanceTable() {
+  const markup = parseFloat(document.getElementById('financeMarkup')?.value) || 0;
+  const q = (document.getElementById('financeSearch')?.value||'').toLowerCase();
+  const { start, end } = getFinanceDateRange();
+  const visible = getVisibleAccounts();
+  const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'];
+
+  const allCamps = visible.flatMap(acc => (campData[acc.id]||[]).filter(c => +getIns(c).spend > 0));
+  financeRows = allCamps.filter(c => !q || c.name.toLowerCase().includes(q) || c._accountName.toLowerCase().includes(q));
+
+  const body = document.getElementById('financeTableBody');
+  if(!financeRows.length) {
+    body.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:32px;color:var(--gray-300)">無資料</td></tr>';
+    return;
+  }
+
+  let totalSpend = 0, totalClicks = 0, totalMsg = 0, campCount = 0;
+  body.innerHTML = financeRows.map((c, i) => {
+    const ins = getIns(c);
+    const spend = +ins.spend || 0;
+    const clicks = +ins.clicks || 0;
+    const cpc = +ins.cpc || 0;
+    const msgs = MSG_TYPES.reduce((s,t)=>{ const a=(ins.actions||[]).find(x=>x.action_type===t); return s+(a?+a.value:0); },0);
+    const msgCost = msgs > 0 ? spend / msgs : 0;
+    const plus = spend * (1 + markup/100);
+    totalSpend += spend; totalClicks += clicks; totalMsg += msgs; campCount++;
+    return `<tr>
+      <td style="color:var(--gray-500)">${i+1}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${c.name}</td>
+      <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;color:var(--gray-500);font-size:12px">${c._accountName}</td>
+      <td style="color:var(--gray-500)">${start}</td>
+      <td style="color:var(--gray-500)">${end}</td>
+      <td class="num">$${fM(spend)}</td>
+      <td class="num">${markup}%</td>
+      <td class="num" style="color:var(--orange);font-weight:600">$${fM(plus)}</td>
+      <td class="num">${fN(clicks)}</td>
+      <td class="num">${cpc>0?'$'+fM(cpc):'—'}</td>
+      <td class="num">${msgs>0?fN(msgs):'—'}</td>
+      <td class="num">${msgCost>0?'$'+fM(msgCost):'—'}</td>
+    </tr>`;
+  }).join('');
+
+  // KPIs
+  const totalPlus = totalSpend * (1 + markup/100);
+  const avgClicks = campCount > 0 ? totalClicks / campCount : 0;
+  const avgCpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
+  const avgMsg = campCount > 0 ? totalMsg / campCount : 0;
+  const avgMsgCost = totalMsg > 0 ? totalSpend / totalMsg : 0;
+  document.getElementById('fin-kpi-spend').textContent = '$' + fM(totalSpend);
+  document.getElementById('fin-kpi-plus').textContent = '$' + fM(totalPlus);
+  document.getElementById('fin-kpi-clicks').textContent = fN(Math.round(avgClicks));
+  document.getElementById('fin-kpi-cpc').textContent = avgCpc > 0 ? '$' + fM(avgCpc) : '—';
+  document.getElementById('fin-kpi-msg').textContent = fN(Math.round(avgMsg));
+  document.getElementById('fin-kpi-cpm').textContent = avgMsgCost > 0 ? '$' + fM(avgMsgCost) : '—';
+  // Summary
+  document.getElementById('fin-acct-count').textContent = visible.length;
+  document.getElementById('fin-total-spend').textContent = '$' + fM(totalSpend);
+  document.getElementById('fin-total-markup').textContent = '$' + fM(totalSpend * markup/100);
+  document.getElementById('fin-total-plus').textContent = '$' + fM(totalPlus);
+}
+
+function downloadFinanceCsv() {
+  const markup = parseFloat(document.getElementById('financeMarkup')?.value) || 0;
+  const { start, end } = getFinanceDateRange();
+  const MSG_TYPES = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'];
+  const rows = [['NO.','活動名稱','廣告帳戶','報告起始','報告截止','花費金額','月%','金額+%','連結點擊數','點擊成本','私訊數','私訊成本']];
+  financeRows.forEach((c,i) => {
+    const ins = getIns(c);
+    const spend = +ins.spend||0, clicks = +ins.clicks||0, cpc = +ins.cpc||0;
+    const msgs = MSG_TYPES.reduce((s,t)=>{ const a=(ins.actions||[]).find(x=>x.action_type===t); return s+(a?+a.value:0); },0);
+    rows.push([i+1, c.name, c._accountName, start, end, spend.toFixed(0), markup+'%', (spend*(1+markup/100)).toFixed(0), clicks, cpc.toFixed(0), msgs||'', msgs>0?(spend/msgs).toFixed(0):'']);
+  });
+  const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  a.download = `財務報表_${start}_${end}.csv`;
+  a.click();
+}
+
 // ── Drag to Sort ────────────────────────────────────────────
 function dragStart(e, id) {
   _dragId = id;
@@ -1659,6 +1862,7 @@ function showView(name) {
   document.getElementById(`view-${name}`).classList.add('active');
   document.getElementById(`nav-${name}`)?.classList.add('active');
   if(name==='ai') loadAiAnalysis();
+  if(name==='finance') loadFinance();
   if(name==='settings') {
     const cb = document.getElementById('filterActiveOnly');
     if(cb) cb.checked = filterActiveOnly;
