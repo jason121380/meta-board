@@ -1206,6 +1206,8 @@ function renderTree() {
     return;
   }
 
+  const MSG_TYPES_TREE = ['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'];
+  const getMsgTree = item => { const acts = getIns(item).actions||[]; for(const t of MSG_TYPES_TREE){const a=acts.find(x=>x.action_type===t);if(a)return +a.value||0;} return 0; };
   const cols = [
     { key:'name', label:'名稱' },
     ...(multiAcct ? [{ key:'account', label:'帳戶' }] : []),
@@ -1215,6 +1217,8 @@ function renderTree() {
     { key:'clicks', label:'點擊', sortKey: i=>+getIns(i).clicks||0 },
     { key:'ctr', label:'CTR', sortKey: i=>+getIns(i).ctr||0 },
     { key:'cpc', label:'CPC', sortKey: i=>+getIns(i).cpc||0 },
+    { key:'msg', label:'私訊數', sortKey: i=>getMsgTree(i) },
+    { key:'msgcost', label:'私訊成本', sortKey: i=>{ const m=getMsgTree(i); return m>0?(+getIns(i).spend||0)/m:Infinity; } },
     { key:'budget', label:'預算' },
     { key:'actions', label:'' },
   ];
@@ -1248,6 +1252,8 @@ function renderTree() {
       <td class="num">${fN(ins.clicks)}</td>
       <td class="num">${fP(ins.ctr)}</td>
       <td class="num">${fM(ins.cpc)}</td>
+      <td class="num">${(()=>{const m=getMsgTree(camp);return m>0?fN(m):'—';})()}</td>
+      <td class="num">${(()=>{const m=getMsgTree(camp),s=+ins.spend||0;return m>0?'$'+fM(s/m):'—';})()}</td>
       <td class="num">${budgetStr(camp)}</td>
       <td onclick="event.stopPropagation()">
         <div style="display:flex;align-items:center;gap:6px">
@@ -1284,6 +1290,8 @@ function renderTree() {
             <td class="num">${fN(ai.clicks)}</td>
             <td class="num">${fP(ai.ctr)}</td>
             <td class="num">${fM(ai.cpc)}</td>
+            <td class="num">${(()=>{const m=getMsgTree(adset);return m>0?fN(m):'—';})()}</td>
+            <td class="num">${(()=>{const m=getMsgTree(adset),s=+ai.spend||0;return m>0?'$'+fM(s/m):'—';})()}</td>
             <td class="num">${budgetStr(adset)}</td>
             <td onclick="event.stopPropagation()">
               <div style="display:flex;align-items:center;gap:6px">
@@ -1316,6 +1324,8 @@ function renderTree() {
                   <td class="num">${fN(adi.clicks)}</td>
                   <td class="num">${fP(adi.ctr)}</td>
                   <td class="num">${fM(adi.cpc)}</td>
+                  <td class="num">${(()=>{const m=getMsgTree(ad);return m>0?fN(m):'—';})()}</td>
+                  <td class="num">${(()=>{const m=getMsgTree(ad),s=+adi.spend||0;return m>0?'$'+fM(s/m):'—';})()}</td>
                   <td class="muted">—</td>
                   <td onclick="event.stopPropagation()">
                     <label class="toggle"><input type="checkbox" ${ad.status==='ACTIVE'?'checked':''} onchange="toggleStatus('ads','${ad.id}',this,false)"><span class="slider"></span></label>
