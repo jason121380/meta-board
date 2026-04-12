@@ -2583,7 +2583,7 @@ async function loadFinance() {
       const cCamp = _cacheGet('fin', acc.id, dp);
       if(cCamp) { finCampData[acc.id] = cCamp; }
       else tasks.push(
-        fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json()).then(res => {
+        fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}&include_archived=true`).then(r=>r.json()).then(res => {
           finCampData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
           _cacheSet('fin', acc.id, dp, finCampData[acc.id]);
         }).catch(()=>{ finCampData[acc.id] = []; })
@@ -2691,7 +2691,7 @@ function renderFinanceTable() {
   // ── Campaign drill-down mode (single account selected) ──────────────
   if(finSelectedAcctIds.length === 1) {
     const accId = finSelectedAcctIds[0];
-    let camps = (finCampData[accId] || []).filter(c => +getIns(c).spend > 0);
+    let camps = finCampData[accId] || [];
     if(q) camps = camps.filter(c => c.name.toLowerCase().includes(q));
 
     const sortFn = (a, b) => {
@@ -2715,11 +2715,11 @@ function renderFinanceTable() {
     financeRows = [...pinned, ...unpinned].map(c => ({ camp: c, acc: visible.find(a=>a.id===accId) }));
 
     document.getElementById('financeTableHead').innerHTML = `<tr>
-      ${fsTh('No.', '')}
-      ${fsTh('行銷活動名稱', 'name')}
-      ${fsTh('花費', 'spend', 'right')}
-      ${fsTh('月%', 'markup', 'right')}
-      ${fsTh('花費+%', 'plus', 'right')}
+      <th style="width:40px;user-select:none">No.</th>
+      <th style="cursor:pointer;user-select:none;${finSort.key==='name'?'color:var(--orange)':''}" onclick="finSortBy('name')">行銷活動名稱${finSort.key==='name'?(finSort.dir==='asc'?' ↑':' ↓'):''}</th>
+      <th class="num" style="width:110px;cursor:pointer;user-select:none;${finSort.key==='spend'?'color:var(--orange)':''}" onclick="finSortBy('spend')">花費${finSort.key==='spend'?(finSort.dir==='asc'?' ↑':' ↓'):''}</th>
+      <th class="num" style="width:110px;cursor:pointer;user-select:none;${finSort.key==='markup'?'color:var(--orange)':''}" onclick="finSortBy('markup')">月%${finSort.key==='markup'?(finSort.dir==='asc'?' ↑':' ↓'):''}</th>
+      <th class="num" style="width:110px;cursor:pointer;user-select:none;${finSort.key==='plus'?'color:var(--orange)':''}" onclick="finSortBy('plus')">花費+%${finSort.key==='plus'?(finSort.dir==='asc'?' ↑':' ↓'):''}</th>
       <th style="text-align:center;width:48px">Pin</th>
     </tr>`;
 
@@ -2730,19 +2730,23 @@ function renderFinanceTable() {
       return;
     }
 
-    let totalSpend = 0, totalPlus = 0;
+    // Use account-level insight spend for KPI (accurate, includes archived campaigns)
+    const acctInsightSpend = finInsightData[accId]?.spend ? +finInsightData[accId].spend : null;
+    let campSpendSum = 0;
     body.innerHTML = financeRows.map(({camp}, i) => {
       const isPinned = finPinnedIds.includes(camp.id);
       const sp = +getIns(camp).spend || 0;
       const rowMarkup = finRowMarkups[camp.id] !== undefined ? finRowMarkups[camp.id] : defaultMarkup;
       const plus = sp * (1 + rowMarkup/100);
-      totalSpend += sp; totalPlus += plus;
+      campSpendSum += sp;
       const statusDot = camp.status === 'ACTIVE'
         ? `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);margin-right:5px;vertical-align:middle"></span>`
+        : camp.status === 'ARCHIVED' || camp.status === 'DELETED'
+        ? `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#ccc;margin-right:5px;vertical-align:middle;opacity:0.5"></span>`
         : `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--gray-300);margin-right:5px;vertical-align:middle"></span>`;
       return `<tr style="${isPinned?'border-left:3px solid var(--orange);background:var(--orange-bg);':''}">
         <td style="color:var(--gray-500);width:40px">${i+1}</td>
-        <td style="font-weight:500;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${camp.name}">${statusDot}${camp.name}</td>
+        <td style="font-weight:500" title="${camp.name}"><div style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center">${statusDot}<span>${camp.name}</span></div></td>
         <td class="num">$${fM(sp)}</td>
         <td class="num"><input class="fin-markup-input" type="number" value="${rowMarkup}" min="0" max="999" step="0.5" data-camp-id="${camp.id}" oninput="onRowMarkupChange(this)" style="width:52px;height:26px;border:1.5px solid var(--border);border-radius:4px;text-align:center;font-size:12px;font-family:inherit;padding:0 4px">%</td>
         <td class="num fin-plus-cell" style="color:var(--orange);font-weight:600">$${fM(Math.ceil(plus))}</td>
@@ -2752,8 +2756,10 @@ function renderFinanceTable() {
       </tr>`;
     }).join('');
 
-    document.getElementById('fin-kpi-spend').textContent = '$' + fM(totalSpend);
-    document.getElementById('fin-kpi-plus').textContent = '$' + fM(Math.ceil(totalPlus));
+    const kpiSpend = acctInsightSpend !== null ? acctInsightSpend : campSpendSum;
+    const kpiPlus = kpiSpend * (1 + defaultMarkup/100);
+    document.getElementById('fin-kpi-spend').textContent = '$' + fM(kpiSpend);
+    document.getElementById('fin-kpi-plus').textContent = '$' + fM(Math.ceil(kpiPlus));
     document.getElementById('fin-kpi-clicks').textContent = '—';
     document.getElementById('fin-kpi-cpc').textContent = '—';
     document.getElementById('fin-kpi-msg').textContent = '—';

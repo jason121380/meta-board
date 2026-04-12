@@ -212,17 +212,22 @@ async def get_accounts():
 # ── 行銷活動 ─────────────────────────────────────────────────────────
 
 @app.get("/api/accounts/{account_id}/campaigns")
-async def get_campaigns(account_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None):
+async def get_campaigns(account_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None, include_archived: bool = False):
     ins = _insights_clause("spend,impressions,clicks,ctr,cpc,cpm,frequency,reach,actions", date_preset, time_range)
+    extra = {}
+    if include_archived:
+        extra["effective_status"] = '["ACTIVE","PAUSED","ARCHIVED","DELETED"]'
     try:
         data = await fb_get(f"{account_id}/campaigns", {
             "fields": f"id,name,status,objective,daily_budget,lifetime_budget,{ins}",
-            "limit": "100"
+            "limit": "200",
+            **extra
         })
     except Exception:
         data = await fb_get(f"{account_id}/campaigns", {
             "fields": "id,name,status,objective,daily_budget,lifetime_budget",
-            "limit": "100"
+            "limit": "200",
+            **extra
         })
     return data
 
