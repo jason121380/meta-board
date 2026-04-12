@@ -761,10 +761,10 @@ async function handleFBStatus(resp) {
     showLogin();
   }
 }
-async function fbLogin() {
-  FB.login(async resp => {
+function fbLogin() {
+  FB.login(function(resp) {
     if(resp.authResponse) {
-      await setToken(resp.authResponse.accessToken);
+      setToken(resp.authResponse.accessToken);
     }
   }, { scope: 'ads_read,ads_management,business_management' });
 }
