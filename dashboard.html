@@ -2834,15 +2834,15 @@ async function loadAiAlerts() {
       campCol,
       {label:'花費', right:true, val:({spend})=>spend, fn:({spend})=>`$${fM(spend)}`},
       {label:'私訊數', right:true, val:({msgs})=>msgs, fn:({msgs})=>msgs>0?fN(msgs):'—'},
-      {label:'私訊成本', right:true, val:({msgCost})=>msgCost, fn:({msgCost})=>msgCost>0?'$'+fM(msgCost):'—'},
+      {label:'私訊成本', right:true, val:({msgCost})=>msgCost, fn:({msgCost})=>msgCost>0?`<span style="${msgCost>300?'color:var(--orange);font-weight:700':''}">${'$'+fM(msgCost)}</span>`:'—'},
     ];
     _alertCols.cpc = [
       campCol,
-      {label:'CPC', right:true, val:({ci})=>+ci.cpc||0, fn:({ci})=>+ci.cpc>0?'$'+fM(ci.cpc):'—'},
+      {label:'CPC', right:true, val:({ci})=>+ci.cpc||0, fn:({ci})=>+ci.cpc>0?`<span style="${+ci.cpc>6?'color:var(--orange);font-weight:700':''}">${'$'+fM(ci.cpc)}</span>`:'—'},
     ];
     _alertCols.freq = [
       campCol,
-      {label:'頻次', right:true, val:({ci})=>+ci.frequency||0, fn:({ci})=>+ci.frequency>0?`<span style="${+ci.frequency>5?'color:var(--orange);font-weight:600':''}">${(+ci.frequency).toFixed(1)}</span>`:'—'},
+      {label:'頻次', right:true, val:({ci})=>+ci.frequency||0, fn:({ci})=>+ci.frequency>0?`<span style="${+ci.frequency>5?'color:var(--orange);font-weight:700':''}">${(+ci.frequency).toFixed(1)}</span>`:'—'},
     ];
 
     _alertRows.msg = msgRows;
