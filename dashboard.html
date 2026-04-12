@@ -363,9 +363,6 @@ input:checked + .slider:before { transform: translateX(14px); }
   .finance-acct-panel { width: 100%; max-height: 120px; border-right: none; border-bottom: 1px solid var(--border); }
   .finance-acct-list { display: flex; overflow-x: auto; flex-wrap: nowrap; }
   .finance-acct-item { flex-shrink: 0; min-width: 130px; border-bottom: none; border-right: 1px solid var(--border); padding: 8px 10px; }
-  .finance-summary { width: 100%; border-right: none; border-bottom: 1px solid var(--border); padding: 12px; display: flex; flex-wrap: wrap; gap: 12px; }
-  .finance-summary-item { flex: 1; min-width: 80px; margin-bottom: 0; }
-  .finance-summary-value { font-size: 15px; }
   .finance-kpi-row { padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
   .finance-kpi-val { font-size: 16px; }
   .finance-toolbar { padding: 8px 12px; flex-wrap: wrap; }
@@ -750,26 +747,11 @@ input:checked + .slider:before { transform: translateX(14px); }
         <div class="loading" style="padding:20px"><div class="spinner"></div></div>
       </div>
     </div>
-    <!-- Middle: Summary -->
-    <div class="finance-summary">
-      <div class="finance-summary-title">摘要</div>
-      <div class="finance-summary-item">
-        <div class="finance-summary-label">帳戶數</div>
-        <div class="finance-summary-value" id="fin-acct-count">—</div>
-      </div>
-      <div class="finance-summary-item">
-        <div class="finance-summary-label">總花費</div>
-        <div class="finance-summary-value" id="fin-total-spend">—</div>
-      </div>
-      <div class="finance-summary-item">
-        <div class="finance-summary-label">加成金額</div>
-        <div class="finance-summary-value" id="fin-total-markup">—</div>
-      </div>
-      <div class="finance-summary-item">
-        <div class="finance-summary-label">總計 (含%)</div>
-        <div class="finance-summary-value" id="fin-total-plus">—</div>
-      </div>
-    </div>
+    <!-- Hidden summary targets (for JS updates, no visible panel) -->
+    <span id="fin-acct-count" style="display:none"></span>
+    <span id="fin-total-spend" style="display:none"></span>
+    <span id="fin-total-markup" style="display:none"></span>
+    <span id="fin-total-plus" style="display:none"></span>
     <!-- Right: KPIs + Table -->
     <div class="finance-main">
       <div class="finance-kpi-row">
