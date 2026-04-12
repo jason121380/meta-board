@@ -776,7 +776,7 @@ input:checked + .slider:before { transform: translateX(14px); }
     <div class="topbar-spacer"></div>
     <div id="dpAi"></div>
     <div class="topbar-sep"></div>
-    <button class="btn btn-blue btn-sm" onclick="aiCampData={};loadAiAnalysis()">重新分析</button>
+    <button class="btn btn-blue btn-sm" onclick="_cacheClear('ai');aiCampData={};loadAiAnalysis()">重新分析</button>
   </div>
   <div style="padding:20px 24px;overflow-y:auto;flex:1">
 
@@ -841,7 +841,7 @@ input:checked + .slider:before { transform: translateX(14px); }
       <button class="btn btn-blue btn-sm" onclick="applyAlertCustomDate()">套用</button>
     </div>
     <div class="topbar-sep"></div>
-    <button class="btn btn-blue btn-sm" onclick="alertCampData={};loadAiAlerts()">重新分析</button>
+    <button class="btn btn-blue btn-sm" onclick="_cacheClear('alert');alertCampData={};loadAiAlerts()">重新分析</button>
   </div>
   <div style="padding:20px 24px;overflow-y:auto;flex:1">
     <div id="alertEmpty" class="empty-state" style="display:none">請先在設定中啟用廣告帳戶</div>
@@ -1064,6 +1064,18 @@ let savedSelectedIds = JSON.parse(localStorage.getItem('fb_selected_accounts') |
 let filterActiveOnly = localStorage.getItem('filter_active_only') !== 'false'; // default true
 let acctOrder = JSON.parse(localStorage.getItem('acct_order') || '[]'); // drag-sort order
 let _dragId = null;
+// ── Session Cache (survives view switches, cleared on tab close) ──────
+function _cacheKey(prefix, id, dp) { return `fbc_${prefix}_${id}_${dp}`; }
+function _cacheGet(prefix, id, dp) {
+  try { const v = sessionStorage.getItem(_cacheKey(prefix, id, dp)); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+function _cacheSet(prefix, id, dp, data) {
+  try { sessionStorage.setItem(_cacheKey(prefix, id, dp), JSON.stringify(data)); } catch {}
+}
+function _cacheClear(prefix) {
+  try { Object.keys(sessionStorage).filter(k=>k.startsWith(`fbc_${prefix}_`)).forEach(k=>sessionStorage.removeItem(k)); } catch {}
+}
+
 let campData = {};              // { accountId: [campaigns] }
 let adsetData = {};             // { campaignId: [adsets] }
 let adData = {};                // { adsetId: [ads] }
@@ -1581,11 +1593,14 @@ async function loadDashboard() {
     const el = document.getElementById('st-'+k);
     if(el) el.innerHTML = '<span style="display:inline-block;width:60px;height:18px;background:linear-gradient(90deg,var(--border) 25%,var(--warm-white) 50%,var(--border) 75%);background-size:200% 100%;border-radius:4px;animation:shimmer 1.2s infinite"></span>';
   });
-  // Load campaigns for all selected accounts in parallel
+  // Load campaigns for all selected accounts in parallel (with session cache)
   const dp = getDateParams();
   await Promise.all(selectedAccounts.map(async acc => {
+    const cached = _cacheGet('camp', acc.id, dp);
+    if(cached) { campData[acc.id] = cached; return; }
     const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
     campData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+    _cacheSet('camp', acc.id, dp, campData[acc.id]);
   }));
   await loadOverviewStats();
   renderTree();
@@ -1640,6 +1655,7 @@ function clearStats() {
 }
 
 function refreshDashboard() {
+  _cacheClear('camp');
   campData = {}; adsetData = {}; adData = {};
   expandedCamps = new Set(); expandedAdsets = new Set();
   loadDashboard();
@@ -2165,13 +2181,15 @@ async function loadAiAnalysis() {
   // Load campaign data for any visible account not yet cached (separate aiCampData cache)
   const dp = getAiDateParams();
   await Promise.all(visible.map(async acc => {
-    if(!aiCampData[acc.id] || !aiCampData[acc.id].length) {
-      try {
-        const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
-        const camps = res.data || [];
-        if(camps.length) aiCampData[acc.id] = camps.map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
-      } catch(e) { /* retry next time */ }
-    }
+    if(aiCampData[acc.id]?.length) return;
+    const cached = _cacheGet('ai', acc.id, dp);
+    if(cached) { aiCampData[acc.id] = cached; return; }
+    try {
+      const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
+      const camps = res.data || [];
+      aiCampData[acc.id] = camps.map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+      _cacheSet('ai', acc.id, dp, aiCampData[acc.id]);
+    } catch(e) { /* retry next time */ }
   }));
 
   const allCamps = visible.flatMap(acc => aiCampData[acc.id] || []);
@@ -2320,10 +2338,12 @@ async function loadAiAlerts() {
 
   const dp = getAlertDateParams();
   await Promise.all(visible.map(async acc => {
-    if(!alertCampData[acc.id]) {
-      const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
-      alertCampData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
-    }
+    if(alertCampData[acc.id]) return;
+    const cached = _cacheGet('alert', acc.id, dp);
+    if(cached) { alertCampData[acc.id] = cached; return; }
+    const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
+    alertCampData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+    _cacheSet('alert', acc.id, dp, alertCampData[acc.id]);
   }));
 
   const allCamps = visible.flatMap(acc => alertCampData[acc.id] || []);
@@ -2552,12 +2572,14 @@ async function loadFinance() {
   if(!visible.length) { renderFinanceAcctList([]); return; }
   renderFinanceAcctList(visible);
   const dp = getFinDateParams();
-  // Load campaigns for visible accounts (use finCampData cache)
+  // Load campaigns for visible accounts (with session cache)
   await Promise.all(visible.map(async acc => {
-    if(!finCampData[acc.id]) {
-      const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
-      finCampData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
-    }
+    if(finCampData[acc.id]) return;
+    const cached = _cacheGet('fin', acc.id, dp);
+    if(cached) { finCampData[acc.id] = cached; renderFinanceAcctList(visible); return; }
+    const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
+    finCampData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+    _cacheSet('fin', acc.id, dp, finCampData[acc.id]);
   }));
   renderFinanceTable();
   // Re-render account list with spend data now available
