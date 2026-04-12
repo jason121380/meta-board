@@ -1959,7 +1959,7 @@ function renderFinanceAcctList(accounts) {
   const allBtn = `<div class="finance-acct-item ${finSelectedAcctIds.length===0?'active':''}" onclick="finSelectAcct('__all__')">
     <div style="flex:1;min-width:0">
       <div class="finance-acct-name">全部帳戶</div>
-      ${totalSpend>0?`<div style="font-size:11px;color:var(--gray-500);margin-top:2px">$${fM(totalSpend)} → <span style="color:var(--orange)">$${fM(Math.ceil(totalPlus))}</span></div>`:''}
+      ${totalSpend>0?`<div style="font-size:12px;color:var(--orange);font-weight:600;margin-top:2px">$${fM(Math.ceil(totalPlus))}</div>`:''}
     </div>
   </div>`;
   const items = accounts.map(acc => {
@@ -1968,7 +1968,7 @@ function renderFinanceAcctList(accounts) {
     return `<div class="finance-acct-item ${finSelectedAcctIds.includes(acc.id)?'active':''}" onclick="finSelectAcct('${acc.id}')">
       <div style="flex:1;min-width:0">
         <div class="finance-acct-name" title="${acc.name}">${acc.name}</div>
-        ${spend>0?`<div style="font-size:11px;color:var(--gray-500);margin-top:2px">$${fM(spend)} → <span style="color:var(--orange)">$${fM(Math.ceil(plus))}</span></div>`:'<div style="font-size:11px;color:var(--gray-300);margin-top:2px">載入中...</div>'}
+        ${spend>0?`<div style="font-size:12px;color:var(--orange);font-weight:600;margin-top:2px">$${fM(Math.ceil(plus))}</div>`:'<div style="font-size:11px;color:var(--gray-300);margin-top:2px">載入中...</div>'}
       </div>
     </div>`;
   }).join('');
