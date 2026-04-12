@@ -214,10 +214,16 @@ async def get_accounts():
 @app.get("/api/accounts/{account_id}/campaigns")
 async def get_campaigns(account_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None):
     ins = _insights_clause("spend,impressions,clicks,ctr,cpc,cpm,frequency,reach,actions", date_preset, time_range)
-    data = await fb_get(f"{account_id}/campaigns", {
-        "fields": f"id,name,status,objective,daily_budget,lifetime_budget,{ins}",
-        "limit": "100"
-    })
+    try:
+        data = await fb_get(f"{account_id}/campaigns", {
+            "fields": f"id,name,status,objective,daily_budget,lifetime_budget,{ins}",
+            "limit": "100"
+        })
+    except Exception:
+        data = await fb_get(f"{account_id}/campaigns", {
+            "fields": "id,name,status,objective,daily_budget,lifetime_budget",
+            "limit": "100"
+        })
     return data
 
 
@@ -241,10 +247,17 @@ async def update_campaign_budget(campaign_id: str, daily_budget: int = Query(Non
 @app.get("/api/campaigns/{campaign_id}/adsets")
 async def get_adsets(campaign_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None):
     ins = _insights_clause("spend,impressions,clicks,ctr,cpc,cpm,frequency,actions", date_preset, time_range)
-    data = await fb_get(f"{campaign_id}/adsets", {
-        "fields": f"id,name,status,daily_budget,lifetime_budget,{ins}",
-        "limit": "100"
-    })
+    try:
+        data = await fb_get(f"{campaign_id}/adsets", {
+            "fields": f"id,name,status,daily_budget,lifetime_budget,{ins}",
+            "limit": "100"
+        })
+    except Exception:
+        # Fallback without insights if date query fails
+        data = await fb_get(f"{campaign_id}/adsets", {
+            "fields": "id,name,status,daily_budget,lifetime_budget",
+            "limit": "100"
+        })
     return data
 
 
