@@ -323,6 +323,9 @@ input:checked + .slider:before { transform: translateX(14px); }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
 /* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 1200px) and (min-width: 769px) {
+  #aiChartGrid { grid-template-columns: repeat(2,1fr) !important; }
+}
 @media (max-width: 768px) {
   :root { --sidebar-w: 0px; }
   .sidebar { transform: translateX(-100%); width: 260px; }
@@ -407,7 +410,7 @@ input:checked + .slider:before { transform: translateX(14px); }
   .launch-wrap h2 { font-size: 18px; }
 
   /* ── AI View ── */
-  #aiChartGrid { grid-template-columns: repeat(2,1fr) !important; }
+  #aiChartGrid { grid-template-columns: repeat(1,1fr) !important; }
   .ai-kpi-value { font-size: 20px; }
   .ai-kpi-card { padding: 12px 14px; }
 
@@ -798,7 +801,7 @@ input:checked + .slider:before { transform: translateX(14px); }
     </div>
 
     <!-- Charts Grid -->
-    <div id="aiChartGrid" style="display:none;gap:16px;grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+    <div id="aiChartGrid" style="display:none;gap:16px;grid-template-columns:repeat(3,1fr);margin-bottom:20px">
       <div class="ai-chart-card">
         <div class="ai-chart-title">各帳戶花費分布</div>
         <canvas id="chartSpendByAccount" height="220"></canvas>
