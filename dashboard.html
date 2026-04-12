@@ -1925,6 +1925,8 @@ async function loadFinance() {
     }
   }));
   renderFinanceTable();
+  // Re-render account list with spend data now available
+  renderFinanceAcctList(visible);
 }
 
 function renderFinanceAcctList(accounts) {
@@ -1933,11 +1935,35 @@ function renderFinanceAcctList(accounts) {
     list.innerHTML = '<div style="padding:12px 14px;font-size:12px;color:var(--gray-300)">尚無帳戶</div>';
     return;
   }
-  const allBtn = `<div class="finance-acct-item ${finSelectedAcctIds.length===0?'active':''}" onclick="finSelectAcct('__all__')"><span class="finance-acct-name">全部帳戶</span></div>`;
-  const items = accounts.map(acc => `
-    <div class="finance-acct-item ${finSelectedAcctIds.includes(acc.id)?'active':''}" onclick="finSelectAcct('${acc.id}')">
-      <span class="finance-acct-name" title="${acc.name}">${acc.name}</span>
-    </div>`).join('');
+  const defaultMarkup = parseFloat(document.getElementById('financeMarkupDefault')?.value) || 0;
+  const getAcctSpend = (accId) => (finCampData[accId]||[]).reduce((s,c)=>s+(+getIns(c).spend||0),0);
+  const getAcctPlus = (accId, spend) => {
+    const camps = finCampData[accId]||[];
+    return camps.reduce((s,c)=>{
+      const sp=+getIns(c).spend||0;
+      const m=finRowMarkups[c.id]!==undefined?finRowMarkups[c.id]:defaultMarkup;
+      return s+sp*(1+m/100);
+    },0);
+  };
+  const totalSpend = accounts.reduce((s,a)=>s+getAcctSpend(a.id),0);
+  const totalPlus = accounts.reduce((s,a)=>s+getAcctPlus(a.id),0);
+
+  const allBtn = `<div class="finance-acct-item ${finSelectedAcctIds.length===0?'active':''}" onclick="finSelectAcct('__all__')">
+    <div style="flex:1;min-width:0">
+      <div class="finance-acct-name">全部帳戶</div>
+      ${totalSpend>0?`<div style="font-size:11px;color:var(--gray-500);margin-top:2px">$${fM(totalSpend)} → <span style="color:var(--orange)">$${fM(totalPlus)}</span></div>`:''}
+    </div>
+  </div>`;
+  const items = accounts.map(acc => {
+    const spend = getAcctSpend(acc.id);
+    const plus = getAcctPlus(acc.id, spend);
+    return `<div class="finance-acct-item ${finSelectedAcctIds.includes(acc.id)?'active':''}" onclick="finSelectAcct('${acc.id}')">
+      <div style="flex:1;min-width:0">
+        <div class="finance-acct-name" title="${acc.name}">${acc.name}</div>
+        ${spend>0?`<div style="font-size:11px;color:var(--gray-500);margin-top:2px">$${fM(spend)} → <span style="color:var(--orange)">$${fM(plus)}</span></div>`:'<div style="font-size:11px;color:var(--gray-300);margin-top:2px">載入中...</div>'}
+      </div>
+    </div>`;
+  }).join('');
   list.innerHTML = allBtn + items;
 }
 
