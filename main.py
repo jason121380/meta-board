@@ -16,7 +16,7 @@ _ACCESS_TOKEN = os.getenv("FB_ACCESS_TOKEN")
 API_VERSION = os.getenv("FB_API_VERSION", "v21.0")
 BASE_URL = f"https://graph.facebook.com/{API_VERSION}"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 
 # Runtime token override (from FB Login)
 _runtime_token: Optional[str] = None
