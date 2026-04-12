@@ -1839,9 +1839,12 @@ async function loadAiAnalysis() {
   // Load campaign data for any visible account not yet cached (separate aiCampData cache)
   const dp = getAiDateParams();
   await Promise.all(visible.map(async acc => {
-    if(!aiCampData[acc.id]) {
-      const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
-      aiCampData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+    if(!aiCampData[acc.id] || !aiCampData[acc.id].length) {
+      try {
+        const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
+        const camps = res.data || [];
+        if(camps.length) aiCampData[acc.id] = camps.map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+      } catch(e) { /* retry next time */ }
     }
   }));
 
@@ -1850,7 +1853,7 @@ async function loadAiAnalysis() {
 
   if(!allCamps.length) {
     show('aiEmpty', 'block');
-    document.getElementById('aiEmpty').textContent = '無廣告資料可分析';
+    document.getElementById('aiEmpty').textContent = '請先在設定中啟用帳戶，或點擊「重新分析」';
     return;
   }
 
