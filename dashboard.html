@@ -10,6 +10,9 @@
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/static/icon-192.svg">
 <title>LURE Meta Platform</title>
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<link rel="manifest" href="/static/manifest.json">
 <style>
 /* ── Design System (Google My Business style) ─────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap');
@@ -262,10 +265,10 @@ input:checked + .slider:before { transform: translateX(14px); }
 .finance-summary-value { font-size: 18px; font-weight: 700; color: var(--black); letter-spacing: -0.3px; font-variant-numeric: tabular-nums; }
 .finance-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .finance-kpi-row { display: flex; padding: 16px 20px; border-bottom: 1px solid var(--border); background: var(--white); flex-shrink: 0; }
-.finance-kpi { flex: 1; min-width: 0; }
+.finance-kpi { flex: 1; min-width: 0; text-align: center; }
 .finance-kpi-val { font-size: 22px; font-weight: 700; color: var(--black); letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
 .finance-kpi-label { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
-.finance-kpi-sep { width: 1px; background: var(--border); flex-shrink: 0; margin: 0 4px; }
+.finance-kpi-sep { width: 1px; background: var(--border); flex-shrink: 0; margin: 0; }
 .finance-toolbar { padding: 10px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; background: var(--white); flex-shrink: 0; }
 .finance-table-wrap { flex: 1; overflow: auto; }
 .finance-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -861,16 +864,6 @@ input:checked + .slider:before { transform: translateX(14px); }
   <div class="finance-body">
     <!-- Left: Account Summary Panel -->
     <div class="finance-acct-panel">
-      <!-- Summary Stats -->
-      <div style="padding:12px 14px;border-bottom:1px solid var(--border);background:var(--white)">
-        <div style="font-size:10px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">總計</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px">
-          <div><span style="color:var(--gray-500)">帳號數量</span> <strong id="fin-acct-count">0</strong></div>
-          <div><span style="color:var(--gray-500)">總花費</span> <strong id="fin-total-spend">—</strong></div>
-          <div><span style="color:var(--gray-500)">%</span> <strong id="fin-total-markup">—</strong></div>
-          <div><span style="color:var(--gray-500)">總花費+%</span> <strong id="fin-total-plus" style="color:var(--orange)">—</strong></div>
-        </div>
-      </div>
       <!-- Account Table Header -->
       <div style="padding:6px 14px;border-bottom:1px solid var(--border);background:var(--warm-white);display:flex;font-size:10px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.5px">
         <div style="font-size:10px;font-weight:700;color:var(--gray-300)">廣告帳號</div>
@@ -2738,10 +2731,6 @@ function renderFinanceTable() {
   document.getElementById('fin-kpi-cpc').textContent = '—';
   document.getElementById('fin-kpi-msg').textContent = '—';
   document.getElementById('fin-kpi-cpm').textContent = '—';
-  document.getElementById('fin-acct-count').textContent = filtered.length;
-  document.getElementById('fin-total-spend').textContent = '$' + fM(totalSpend);
-  document.getElementById('fin-total-markup').textContent = '$' + fM(Math.ceil(totalPlus - totalSpend));
-  document.getElementById('fin-total-plus').textContent = '$' + fM(Math.ceil(totalPlus));
 }
 
 function onRowMarkupChange(inp) {
@@ -2762,11 +2751,8 @@ function onRowMarkupChange(inp) {
     const m = finRowMarkups[r.acc.id] !== undefined ? finRowMarkups[r.acc.id] : (parseFloat(document.getElementById('financeMarkupDefault')?.value)||0);
     totalSpend += s; totalPlus += s*(1+m/100);
   });
-  document.getElementById('fin-total-spend').textContent = '$' + fM(totalSpend);
-  document.getElementById('fin-total-markup').textContent = '$' + fM(Math.ceil(totalPlus - totalSpend));
-  document.getElementById('fin-total-plus').textContent = '$' + fM(totalPlus);
   document.getElementById('fin-kpi-spend').textContent = '$' + fM(totalSpend);
-  document.getElementById('fin-kpi-plus').textContent = '$' + fM(totalPlus);
+  document.getElementById('fin-kpi-plus').textContent = '$' + fM(Math.ceil(totalPlus));
 }
 
 function downloadFinanceCsv() {
