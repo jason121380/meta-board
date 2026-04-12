@@ -2718,17 +2718,17 @@ async function loadAiAlerts() {
     const acctCol = {label:'帳戶', right:false, extra:'color:var(--gray-500);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap', fn:({c})=>c._accountName};
 
     const msgCols = [
-      acctCol, campCol,
+      campCol,
       {label:'花費', right:true, fn:({spend})=>`$${fM(spend)}`},
       {label:'私訊數', right:true, fn:({msgs})=>msgs>0?fN(msgs):'—'},
       {label:'私訊成本', right:true, fn:({msgCost})=>msgCost>0?'$'+fM(msgCost):'—'},
     ];
     const cpcCols = [
-      acctCol, campCol,
+      campCol,
       {label:'CPC', right:true, fn:({ci})=>+ci.cpc>0?'$'+fM(ci.cpc):'—'},
     ];
     const freqCols = [
-      acctCol, campCol,
+      campCol,
       {label:'頻次', right:true, extra:'', fn:({ci})=>+ci.frequency>0?`<span style="${+ci.frequency>5?'color:var(--orange);font-weight:600':''}">${(+ci.frequency).toFixed(1)}</span>`:'—'},
     ];
 
