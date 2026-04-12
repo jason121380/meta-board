@@ -3,113 +3,99 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FB Ads Manager</title>
+<title>LURE Meta Platform</title>
 <style>
-/* ── Notion Design System ─────────────────────────────────── */
+/* ── Design System (Google My Business style) ─────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap');
 :root {
-  --blue: #0075de;
-  --blue-dark: #005bab;
-  --blue-bg: #f2f9ff;
-  --navy: #213183;
-  --black: rgba(0,0,0,0.9);
-  --gray-500: #615d59;
-  --gray-300: #a39e98;
-  --warm-white: #f6f5f4;
-  --white: #fff;
-  --border: rgba(0,0,0,0.09);
-  --border-strong: rgba(0,0,0,0.15);
-  --green: #1aae39;
-  --green-bg: rgba(26,174,57,0.1);
-  --red: #e03e2d;
-  --red-bg: rgba(224,62,45,0.1);
-  --yellow: #dd5b00;
-  --yellow-bg: rgba(221,91,0,0.1);
-  --shadow-sm: rgba(0,0,0,0.04) 0px 4px 18px, rgba(0,0,0,0.025) 0px 2px 8px;
-  --shadow-md: rgba(0,0,0,0.01) 0px 1px 3px, rgba(0,0,0,0.02) 0px 3px 7px, rgba(0,0,0,0.02) 0px 7px 15px, rgba(0,0,0,0.04) 0px 14px 28px;
+  --orange: #FF6B2C;
+  --orange-dark: #E55A1C;
+  --orange-bg: #FFF5F0;
+  --orange-border: #FFE8D9;
+  --orange-muted: #B07A50;
+  --blue: #FF6B2C;
+  --blue-dark: #E55A1C;
+  --blue-bg: #FFF5F0;
+  --black: #1A1A1A;
+  --gray-500: #666666;
+  --gray-300: #AAAAAA;
+  --warm-white: #FAFAFA;
+  --white: #FFFFFF;
+  --border: #F0F0F0;
+  --border-strong: #E0E0E0;
+  --green: #2E7D32;
+  --green-bg: #E8F5E9;
+  --red: #C62828;
+  --red-bg: #FFEBEE;
+  --yellow: #E65100;
+  --yellow-bg: #FFF3E0;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 24px rgba(0,0,0,0.08);
   --sidebar-w: 220px;
-  --radius: 6px;
-  --radius-sm: 4px;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-pill: 50px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: var(--white); color: var(--black); font-size: 14px; line-height: 1.5;
+  font-family: "Noto Sans TC", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--warm-white); color: var(--black); font-size: 14px; line-height: 1.5;
 }
-a { color: var(--blue); text-decoration: none; }
+a { color: var(--orange); text-decoration: none; }
 
 /* ── Layout ────────────────────────────────────────────────── */
 .layout { display: flex; min-height: 100vh; }
 .sidebar {
-  width: var(--sidebar-w); background: var(--warm-white); border-right: 1px solid var(--border);
+  width: var(--sidebar-w); background: var(--white); border-right: 1px solid var(--border);
   display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh;
   overflow-y: auto; z-index: 100; transition: transform 0.2s;
 }
-.main { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; background: var(--white); }
+.main { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; background: var(--warm-white); }
 
 /* ── Sidebar ───────────────────────────────────────────────── */
 .sidebar-top {
-  padding: 16px 14px 10px; border-bottom: 1px solid var(--border);
+  padding: 20px 16px 14px; border-bottom: 1px solid var(--border);
   display: flex; align-items: center; gap: 8px;
 }
-.sidebar-logo { font-size: 14px; font-weight: 700; color: var(--black); letter-spacing: -0.2px; }
-.sidebar-logo .dot { color: var(--blue); }
-.sidebar-user {
-  padding: 10px 14px 8px; display: flex; align-items: center; gap: 8px;
-  border-bottom: 1px solid var(--border);
-}
-.user-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--blue-bg); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--blue); overflow: hidden; flex-shrink: 0; }
-.user-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.user-info { flex: 1; min-width: 0; }
-.user-name { font-size: 12px; font-weight: 600; color: var(--black); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.user-meta { font-size: 11px; color: var(--gray-300); }
-.fb-login-btn {
-  width: calc(100% - 28px); margin: 8px 14px; height: 30px; border-radius: var(--radius-sm);
-  background: #1877f2; color: #fff; border: none; font-size: 12px; font-weight: 600; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-}
-.fb-login-btn:hover { background: #1464cc; }
-.fb-logout-btn {
-  width: calc(100% - 28px); margin: 4px 14px 8px; height: 28px; border-radius: var(--radius-sm);
-  background: transparent; color: var(--gray-500); border: 1px solid var(--border); font-size: 11px; cursor: pointer;
-}
-.fb-logout-btn:hover { background: var(--white); color: var(--red); border-color: var(--red); }
-nav { padding: 8px 8px; flex: 1; }
-.nav-section { font-size: 10px; font-weight: 600; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.8px; padding: 8px 8px 4px; }
+.sidebar-logo { font-size: 15px; font-weight: 700; color: var(--black); letter-spacing: -0.2px; }
+.sidebar-logo .dot { color: var(--orange); }
+nav { padding: 10px 10px; flex: 1; }
+.nav-section { font-size: 10px; font-weight: 600; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.8px; padding: 10px 10px 5px; }
 .nav-item {
-  display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--radius-sm);
-  cursor: pointer; font-size: 13px; font-weight: 500; color: var(--gray-500); margin-bottom: 1px;
-  transition: all 0.1s; user-select: none;
+  display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: var(--radius);
+  cursor: pointer; font-size: 14px; font-weight: 500; color: var(--gray-500); margin-bottom: 2px;
+  transition: all 0.15s; user-select: none;
 }
-.nav-item:hover { background: var(--white); color: var(--black); }
-.nav-item.active { background: var(--white); color: var(--black); font-weight: 600; box-shadow: var(--shadow-sm); }
-.nav-icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+.nav-item:hover { background: var(--orange-bg); color: var(--orange); }
+.nav-item.active { background: var(--orange-bg); color: var(--orange); font-weight: 600; }
+.nav-icon { font-size: 17px; width: 22px; text-align: center; flex-shrink: 0; }
 
 /* ── Top Bar ───────────────────────────────────────────────── */
 .topbar {
-  height: 52px; padding: 0 24px; border-bottom: 1px solid var(--border);
+  height: 60px; padding: 0 24px; border-bottom: 1px solid var(--border);
   display: flex; align-items: center; gap: 12px; position: sticky; top: 0; background: var(--white); z-index: 50;
 }
-.page-title { font-size: 15px; font-weight: 700; color: var(--black); letter-spacing: -0.2px; }
+.page-title { font-size: 16px; font-weight: 700; color: var(--black); letter-spacing: -0.2px; }
 .topbar-spacer { flex: 1; }
 .topbar select, .topbar input[type=date] {
-  height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
-  font-size: 13px; color: var(--black); background: var(--white); cursor: pointer;
+  height: 36px; padding: 0 12px; border: 1.5px solid var(--border); border-radius: var(--radius);
+  font-size: 13px; color: var(--black); background: var(--white); cursor: pointer; font-family: inherit;
 }
-.topbar select:focus, .topbar input:focus { outline: none; border-color: var(--blue); }
+.topbar select:focus, .topbar input:focus { outline: none; border-color: var(--orange); }
 #datePreset { width: 130px; }
 .date-range-wrap { display: none; align-items: center; gap: 6px; }
 .date-range-wrap.show { display: flex; }
 .topbar-sep { width: 1px; height: 20px; background: var(--border); }
 
 /* ── Button ────────────────────────────────────────────────── */
-.btn { height: 32px; padding: 0 14px; border-radius: var(--radius-sm); border: 1px solid transparent; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.1s; }
-.btn-blue { background: var(--blue); color: #fff; border-color: var(--blue); }
-.btn-blue:hover { background: var(--blue-dark); }
+.btn { height: 36px; padding: 0 18px; border-radius: var(--radius-pill); border: 1.5px solid transparent; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; font-family: inherit; }
+.btn-blue { background: var(--orange); color: #fff; border-color: var(--orange); }
+.btn-blue:hover { background: var(--orange-dark); border-color: var(--orange-dark); }
 .btn-ghost { background: transparent; color: var(--black); border-color: var(--border); }
-.btn-ghost:hover { background: var(--warm-white); }
-.btn-sm { height: 26px; padding: 0 10px; font-size: 12px; }
-.btn-red { background: var(--red-bg); color: var(--red); border-color: transparent; }
-.btn-red:hover { background: rgba(224,62,45,0.18); }
+.btn-ghost:hover { background: var(--orange-bg); color: var(--orange); border-color: var(--orange-border); }
+.btn-sm { height: 30px; padding: 0 14px; font-size: 12px; }
+.btn-red { background: var(--red-bg); color: var(--red); border-color: transparent; border-radius: var(--radius-pill); }
+.btn-red:hover { background: #FFCDD2; }
 
 /* ── View ──────────────────────────────────────────────────── */
 .view { display: none; padding: 0; }
@@ -117,13 +103,12 @@ nav { padding: 8px 8px; flex: 1; }
 
 /* ── Stats ─────────────────────────────────────────────────── */
 .stats-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); gap: 1px;
-  background: var(--border); border-bottom: 1px solid var(--border);
-  overflow: hidden;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr));
+  gap: 12px; padding: 16px 16px 0; background: var(--warm-white);
 }
-.stat { background: var(--white); padding: 14px 16px; }
+.stat { background: var(--white); padding: 16px 20px; border-radius: 16px; border: 1px solid var(--border); }
 .stat-label { font-size: 11px; font-weight: 600; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.5px; }
-.stat-value { font-size: 20px; font-weight: 700; color: var(--black); margin-top: 3px; letter-spacing: -0.3px; font-variant-numeric: tabular-nums; }
+.stat-value { font-size: 22px; font-weight: 700; color: var(--black); margin-top: 4px; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
 .stat-sub { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
 
 /* ── Dashboard Two-Column ──────────────────────────────────── */
@@ -144,44 +129,44 @@ nav { padding: 8px 8px; flex: 1; }
   display: flex; align-items: center; gap: 8px; padding: 8px 12px;
   border-bottom: 1px solid var(--border); cursor: pointer; user-select: none;
 }
-.dash-acct-item:hover { background: rgba(0,0,0,0.02); }
-.dash-acct-item.active { background: var(--blue-bg); }
+.dash-acct-item:hover { background: var(--orange-bg); }
+.dash-acct-item.active { background: var(--orange-bg); }
 .dash-acct-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .dash-acct-dot.on { background: var(--green); }
 .dash-acct-dot.off { background: var(--gray-300); }
 .dash-acct-name { flex: 1; font-size: 12px; font-weight: 500; color: var(--black); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dash-acct-item.active .dash-acct-name { color: var(--blue); font-weight: 600; }
+.dash-acct-item.active .dash-acct-name { color: var(--orange); font-weight: 600; }
 .dash-acct-check { width: 14px; height: 14px; accent-color: var(--blue); flex-shrink: 0; }
 .dash-content { flex: 1; overflow-y: auto; }
 
 .acct-status-2 { color: var(--gray-300); }
 
 /* ── Tree Table ────────────────────────────────────────────── */
-.tree-wrap { border-top: none; border-left: none; border-right: none; border-bottom: none; overflow: hidden; flex: 1; }
-.tree-toolbar { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; background: var(--warm-white); }
-.tree-search { flex: 1; max-width: 260px; height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; background: var(--white); }
-.tree-search:focus { outline: none; border-color: var(--blue); }
+.tree-wrap { overflow: hidden; flex: 1; margin: 12px 16px 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--white); }
+.tree-toolbar { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; background: var(--white); border-radius: 16px 16px 0 0; }
+.tree-search { flex: 1; max-width: 260px; height: 34px; padding: 0 12px; border: 1.5px solid var(--border); border-radius: var(--radius-pill); font-size: 13px; background: var(--warm-white); font-family: inherit; }
+.tree-search:focus { outline: none; border-color: var(--orange); background: var(--white); }
 .tree-count { font-size: 12px; color: var(--gray-500); }
 .tree-actions { display: flex; gap: 6px; margin-left: auto; }
 
 table.tree { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.tree th {
-  padding: 9px 12px; text-align: left; font-size: 11px; font-weight: 600; color: var(--gray-300);
+  padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: var(--gray-300);
   text-transform: uppercase; letter-spacing: 0.5px; background: var(--warm-white);
   border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none;
   position: sticky; top: 0;
 }
-table.tree th:hover { color: var(--blue); }
+table.tree th:hover { color: var(--orange); }
 table.tree th.sorted-asc::after { content: ' ↑'; }
 table.tree th.sorted-desc::after { content: ' ↓'; }
-table.tree td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+table.tree td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 table.tree tr:last-child td { border-bottom: none; }
 table.tree tr.campaign-row { background: var(--white); }
-table.tree tr.campaign-row:hover td { background: #fafaf9; }
-table.tree tr.adset-row td { background: #fdfdfc; }
-table.tree tr.adset-row:hover td { background: #f9f8f7; }
-table.tree tr.ad-row td { background: #fefefe; }
-table.tree tr.ad-row:hover td { background: #fafaf9; }
+table.tree tr.campaign-row:hover td { background: #FEFAF7; }
+table.tree tr.adset-row td { background: #FFFCFA; }
+table.tree tr.adset-row:hover td { background: #FFF5F0; }
+table.tree tr.ad-row td { background: var(--white); }
+table.tree tr.ad-row:hover td { background: #FEFAF7; }
 table.tree tr { cursor: pointer; }
 table.tree tr.disabled-row { opacity: 0.5; }
 
@@ -303,48 +288,48 @@ input:checked + .slider:before { transform: translateX(14px); }
 /* ── Login Page ────────────────────────────────────────────── */
 #loginPage {
   position: fixed; inset: 0; z-index: 9999;
-  background: #f7f7f5;
+  background: var(--orange-bg);
   display: flex; align-items: center; justify-content: center;
 }
 #loginPage.hidden { display: none; }
 .login-card {
-  width: 400px; background: var(--white); border-radius: 12px;
-  border: 1px solid var(--border); padding: 48px 40px;
-  box-shadow: 0 2px 40px rgba(0,0,0,0.06);
+  width: 420px; background: var(--white); border-radius: 24px;
+  border: 1.5px solid var(--orange-border); padding: 52px 44px;
+  box-shadow: 0 8px 48px rgba(255,107,44,0.1);
   display: flex; flex-direction: column; align-items: center; text-align: center;
 }
 .login-logo {
-  font-size: 28px; font-weight: 800; color: var(--black); letter-spacing: -0.5px; margin-bottom: 6px;
+  font-size: 30px; font-weight: 800; color: var(--black); letter-spacing: -0.5px; margin-bottom: 6px;
 }
-.login-logo span { color: var(--blue); }
+.login-logo span { color: var(--orange); }
 .login-tagline { font-size: 13px; color: var(--gray-300); margin-bottom: 36px; }
 .login-divider { width: 100%; height: 1px; background: var(--border); margin-bottom: 24px; }
-.login-desc { font-size: 14px; color: var(--gray-500); margin-bottom: 24px; line-height: 1.6; }
+.login-desc { font-size: 14px; color: var(--gray-500); margin-bottom: 28px; line-height: 1.7; }
 .fb-login-big {
-  width: 100%; height: 46px; background: #1877f2; color: #fff; border: none;
-  border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer;
+  width: 100%; height: 50px; background: #1877f2; color: #fff; border: none;
+  border-radius: var(--radius-pill); font-size: 15px; font-weight: 700; cursor: pointer;
   display: flex; align-items: center; justify-content: center; gap: 10px;
-  transition: background 0.15s;
+  transition: background 0.15s; font-family: inherit;
 }
 .fb-login-big:hover { background: #1464cc; }
 .login-footer { font-size: 11px; color: var(--gray-300); margin-top: 28px; line-height: 1.6; }
 
 /* ── Topbar User Menu ──────────────────────────────────────── */
-.topbar-user { position: relative; display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 4px 8px; border-radius: var(--radius-sm); }
-.topbar-user:hover { background: var(--warm-white); }
-.topbar-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--blue-bg); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--blue); overflow: hidden; flex-shrink: 0; }
+.topbar-user { position: relative; display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 5px 10px; border-radius: var(--radius-pill); border: 1.5px solid var(--border); }
+.topbar-user:hover { background: var(--orange-bg); border-color: var(--orange-border); }
+.topbar-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--orange-bg); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--orange); overflow: hidden; flex-shrink: 0; }
 .topbar-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .topbar-username { font-size: 13px; font-weight: 600; color: var(--black); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-dropdown {
-  display: none; position: absolute; top: calc(100% + 6px); right: 0;
-  background: var(--white); border: 1px solid var(--border); border-radius: var(--radius);
-  box-shadow: var(--shadow-md); width: 200px; z-index: 999; padding: 6px;
+  display: none; position: absolute; top: calc(100% + 8px); right: 0;
+  background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow-md); width: 210px; z-index: 999; padding: 6px;
 }
 .user-dropdown.open { display: block; }
 .user-dropdown-name { padding: 8px 10px 6px; font-size: 12px; font-weight: 700; color: var(--black); border-bottom: 1px solid var(--border); margin-bottom: 4px; }
 .user-dropdown-meta { font-size: 11px; color: var(--gray-300); font-weight: 400; }
-.user-dropdown-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--radius-sm); font-size: 13px; cursor: pointer; color: var(--gray-500); }
-.user-dropdown-item:hover { background: var(--warm-white); color: var(--red); }
+.user-dropdown-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm); font-size: 13px; cursor: pointer; color: var(--gray-500); }
+.user-dropdown-item:hover { background: var(--orange-bg); color: var(--orange); }
 
 /* ── App (hidden until logged in) ──────────────────────────── */
 #appLayout.visible { display: flex !important; }
@@ -375,8 +360,8 @@ input:checked + .slider:before { transform: translateX(14px); }
 <!-- ── Login Page ───────────────────────────────────────────── -->
 <div id="loginPage">
   <div class="login-card">
-    <div class="login-logo">Meta<span>Board</span></div>
-    <div class="login-tagline">Facebook 廣告管理後台</div>
+    <div class="login-logo">LURE <span>META</span></div>
+    <div class="login-tagline">Meta 廣告管理平台</div>
     <div class="login-divider"></div>
     <p class="login-desc">使用你的 Facebook 帳號登入，即可查看並管理廣告帳戶的成效數據。</p>
     <button class="fb-login-big" onclick="fbLogin()">
@@ -396,23 +381,23 @@ input:checked + .slider:before { transform: translateX(14px); }
 <!-- ── Sidebar ─────────────────────────────────────────────── -->
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-top">
-    <div class="sidebar-logo">📊 FB Ads<span class="dot">.</span></div>
+    <div class="sidebar-logo">LURE <span class="dot">META</span></div>
   </div>
 
   <nav>
     <div class="nav-section">主選單</div>
     <div class="nav-item active" id="nav-dashboard" onclick="showView('dashboard')">
-      <span class="nav-icon">🏠</span> 儀表板
+      <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span> 儀表板
     </div>
     <div class="nav-item" id="nav-ai" onclick="showView('ai')">
-      <span class="nav-icon">🤖</span> AI 廣告分析
+      <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span> AI 廣告分析
     </div>
     <div class="nav-section" style="margin-top:8px">工具</div>
     <div class="nav-item" id="nav-launch" onclick="showView('launch')">
-      <span class="nav-icon">🚀</span> 快速上架
+      <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span> 快速上架
     </div>
     <div class="nav-item" id="nav-settings" onclick="showView('settings')">
-      <span class="nav-icon">⚙️</span> 設定
+      <span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> 設定
     </div>
   </nav>
 </aside>
@@ -494,7 +479,7 @@ input:checked + .slider:before { transform: translateX(14px); }
       <!-- Tree Table -->
       <div class="tree-wrap">
         <div class="tree-toolbar">
-          <input class="tree-search" id="treeSearch" placeholder="🔍 搜尋行銷活動..." oninput="renderTree()">
+          <input class="tree-search" id="treeSearch" placeholder="搜尋行銷活動..." oninput="renderTree()">
           <span class="tree-count" id="treeCount"></span>
           <div class="tree-actions">
             <button class="btn btn-ghost btn-sm" onclick="expandAll()">展開全部</button>
@@ -502,7 +487,7 @@ input:checked + .slider:before { transform: translateX(14px); }
           </div>
         </div>
         <div id="treeContainer">
-          <div class="empty-state"><div class="empty-icon">👈</div>從左側選擇廣告帳戶</div>
+          <div class="empty-state">從左側選擇廣告帳戶</div>
         </div>
       </div>
     </div>
@@ -520,7 +505,7 @@ input:checked + .slider:before { transform: translateX(14px); }
     <h2>智慧洞察</h2>
     <p class="sub" style="color:var(--gray-500);font-size:13px;margin-bottom:20px">基於您的廣告數據自動分析，提供優化建議</p>
     <div id="aiContent">
-      <div class="empty-state"><div class="empty-icon">🤖</div>請先在儀表板選擇廣告帳戶以載入分析</div>
+      <div class="empty-state">請先在儀表板選擇廣告帳戶以載入分析</div>
     </div>
   </div>
 </div>
@@ -593,7 +578,7 @@ input:checked + .slider:before { transform: translateX(14px); }
     <!-- Step 3 -->
     <div class="launch-step" id="launch-step3">
       <div style="text-align:center;padding:40px 0">
-        <div style="font-size:48px;margin-bottom:16px">🎉</div>
+        <div style="font-size:32px;font-weight:700;color:var(--orange);margin-bottom:16px">完成</div>
         <div style="font-size:20px;font-weight:700;margin-bottom:8px">上架成功！</div>
         <div id="launchResult" style="font-size:13px;color:var(--gray-500);margin-bottom:24px"></div>
         <button class="btn btn-blue" onclick="launchStep(1);document.getElementById('launchName').value=''">再次上架</button>
@@ -618,7 +603,7 @@ input:checked + .slider:before { transform: translateX(14px); }
           <h3 style="flex:1">廣告帳戶</h3>
           <button class="btn btn-blue btn-sm" onclick="saveSettings()">儲存</button>
         </div>
-        <input id="settingsSearch" placeholder="🔍 搜尋..." oninput="renderSettingsAccountList()" style="height:30px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;width:100%">
+        <input id="settingsSearch" placeholder="搜尋..." oninput="renderSettingsAccountList()" style="height:30px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px;width:100%">
         <div class="settings-left-toolbar-row">
           <span id="settingsSelCount" style="font-size:11px;color:var(--gray-500);flex:1"></span>
           <button class="btn btn-ghost btn-sm" onclick="settingsSort('name')" style="font-size:11px;padding:0 8px">名稱↕</button>
@@ -779,15 +764,24 @@ async function init() {
 async function loadAllAccounts() {
   const res = await fetch(`${API}/api/accounts`).then(r=>r.json());
   allAccounts = res.data || [];
+  // visibleAccounts = accounts enabled in settings (savedSelectedIds)
+  // If no savedSelectedIds yet, show all
   renderDashAcctList();
   renderSettingsAccountList();
   renderLaunchAccountSelect();
-  // Restore saved selection
-  if(savedSelectedIds.length) {
-    selectedAccounts = allAccounts.filter(a => savedSelectedIds.includes(a.id));
+  // Restore selected accounts from last session
+  const lastSelected = JSON.parse(localStorage.getItem('fb_active_accounts') || '[]');
+  if(lastSelected.length) {
+    selectedAccounts = getVisibleAccounts().filter(a => lastSelected.includes(a.id));
     renderDashAcctList();
-    await loadDashboard();
+    if(selectedAccounts.length) await loadDashboard();
   }
+}
+
+function getVisibleAccounts() {
+  // Accounts enabled in settings; if none configured show all
+  if(!savedSelectedIds.length) return allAccounts;
+  return allAccounts.filter(a => savedSelectedIds.includes(a.id));
 }
 
 // ── Date ───────────────────────────────────────────────────
@@ -813,20 +807,21 @@ function applyCustomDate() {
 // ── Dashboard Account Panel ─────────────────────────────────
 function renderDashAcctList() {
   const el = document.getElementById('dashAcctList');
-  if(!allAccounts.length) { el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--gray-300)">無廣告帳戶</div>'; return; }
+  const visible = getVisibleAccounts();
+  if(!visible.length) { el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--gray-300)">請先在設定中啟用帳戶</div>'; return; }
   const q = (document.getElementById('dashAcctSearch')?.value||'').toLowerCase();
-  const list = allAccounts.filter(a => !q || a.name.toLowerCase().includes(q) || a.id.includes(q));
+  const list = visible.filter(a => !q || a.name.toLowerCase().includes(q) || a.id.includes(q));
   el.innerHTML = list.map(a => {
     const isActive = selectedAccounts.some(s=>s.id===a.id);
     const dotClass = a.account_status===1?'on':'off';
     return `<div class="dash-acct-item${isActive?' active':''}" onclick="toggleAccount('${a.id}')">
       <div class="dash-acct-dot ${dotClass}"></div>
       <span class="dash-acct-name" title="${a.name}">${a.name}</span>
-      ${isActive?'<span style="font-size:10px;color:var(--blue)">✓</span>':''}
+      ${isActive?'<span style="font-size:10px;color:var(--orange)">✓</span>':''}
     </div>`;
   }).join('');
   const info = document.getElementById('dashAcctSelInfo');
-  if(info) info.textContent = selectedAccounts.length ? `已選 ${selectedAccounts.length} 個帳戶` : '點選帳戶加入儀表板';
+  if(info) info.textContent = selectedAccounts.length ? `已選 ${selectedAccounts.length} / ${visible.length} 個` : `共 ${visible.length} 個帳戶`;
 }
 
 async function toggleAccount(id) {
@@ -844,14 +839,15 @@ async function toggleAccount(id) {
   await loadDashboard();
 }
 function saveSelectedIds() {
-  savedSelectedIds = selectedAccounts.map(a=>a.id);
-  localStorage.setItem('fb_selected_accounts', JSON.stringify(savedSelectedIds));
+  // Save "active in dashboard" separately from "enabled in settings"
+  const activeIds = selectedAccounts.map(a=>a.id);
+  localStorage.setItem('fb_active_accounts', JSON.stringify(activeIds));
 }
 
 // ── Dashboard ───────────────────────────────────────────────
 async function loadDashboard() {
   if(!selectedAccounts.length) {
-    document.getElementById('treeContainer').innerHTML = '<div class="empty-state"><div class="empty-icon">📢</div>請新增廣告帳戶</div>';
+    document.getElementById('treeContainer').innerHTML = '<div class="empty-state">請新增廣告帳戶</div>';
     clearStats();
     return;
   }
@@ -950,7 +946,7 @@ function renderTree() {
   document.getElementById('treeCount').textContent = `${allCamps.length} 個活動`;
 
   if(!allCamps.length) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div>無符合條件的行銷活動</div>';
+    container.innerHTML = '<div class="empty-state">無符合條件的行銷活動</div>';
     return;
   }
 
@@ -1000,7 +996,7 @@ function renderTree() {
       <td onclick="event.stopPropagation()">
         <div style="display:flex;align-items:center;gap:6px">
           <label class="toggle"><input type="checkbox" ${camp.status==='ACTIVE'?'checked':''} onchange="toggleStatus('campaigns','${camp.id}',this,true)"><span class="slider"></span></label>
-          <button class="btn btn-ghost btn-sm" onclick="openBudget('campaign','${camp.id}','${camp.name.replace(/'/g,"\\'")}')">💰</button>
+          <button class="btn btn-ghost btn-sm" onclick="openBudget('campaign','${camp.id}','${camp.name.replace(/'/g,"\\'")}')">預算</button>
         </div>
       </td>
     </tr>`;
@@ -1036,7 +1032,7 @@ function renderTree() {
             <td onclick="event.stopPropagation()">
               <div style="display:flex;align-items:center;gap:6px">
                 <label class="toggle"><input type="checkbox" ${adset.status==='ACTIVE'?'checked':''} onchange="toggleStatus('adsets','${adset.id}',this,false)"><span class="slider"></span></label>
-                <button class="btn btn-ghost btn-sm" onclick="openBudget('adset','${adset.id}','${adset.name.replace(/'/g,"\\'")}')">💰</button>
+                <button class="btn btn-ghost btn-sm" onclick="openBudget('adset','${adset.id}','${adset.name.replace(/'/g,"\\'")}')">預算</button>
               </div>
             </td>
           </tr>`;
@@ -1292,10 +1288,10 @@ function saveSettings() {
   const checked = [...document.querySelectorAll('[data-id]:checked')].map(el=>el.dataset.id);
   savedSelectedIds = checked;
   localStorage.setItem('fb_selected_accounts', JSON.stringify(savedSelectedIds));
-  selectedAccounts = allAccounts.filter(a=>checked.includes(a.id));
+  // Remove from selectedAccounts any account no longer visible
+  selectedAccounts = selectedAccounts.filter(a => checked.includes(a.id));
   campData={}; adsetData={}; adData={};
   renderDashAcctList();
-  loadDashboard();
   showView('dashboard');
 }
 
@@ -1360,7 +1356,7 @@ async function doLaunch() {
 async function loadAiAnalysis() {
   const el = document.getElementById('aiContent');
   if(!selectedAccounts.length) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🤖</div>請先選擇廣告帳戶</div>';
+    el.innerHTML = '<div class="empty-state">請先選擇廣告帳戶</div>';
     return;
   }
   el.innerHTML = '<div class="loading"><div class="spinner"></div>分析中...</div>';
@@ -1368,7 +1364,7 @@ async function loadAiAnalysis() {
   // Gather all campaign data
   const allCamps = selectedAccounts.flatMap(acc => campData[acc.id]||[]);
   if(!allCamps.length) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div>無廣告資料可分析</div>';
+    el.innerHTML = '<div class="empty-state">無廣告資料可分析</div>';
     return;
   }
 
@@ -1381,39 +1377,39 @@ async function loadAiAnalysis() {
   let html = '';
 
   html += `<div class="ai-card info">
-    <h4>📊 帳戶概覽</h4>
+    <h4>帳戶概覽</h4>
     <p>共 ${allCamps.length} 個行銷活動，執行中 <strong>${active.length}</strong> 個、已暫停 <strong>${paused.length}</strong> 個</p>
   </div>`;
 
   if(highSpend.length) {
     html += `<div class="ai-card warn">
-      <h4>💰 高消耗行銷活動</h4>
+      <h4>高消耗行銷活動</h4>
       <p>${highSpend.map(c=>`<strong>${c.name}</strong>（花費 ${fM(getIns(c).spend)} TWD）`).join('、')}。建議檢視這些活動的 ROAS 是否符合預期。</p>
     </div>`;
   }
 
   if(lowCtr.length) {
     html += `<div class="ai-card warn">
-      <h4>⚠️ CTR 偏低（< 1%）</h4>
+      <h4>CTR 偏低（< 1%）</h4>
       <p>${lowCtr.map(c=>`<strong>${c.name}</strong>（CTR ${fP(getIns(c).ctr)}）`).join('、')}。建議測試新的廣告素材或優化受眾定向。</p>
     </div>`;
   }
 
   if(highCtr.length) {
     html += `<div class="ai-card good">
-      <h4>✅ 高效能行銷活動（CTR > 3%）</h4>
+      <h4>高效能行銷活動（CTR > 3%）</h4>
       <p>${highCtr.map(c=>`<strong>${c.name}</strong>（CTR ${fP(getIns(c).ctr)}）`).join('、')}。這些活動表現優異，可考慮增加預算。</p>
     </div>`;
   }
 
   if(paused.length > active.length) {
     html += `<div class="ai-card info">
-      <h4>💡 暫停活動偏多</h4>
+      <h4>暫停活動偏多</h4>
       <p>暫停中的活動（${paused.length} 個）多於執行中（${active.length} 個）。可以檢視是否有可重新啟動的優質活動。</p>
     </div>`;
   }
 
-  el.innerHTML = html || '<div class="empty-state"><div class="empty-icon">✅</div>目前無需特別關注的事項</div>';
+  el.innerHTML = html || '<div class="empty-state">目前無需特別關注的事項</div>';
 }
 
 // ── Navigation ───────────────────────────────────────────────
