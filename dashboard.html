@@ -730,8 +730,7 @@ input:checked + .slider:before { transform: translateX(14px); }
     <div class="dash-accounts-panel">
       <div class="dash-accounts-header">
         <h4>廣告帳戶</h4>
-        <input class="dash-acct-search" id="dashAcctSearch" placeholder="搜尋帳戶..." oninput="renderDashAcctList()">
-        <div class="dash-acct-sel-info" id="dashAcctSelInfo">尚未選擇帳戶</div>
+        <div id="dashAcctSelInfo" style="display:none"></div>
       </div>
       <div class="dash-acct-list" id="dashAcctList">
         <div class="loading"><div class="spinner"></div></div>
@@ -1585,8 +1584,7 @@ function renderDashAcctList() {
   const el = document.getElementById('dashAcctList');
   const visible = getVisibleAccounts();
   if(!visible.length) { el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--gray-300)">請先在設定中啟用帳戶</div>'; return; }
-  const q = (document.getElementById('dashAcctSearch')?.value||'').toLowerCase();
-  let list = visible.filter(a => !q || a.name.toLowerCase().includes(q) || a.id.includes(q));
+  let list = visible.slice();
   list = list.sort((a,b) => {
     const ia = acctOrder.indexOf(a.id), ib = acctOrder.indexOf(b.id);
     if(ia>=0 && ib>=0) return ia-ib;
