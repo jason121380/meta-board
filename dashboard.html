@@ -250,7 +250,7 @@ input:checked + .slider:before { transform: translateX(14px); }
 
 /* ── Finance View ──────────────────────────────────────────── */
 .finance-body { display: flex; flex: 1; overflow: hidden; }
-.finance-acct-panel { width: 240px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--white); overflow: hidden; }
+.finance-acct-panel { width: 480px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--white); overflow: hidden; }
 .finance-acct-header { padding: 12px 14px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .finance-acct-title { font-size: 11px; font-weight: 700; color: var(--gray-300); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
 .finance-acct-list { flex: 1; overflow-y: auto; }
@@ -864,8 +864,12 @@ input:checked + .slider:before { transform: translateX(14px); }
   <div class="finance-body">
     <!-- Left: Account Summary Panel -->
     <div class="finance-acct-panel">
-      <!-- Account List Header -->
-      <div style="padding:8px 14px;border-bottom:1px solid var(--border);background:var(--warm-white);font-size:10px;font-weight:700;color:var(--gray-300);text-transform:uppercase;letter-spacing:0.5px">廣告帳號</div>
+      <!-- Account Table Header -->
+      <div style="display:flex;padding:7px 14px;border-bottom:1px solid var(--border);background:var(--warm-white);font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.5px;user-select:none">
+        <span style="flex:1">廣告帳號</span>
+        <span style="width:110px;text-align:right">花費</span>
+        <span style="width:120px;text-align:right">花費+%</span>
+      </div>
       <!-- Account List -->
       <div class="finance-acct-list" id="financeAcctList">
         <div class="loading" style="padding:20px"><div class="spinner"></div></div>
@@ -877,14 +881,6 @@ input:checked + .slider:before { transform: translateX(14px); }
         <div class="finance-kpi"><div class="finance-kpi-val" id="fin-kpi-spend">—</div><div class="finance-kpi-label">總花費</div></div>
         <div class="finance-kpi-sep"></div>
         <div class="finance-kpi"><div class="finance-kpi-val" id="fin-kpi-plus">—</div><div class="finance-kpi-label">總花費+%</div></div>
-        <div class="finance-kpi-sep"></div>
-        <div class="finance-kpi"><div class="finance-kpi-val" id="fin-kpi-clicks">—</div><div class="finance-kpi-label">平均點擊次數</div></div>
-        <div class="finance-kpi-sep"></div>
-        <div class="finance-kpi"><div class="finance-kpi-val" id="fin-kpi-cpc">—</div><div class="finance-kpi-label">平均點擊成本</div></div>
-        <div class="finance-kpi-sep"></div>
-        <div class="finance-kpi"><div class="finance-kpi-val" id="fin-kpi-msg">—</div><div class="finance-kpi-label">平均私訊數</div></div>
-        <div class="finance-kpi-sep"></div>
-        <div class="finance-kpi"><div class="finance-kpi-val" id="fin-kpi-cpm">—</div><div class="finance-kpi-label">平均私訊成本</div></div>
       </div>
       <div class="finance-toolbar">
         <input id="financeSearch" placeholder="搜尋活動名稱..." oninput="renderFinanceTable()" style="flex:1;height:32px;padding:0 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit">
@@ -2617,22 +2613,22 @@ function renderFinanceAcctList(accounts) {
   const totalPlus = accounts.reduce((s,a)=>s+getAcctPlus(a.id),0);
 
   const dataLoaded = accounts.every(a => finInsightData[a.id] !== undefined || finCampData[a.id] !== undefined);
-  const allRow = `<div class="finance-acct-item ${finSelectedAcctIds.length===0?'active':''}" onclick="finSelectAcct('__all__')">
-    <div style="flex:1;min-width:0">
-      <div class="finance-acct-name">全部帳戶</div>
-      ${dataLoaded?`<div style="font-size:11px;color:var(--gray-400);margin-top:3px"><span style="color:var(--gray-500)">花費</span> $${fM(totalSpend)}</div><div style="font-size:11px;color:var(--orange);font-weight:600"><span style="color:var(--gray-500);font-weight:400">含%</span> $${fM(Math.ceil(totalPlus))}</div>`:'<div style="font-size:11px;color:var(--gray-300);margin-top:2px">載入中...</div>'}
-    </div>
+  const isAllActive = finSelectedAcctIds.length === 0;
+  const allRow = `<div class="finance-acct-item ${isAllActive?'active':''}" onclick="finSelectAcct('__all__')" style="display:flex;align-items:center;padding:9px 14px">
+    <div style="flex:1;min-width:0;font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">全部帳戶</div>
+    <div style="width:110px;text-align:right;font-size:13px;font-variant-numeric:tabular-nums">${dataLoaded?'$'+fM(totalSpend):'—'}</div>
+    <div style="width:120px;text-align:right;font-size:13px;font-weight:700;color:var(--orange);font-variant-numeric:tabular-nums">${dataLoaded?'$'+fM(Math.ceil(totalPlus)):'—'}</div>
   </div>`;
 
   const rows = accounts.map((acc) => {
     const spend = getAcctSpend(acc.id);
     const plus = getAcctPlus(acc.id);
     const loaded = finInsightData[acc.id] !== undefined || finCampData[acc.id] !== undefined;
-    return `<div class="finance-acct-item ${finSelectedAcctIds.includes(acc.id)?'active':''}" onclick="finSelectAcct('${acc.id}')">
-      <div style="flex:1;min-width:0">
-        <div class="finance-acct-name" title="${acc.name}">${acc.name}</div>
-        ${loaded?`<div style="font-size:11px;color:var(--gray-400);margin-top:3px"><span style="color:var(--gray-500)">花費</span> $${fM(spend)}</div><div style="font-size:11px;color:var(--orange);font-weight:600"><span style="color:var(--gray-500);font-weight:400">含%</span> $${fM(Math.ceil(plus))}</div>`:'<div style="font-size:11px;color:var(--gray-300);margin-top:2px">載入中...</div>'}
-      </div>
+    const isActive = finSelectedAcctIds.includes(acc.id);
+    return `<div class="finance-acct-item ${isActive?'active':''}" onclick="finSelectAcct('${acc.id}')" style="display:flex;align-items:center;padding:9px 14px">
+      <div style="flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${acc.name}">${acc.name}</div>
+      <div style="width:110px;text-align:right;font-size:13px;font-variant-numeric:tabular-nums">${loaded?'$'+fM(spend):'<span style="color:var(--gray-300)">…</span>'}</div>
+      <div style="width:120px;text-align:right;font-size:13px;font-weight:600;color:var(--orange);font-variant-numeric:tabular-nums">${loaded?'$'+fM(Math.ceil(plus)):'<span style="color:var(--gray-300)">…</span>'}</div>
     </div>`;
   }).join('');
 
@@ -2760,10 +2756,6 @@ function renderFinanceTable() {
     const kpiPlus = kpiSpend * (1 + defaultMarkup/100);
     document.getElementById('fin-kpi-spend').textContent = '$' + fM(kpiSpend);
     document.getElementById('fin-kpi-plus').textContent = '$' + fM(Math.ceil(kpiPlus));
-    document.getElementById('fin-kpi-clicks').textContent = '—';
-    document.getElementById('fin-kpi-cpc').textContent = '—';
-    document.getElementById('fin-kpi-msg').textContent = '—';
-    document.getElementById('fin-kpi-cpm').textContent = '—';
     return;
   }
 
@@ -2837,10 +2829,6 @@ function renderFinanceTable() {
 
   document.getElementById('fin-kpi-spend').textContent = '$' + fM(totalSpend);
   document.getElementById('fin-kpi-plus').textContent = '$' + fM(Math.ceil(totalPlus));
-  document.getElementById('fin-kpi-clicks').textContent = '—';
-  document.getElementById('fin-kpi-cpc').textContent = '—';
-  document.getElementById('fin-kpi-msg').textContent = '—';
-  document.getElementById('fin-kpi-cpm').textContent = '—';
 }
 
 function onRowMarkupChange(inp) {
