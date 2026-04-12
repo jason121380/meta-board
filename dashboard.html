@@ -227,9 +227,12 @@ input:checked + .slider:before { transform: translateX(14px); }
 .settings-acct-header-row { display: flex; align-items: center; gap: 8px; }
 .settings-acct-title { font-size: 14px; font-weight: 700; color: var(--black); flex: 1; }
 .settings-acct-list { flex: 1; overflow-y: auto; }
-.settings-acct-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--white); }
+.settings-acct-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--white); cursor: pointer; user-select: none; }
 .settings-acct-item:hover { background: var(--orange-bg); }
-.settings-acct-item input[type=checkbox] { accent-color: var(--orange); width: 15px; height: 15px; flex-shrink: 0; }
+/* Custom white-check orange checkbox */
+.custom-cb { appearance: none; -webkit-appearance: none; width: 16px; height: 16px; border: 2px solid var(--border); border-radius: 4px; background: var(--white); cursor: pointer; flex-shrink: 0; position: relative; transition: background 0.15s, border-color 0.15s; }
+.custom-cb:checked { background: var(--orange); border-color: var(--orange); }
+.custom-cb:checked::after { content: ''; position: absolute; left: 3px; top: 0px; width: 5px; height: 9px; border: 2px solid #fff; border-top: none; border-left: none; transform: rotate(45deg); }
 .account-list-name { flex: 1; font-size: 13px; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-list-id { font-size: 11px; color: var(--gray-300); }
 .account-list-status { font-size: 11px; padding: 2px 6px; border-radius: 9999px; font-weight: 600; flex-shrink: 0; }
@@ -475,6 +478,8 @@ input:checked + .slider:before { transform: translateX(14px); }
         <div class="stat"><div class="stat-label">頻率</div><div class="stat-value" id="st-freq">—</div></div>
         <div class="stat"><div class="stat-label">購買數</div><div class="stat-value" id="st-purchase">—</div></div>
         <div class="stat"><div class="stat-label">名單數</div><div class="stat-value" id="st-lead">—</div></div>
+        <div class="stat"><div class="stat-label">私訊數</div><div class="stat-value" id="st-msg">—</div></div>
+        <div class="stat"><div class="stat-label">私訊成本</div><div class="stat-value" id="st-cpm-msg">—</div></div>
       </div>
 
       <!-- Tree Table -->
@@ -690,6 +695,8 @@ let allAccounts = [];           // All FB ad accounts
 let selectedAccounts = [];      // Currently selected account IDs
 let savedSelectedIds = JSON.parse(localStorage.getItem('fb_selected_accounts') || '[]');
 let filterActiveOnly = localStorage.getItem('filter_active_only') !== 'false'; // default true
+let acctOrder = JSON.parse(localStorage.getItem('acct_order') || '[]'); // drag-sort order
+let _dragId = null;
 let campData = {};              // { accountId: [campaigns] }
 let adsetData = {};             // { campaignId: [adsets] }
 let adData = {};                // { adsetId: [ads] }
@@ -842,11 +849,23 @@ function renderDashAcctList() {
   const visible = getVisibleAccounts();
   if(!visible.length) { el.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--gray-300)">請先在設定中啟用帳戶</div>'; return; }
   const q = (document.getElementById('dashAcctSearch')?.value||'').toLowerCase();
-  const list = visible.filter(a => !q || a.name.toLowerCase().includes(q) || a.id.includes(q));
+  let list = visible.filter(a => !q || a.name.toLowerCase().includes(q) || a.id.includes(q));
+  // Apply custom drag-sort order
+  list = list.sort((a,b) => {
+    const ia = acctOrder.indexOf(a.id), ib = acctOrder.indexOf(b.id);
+    if(ia>=0 && ib>=0) return ia-ib;
+    if(ia>=0) return -1; if(ib>=0) return 1;
+    return 0;
+  });
   el.innerHTML = list.map(a => {
     const isActive = selectedAccounts.some(s=>s.id===a.id);
     const dotClass = a.account_status===1?'on':'off';
-    return `<div class="dash-acct-item${isActive?' active':''}" onclick="selectAccount('${a.id}')">
+    return `<div class="dash-acct-item${isActive?' active':''}" draggable="true"
+        onclick="selectAccount('${a.id}')"
+        ondragstart="dragStart(event,'${a.id}')"
+        ondragover="dragOver(event)"
+        ondrop="dragDrop(event,'${a.id}')"
+        ondragend="dragEnd()">
       <div class="dash-acct-dot ${dotClass}"></div>
       <span class="dash-acct-name" title="${a.name}">${a.name}</span>
     </div>`;
@@ -890,7 +909,7 @@ async function loadDashboard() {
 
 async function loadOverviewStats() {
   const dp = getDateParams();
-  let totals = { spend:0, impressions:0, reach:0, clicks:0, purchase:0, lead:0 };
+  let totals = { spend:0, impressions:0, reach:0, clicks:0, purchase:0, lead:0, msg:0 };
   let ctrVals=[], cpcVals=[], cpmVals=[], freqVals=[];
   await Promise.all(selectedAccounts.map(async acc => {
     const res = await fetch(`${API}/api/accounts/${acc.id}/insights?${dp}`).then(r=>r.json());
@@ -906,6 +925,8 @@ async function loadOverviewStats() {
     (i.actions||[]).forEach(a=>{
       if(a.action_type==='purchase') totals.purchase += +a.value;
       if(a.action_type==='lead') totals.lead += +a.value;
+      if(['onsite_conversion.messaging_conversation_started_7d','messaging_conversation_started_7d','onsite_conversion.total_messaging_connection'].includes(a.action_type))
+        totals.msg += +a.value;
     });
   }));
   const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
@@ -919,10 +940,12 @@ async function loadOverviewStats() {
   document.getElementById('st-freq').textContent = fF(avg(freqVals));
   document.getElementById('st-purchase').textContent = fN(totals.purchase);
   document.getElementById('st-lead').textContent = fN(totals.lead);
+  document.getElementById('st-msg').textContent = fN(totals.msg);
+  document.getElementById('st-cpm-msg').textContent = totals.msg > 0 ? fM(totals.spend / totals.msg) : '—';
 }
 
 function clearStats() {
-  ['spend','imp','reach','clicks','ctr','cpc','cpm','freq','purchase','lead'].forEach(k => {
+  ['spend','imp','reach','clicks','ctr','cpc','cpm','freq','purchase','lead','msg','cpm-msg'].forEach(k => {
     document.getElementById('st-'+k).textContent = '—';
   });
 }
@@ -1269,15 +1292,21 @@ function renderSettingsAcctList() {
   if(!g) return;
   const q = (document.getElementById('settingsSearch')?.value||'').toLowerCase();
   let list = g.accounts.filter(a => !q || a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q));
-  list = list.sort((a,b) => a.name.localeCompare(b.name,'zh-TW'));
+  // Apply custom order: ordered IDs first, then remainder alpha
+  list = list.sort((a,b) => {
+    const ia = acctOrder.indexOf(a.id), ib = acctOrder.indexOf(b.id);
+    if(ia>=0 && ib>=0) return ia-ib;
+    if(ia>=0) return -1; if(ib>=0) return 1;
+    return a.name.localeCompare(b.name,'zh-TW');
+  });
   // Build current checked set from DOM + savedSelectedIds
   const domChecked = new Set([...document.querySelectorAll('[data-id]:checked')].map(e=>e.dataset.id));
   const checkedIds = new Set([...savedSelectedIds, ...domChecked]);
   el.innerHTML = list.map(a => {
     const checked = checkedIds.has(a.id);
     const statusLabel = acctStatusLabel(a.account_status);
-    return `<div class="settings-acct-item">
-      <input type="checkbox" ${checked?'checked':''} id="set-${a.id}" data-id="${a.id}" onchange="updateSelCount();renderSettingsBmList()">
+    return `<div class="settings-acct-item" onclick="toggleAcctCheck('${a.id}')">
+      <input type="checkbox" class="custom-cb" ${checked?'checked':''} id="set-${a.id}" data-id="${a.id}" onclick="event.stopPropagation()" onchange="updateSelCount();renderSettingsBmList()">
       <div style="flex:1;min-width:0">
         <div class="account-list-name">${a.name}</div>
         <div class="account-list-id">${a.id}</div>
@@ -1286,6 +1315,11 @@ function renderSettingsAcctList() {
     </div>`;
   }).join('');
   updateSelCount();
+}
+
+function toggleAcctCheck(id) {
+  const cb = document.getElementById(`set-${id}`);
+  if(cb) { cb.checked = !cb.checked; updateSelCount(); renderSettingsBmList(); }
 }
 
 function settingsBmSelectAll(checked) {
@@ -1575,6 +1609,50 @@ async function loadAiAnalysis() {
 }
 
 // ── Navigation ───────────────────────────────────────────────
+// ── Drag to Sort ────────────────────────────────────────────
+function dragStart(e, id) {
+  _dragId = id;
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.style.opacity = '0.4';
+}
+function dragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.style.background = 'var(--orange-bg)';
+}
+function dragDrop(e, targetId) {
+  e.preventDefault();
+  e.currentTarget.style.background = '';
+  if(!_dragId || _dragId === targetId) return;
+  // Get current order from the rendered list
+  const items = [...document.querySelectorAll('.dash-acct-item,[data-drag-id]')];
+  const ids = items.map(el => {
+    const cb = el.querySelector('[data-id]');
+    return cb ? cb.dataset.id : el.dataset.dragId || el.querySelector('.dash-acct-dot')?.nextElementSibling?.getAttribute('title');
+  }).filter(Boolean);
+  // Build order from current rendered order
+  const currentOrder = [...document.getElementById('dashAcctList').querySelectorAll('[draggable]')].map(el => {
+    const onclick = el.getAttribute('onclick') || '';
+    const m = onclick.match(/'([^']+)'/);
+    return m ? m[1] : null;
+  }).filter(Boolean);
+  const fromIdx = currentOrder.indexOf(_dragId);
+  const toIdx = currentOrder.indexOf(targetId);
+  if(fromIdx < 0 || toIdx < 0) return;
+  currentOrder.splice(fromIdx, 1);
+  currentOrder.splice(toIdx, 0, _dragId);
+  acctOrder = currentOrder;
+  localStorage.setItem('acct_order', JSON.stringify(acctOrder));
+  renderDashAcctList();
+}
+function dragEnd() {
+  _dragId = null;
+  document.querySelectorAll('.dash-acct-item,[data-drag-id]').forEach(el => {
+    el.style.opacity = '';
+    el.style.background = '';
+  });
+}
+
 function showView(name) {
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
