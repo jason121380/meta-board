@@ -360,6 +360,32 @@ input:checked + .slider:before { transform: translateX(14px); }
 
 /* ── App (hidden until logged in) ──────────────────────────── */
 #appLayout.visible { display: flex !important; }
+
+/* ── AI Chat Bubble ─────────────────────────────────────────── */
+#aiChatBubble { position: fixed; bottom: 24px; right: 24px; width: 52px; height: 52px; background: var(--orange); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 16px rgba(255,107,44,0.4); z-index: 500; transition: transform 0.2s, box-shadow 0.2s; }
+#aiChatBubble:hover { transform: scale(1.08); box-shadow: 0 6px 20px rgba(255,107,44,0.5); }
+#aiChatBubble svg { color: #fff; }
+#aiChatPanel { position: fixed; top: 0; right: -420px; width: 420px; height: 100vh; background: var(--white); border-left: 1px solid var(--border); box-shadow: -4px 0 24px rgba(0,0,0,0.08); z-index: 600; display: flex; flex-direction: column; transition: right 0.3s cubic-bezier(0.4,0,0.2,1); }
+#aiChatPanel.open { right: 0; }
+.chat-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.chat-header-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+.chat-header-title { font-size: 15px; font-weight: 700; color: var(--black); flex: 1; }
+.chat-header-close { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--gray-300); }
+.chat-header-close:hover { background: var(--warm-white); color: var(--black); }
+.chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.chat-msg { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 13px; line-height: 1.6; word-break: break-word; }
+.chat-msg.user { background: var(--orange); color: #fff; border-radius: 16px 16px 4px 16px; align-self: flex-end; }
+.chat-msg.model { background: var(--warm-white); color: var(--black); border-radius: 16px 16px 16px 4px; align-self: flex-start; border: 1px solid var(--border); }
+.chat-msg.loading { color: var(--gray-300); font-style: italic; }
+.chat-presets { padding: 0 16px 12px; display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
+.chat-preset-chip { font-size: 11px; padding: 5px 10px; border: 1.5px solid var(--orange-border); border-radius: 9999px; cursor: pointer; color: var(--orange); background: var(--orange-bg); font-weight: 500; white-space: nowrap; }
+.chat-preset-chip:hover { background: var(--orange); color: #fff; }
+.chat-input-row { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0; }
+.chat-input { flex: 1; border: 1.5px solid var(--border); border-radius: var(--radius); padding: 8px 12px; font-size: 13px; font-family: inherit; resize: none; min-height: 40px; max-height: 120px; outline: none; line-height: 1.5; }
+.chat-input:focus { border-color: var(--orange); }
+.chat-send-btn { width: 36px; height: 36px; background: var(--orange); border: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+.chat-send-btn:hover { background: var(--orange-dark); }
+.chat-send-btn:disabled { background: var(--gray-300); cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -1879,6 +1905,120 @@ function saveFilterPref() {
 
 // ── Start ────────────────────────────────────────────────────
 init();
+</script>
+
+<!-- ── AI Chat Bubble ──────────────────────────────────────── -->
+<div id="aiChatBubble" onclick="toggleAiChat()" title="AI 廣告顧問">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+</div>
+
+<div id="aiChatPanel">
+  <div class="chat-header">
+    <div class="chat-header-dot"></div>
+    <div class="chat-header-title">AI 廣告顧問</div>
+    <div style="font-size:11px;color:var(--gray-300)">Gemini Flash</div>
+    <div class="chat-header-close" onclick="toggleAiChat()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </div>
+  </div>
+  <div class="chat-messages" id="chatMessages">
+    <div class="chat-msg model">你好！我是 LURE 的 AI 廣告顧問。可以問我廣告成效分析、優化建議或預算分配策略。</div>
+  </div>
+  <div class="chat-presets" id="chatPresets">
+    <span class="chat-preset-chip" onclick="sendPreset(this.textContent)">目前哪個帳戶花費最高？</span>
+    <span class="chat-preset-chip" onclick="sendPreset(this.textContent)">CTR 偏低的活動如何優化？</span>
+    <span class="chat-preset-chip" onclick="sendPreset(this.textContent)">私訊成本如何降低？</span>
+    <span class="chat-preset-chip" onclick="sendPreset(this.textContent)">哪些活動值得增加預算？</span>
+    <span class="chat-preset-chip" onclick="sendPreset(this.textContent)">幫我分析整體廣告表現</span>
+    <span class="chat-preset-chip" onclick="sendPreset(this.textContent)">CPC 偏高的原因？</span>
+  </div>
+  <div class="chat-input-row">
+    <textarea class="chat-input" id="chatInput" placeholder="輸入問題..." rows="1"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"
+      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
+    <button class="chat-send-btn" id="chatSendBtn" onclick="sendChat()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+// ── AI Chat ──────────────────────────────────────────────────
+let chatHistory = [];
+let chatOpen = false;
+
+function toggleAiChat() {
+  chatOpen = !chatOpen;
+  document.getElementById('aiChatPanel').classList.toggle('open', chatOpen);
+}
+
+function getAdContext() {
+  // Summarize current account/campaign data for AI context
+  const visible = getVisibleAccounts();
+  if(!visible.length) return '';
+  const lines = [`已啟用帳戶：${visible.length} 個`];
+  let totalSpend = 0, totalCamps = 0, activeCamps = 0;
+  visible.forEach(acc => {
+    const camps = campData[acc.id] || [];
+    totalCamps += camps.length;
+    activeCamps += camps.filter(c=>c.status==='ACTIVE').length;
+    const spend = camps.reduce((s,c)=>s+(+getIns(c).spend||0),0);
+    totalSpend += spend;
+    if(spend > 0) lines.push(`  - ${acc.name}：花費 $${fM(spend)}`);
+  });
+  lines.unshift(`總花費：$${fM(totalSpend)}，執行中活動 ${activeCamps}/${totalCamps} 個`);
+  return lines.join('\n');
+}
+
+function appendMsg(role, text, isLoading) {
+  const el = document.createElement('div');
+  el.className = `chat-msg ${role}${isLoading?' loading':''}`;
+  el.textContent = text;
+  const container = document.getElementById('chatMessages');
+  container.appendChild(el);
+  container.scrollTop = container.scrollHeight;
+  return el;
+}
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if(!text) return;
+  input.value = '';
+  input.style.height = 'auto';
+
+  appendMsg('user', text);
+  chatHistory.push({ role: 'user', text });
+  document.getElementById('chatPresets').style.display = 'none';
+
+  const btn = document.getElementById('chatSendBtn');
+  btn.disabled = true;
+  const loadingEl = appendMsg('model', '分析中...', true);
+
+  try {
+    const context = getAdContext();
+    const res = await fetch(`${API}/api/ai/chat`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ messages: chatHistory, context })
+    }).then(r=>r.json());
+
+    const reply = res.reply || res.detail || '無法取得回應';
+    loadingEl.textContent = reply;
+    loadingEl.classList.remove('loading');
+    chatHistory.push({ role: 'model', text: reply });
+  } catch(e) {
+    loadingEl.textContent = '連線失敗，請稍後再試';
+    loadingEl.classList.remove('loading');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function sendPreset(text) {
+  document.getElementById('chatInput').value = text;
+  sendChat();
+}
 </script>
 </body>
 </html>

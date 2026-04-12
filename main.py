@@ -15,6 +15,8 @@ APP_SECRET = os.getenv("FB_APP_SECRET")
 _ACCESS_TOKEN = os.getenv("FB_ACCESS_TOKEN")
 API_VERSION = os.getenv("FB_API_VERSION", "v21.0")
 BASE_URL = f"https://graph.facebook.com/{API_VERSION}"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 # Runtime token override (from FB Login)
 _runtime_token: Optional[str] = None
@@ -213,6 +215,58 @@ async def get_account_insights(account_id: str, date_preset: str = "last_30d"):
         "date_preset": date_preset,
     })
     return data
+
+
+# ── AI Chat (Gemini) ──────────────────────────────────────────
+from typing import List
+
+class ChatMessage(BaseModel):
+    role: str   # "user" | "model"
+    text: str
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage]
+    context: Optional[str] = None  # ad data summary from frontend
+
+@app.post("/api/ai/chat")
+async def ai_chat(req: ChatRequest):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=503, detail="Gemini API key not configured")
+
+    system_prompt = """你是 LURE 廣告代理商的 AI 廣告顧問，專門分析 Facebook / Meta 廣告成效。
+使用繁體中文回答。回答要簡潔、有洞察力、直接提供可執行的建議。
+專業術語：CTR（點擊率）、CPC（每次點擊成本）、CPM（每千次曝光成本）、ROAS（廣告投資報酬率）、私訊轉換。"""
+
+    if req.context:
+        system_prompt += f"\n\n目前廣告數據摘要：\n{req.context}"
+
+    # Build Gemini contents array
+    contents = []
+    for m in req.messages:
+        contents.append({
+            "role": m.role,
+            "parts": [{"text": m.text}]
+        })
+
+    payload = {
+        "system_instruction": {"parts": [{"text": system_prompt}]},
+        "contents": contents,
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 1024,
+        }
+    }
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(url, json=payload)
+    data = r.json()
+
+    if "error" in data:
+        raise HTTPException(status_code=400, detail=data["error"].get("message", "Gemini error"))
+
+    text = data["candidates"][0]["content"]["parts"][0]["text"]
+    return {"reply": text}
 
 
 if __name__ == "__main__":
