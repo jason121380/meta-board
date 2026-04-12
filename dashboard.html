@@ -588,17 +588,29 @@ input:checked + .slider:before { transform: translateX(14px); }
   <div class="topbar">
     <div class="page-title">設定</div>
   </div>
-  <div class="settings-wrap">
+  <div class="settings-wrap" style="max-width:800px">
     <div class="settings-section">
       <h3>顯示的廣告帳戶</h3>
       <p style="font-size:13px;color:var(--gray-500);margin-bottom:12px">勾選要在儀表板顯示的帳戶</p>
+
+      <!-- Toolbar -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <input id="settingsSearch" placeholder="🔍 搜尋帳戶..." oninput="renderSettingsAccountList()" style="flex:1;max-width:260px;height:32px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px">
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="settingsSort('name')">名稱排序</button>
+          <button class="btn btn-ghost btn-sm" onclick="settingsSort('status')">狀態排序</button>
+          <button class="btn btn-ghost btn-sm" onclick="selectAllAccounts()">全選</button>
+          <button class="btn btn-ghost btn-sm" onclick="deselectAllAccounts()">全消</button>
+        </div>
+      </div>
+
+      <!-- Table -->
       <div class="account-list" id="settingsAccountList">
         <div class="loading"><div class="spinner"></div>載入中</div>
       </div>
-      <div style="margin-top:12px;display:flex;gap:8px">
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
         <button class="btn btn-blue btn-sm" onclick="saveSettings()">儲存設定</button>
-        <button class="btn btn-ghost btn-sm" onclick="selectAllAccounts()">全選</button>
-        <button class="btn btn-ghost btn-sm" onclick="deselectAllAccounts()">全消</button>
+        <span id="settingsSelCount" style="font-size:12px;color:var(--gray-500)"></span>
       </div>
     </div>
   </div>
@@ -636,6 +648,13 @@ let dateConfig = { preset: 'last_30d', from: null, to: null };
 let currentLaunchStep = 1;
 
 // ── Format ─────────────────────────────────────────────────
+const ACCT_STATUS = {1:'正常',2:'停用',3:'欠費',7:'待審核',8:'待結算',9:'寬限期',100:'待關閉',101:'暫時不可用'};
+const ACCT_STATUS_COLOR = {1:'green',2:'red',3:'red',7:'yellow',8:'yellow',9:'yellow',100:'red',101:'yellow'};
+function acctStatusLabel(s) {
+  const label = ACCT_STATUS[s] || `狀態${s}`;
+  const color = ACCT_STATUS_COLOR[s] || 'yellow';
+  return `<span class="account-list-status" style="background:var(--${color}-bg);color:var(--${color})">${label}</span>`;
+}
 const fN = (n,d=0) => n == null || n==='' ? '—' : Number(n).toLocaleString('zh-TW',{minimumFractionDigits:d,maximumFractionDigits:d});
 const fM = n => fN(n,0);
 const fP = n => n==null||n==='' ? '—' : `${Number(n).toFixed(2)}%`;
@@ -771,6 +790,7 @@ function renderAccountDropdown() {
   list.innerHTML = allAccounts.map(a => {
     const checked = selectedAccounts.some(s=>s.id===a.id);
     const cls = a.account_status===1?'':'acct-status-2';
+    const statusTip = ACCT_STATUS[a.account_status]||`狀態${a.account_status}`;
     return `<div class="acct-item" onclick="toggleAccount('${a.id}')">
       <input type="checkbox" ${checked?'checked':''} id="acct-chk-${a.id}" onchange="toggleAccount('${a.id}')">
       <div class="acct-item-name ${cls}">${a.name}</div>
@@ -1170,23 +1190,60 @@ async function saveBudget() {
 }
 
 // ── Settings ────────────────────────────────────────────────
+let settingsSortKey = 'name', settingsSortDir = 'asc';
+
+function settingsSort(key) {
+  if(settingsSortKey === key) settingsSortDir = settingsSortDir==='asc'?'desc':'asc';
+  else { settingsSortKey = key; settingsSortDir = 'asc'; }
+  renderSettingsAccountList();
+}
+
 function renderSettingsAccountList() {
   const el = document.getElementById('settingsAccountList');
   if(!allAccounts.length) { el.innerHTML = '<div style="padding:16px;color:var(--gray-300);font-size:13px">無廣告帳戶</div>'; return; }
-  el.innerHTML = allAccounts.map(a => {
-    const checked = savedSelectedIds.includes(a.id);
-    const statusLabel = a.account_status===1?'<span class="account-list-status" style="background:var(--green-bg);color:var(--green)">啟用</span>':
-      a.account_status===2?'<span class="account-list-status" style="background:var(--red-bg);color:var(--red)">停用</span>':
-      `<span class="account-list-status" style="background:var(--yellow-bg);color:var(--yellow)">${a.account_status}</span>`;
-    return `<div class="account-list-item">
-      <input type="checkbox" ${checked?'checked':''} id="set-${a.id}" data-id="${a.id}">
+
+  const q = (document.getElementById('settingsSearch')?.value||'').toLowerCase();
+  let list = allAccounts.filter(a => !q || a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q));
+
+  // Sort
+  list = [...list].sort((a,b) => {
+    let va, vb;
+    if(settingsSortKey==='name') { va=a.name.toLowerCase(); vb=b.name.toLowerCase(); }
+    else { va=a.account_status; vb=b.account_status; }
+    if(va < vb) return settingsSortDir==='asc'?-1:1;
+    if(va > vb) return settingsSortDir==='asc'?1:-1;
+    return 0;
+  });
+
+  // Track checked state from DOM before re-render
+  const nowChecked = new Set([...document.querySelectorAll('[data-id]:checked')].map(el=>el.dataset.id));
+  const checkedIds = new Set([...savedSelectedIds, ...nowChecked]);
+
+  el.innerHTML = list.map(a => {
+    const checked = checkedIds.has(a.id);
+    const statusLabel = acctStatusLabel(a.account_status);
+    return `<div class="account-list-item" onclick="toggleSettingsItem('${a.id}')">
+      <input type="checkbox" ${checked?'checked':''} id="set-${a.id}" data-id="${a.id}" onclick="event.stopPropagation();updateSelCount()">
       <div style="flex:1">
         <div class="account-list-name">${a.name}</div>
-        <div class="account-list-id">${a.id}</div>
+        <div class="account-list-id">${a.id}${a.business?' · '+a.business.name:''}</div>
       </div>
       ${statusLabel}
     </div>`;
   }).join('');
+  updateSelCount();
+}
+
+function toggleSettingsItem(id) {
+  const cb = document.getElementById(`set-${id}`);
+  if(cb) { cb.checked = !cb.checked; updateSelCount(); }
+}
+
+function updateSelCount() {
+  const total = document.querySelectorAll('[data-id]').length;
+  const checked = document.querySelectorAll('[data-id]:checked').length;
+  const el = document.getElementById('settingsSelCount');
+  if(el) el.textContent = `已選 ${checked} / ${total} 個帳戶`;
 }
 
 function saveSettings() {
@@ -1199,14 +1256,15 @@ function saveSettings() {
   renderAccountDropdown();
   loadDashboard();
   showView('dashboard');
-  alert('✅ 設定已儲存');
 }
 
 function selectAllAccounts() {
   document.querySelectorAll('[data-id]').forEach(el => el.checked = true);
+  updateSelCount();
 }
 function deselectAllAccounts() {
   document.querySelectorAll('[data-id]').forEach(el => el.checked = false);
+  updateSelCount();
 }
 
 // ── Launch Account Select ───────────────────────────────────

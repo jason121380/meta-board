@@ -125,7 +125,7 @@ async def get_accounts():
     accounts = []
     next_url = f"{BASE_URL}/me/adaccounts"
     params = {
-        "fields": "id,name,account_status,currency,timezone_name",
+        "fields": "id,name,account_status,currency,timezone_name,business",
         "access_token": get_token(),
         "limit": "100"
     }
