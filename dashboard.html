@@ -916,11 +916,8 @@ input:checked + .slider:before { transform: translateX(14px); }
     </div>
     <!-- Right: KPIs + Table -->
     <div class="finance-main">
-      <div class="finance-kpi-row">
-        <div class="finance-kpi"><div class="finance-kpi-val" id="fin-kpi-spend">—</div><div class="finance-kpi-label">總花費</div></div>
-        <div class="finance-kpi-sep"></div>
-        <div class="finance-kpi"><div class="finance-kpi-val" id="fin-kpi-plus">—</div><div class="finance-kpi-label">總花費+%</div></div>
-      </div>
+      <div id="fin-kpi-spend" style="display:none"></div>
+      <div id="fin-kpi-plus" style="display:none"></div>
       <div class="finance-toolbar">
         <input id="financeSearch" placeholder="搜尋活動名稱..." oninput="renderFinanceTable()" style="flex:1;height:32px;padding:0 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit">
         <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--gray-500);cursor:pointer;white-space:nowrap">
