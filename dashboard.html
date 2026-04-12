@@ -782,7 +782,7 @@ input:checked + .slider:before { transform: translateX(14px); }
     <div class="topbar-spacer"></div>
     <div id="dpAi"></div>
     <div class="topbar-sep"></div>
-    <button class="btn btn-blue btn-sm" onclick="_cacheClear('ai');_cacheClear('ai_ins');aiCampData={};aiInsightData={};loadAiAnalysis()">重新分析</button>
+    <button class="btn btn-ghost btn-sm" title="重新分析" onclick="_cacheClear('ai');_cacheClear('ai_ins');aiCampData={};aiInsightData={};loadAiAnalysis()" style="padding:0 10px;font-size:16px">↻</button>
   </div>
   <div style="padding:20px 24px;overflow-y:auto;flex:1">
 
@@ -872,7 +872,7 @@ input:checked + .slider:before { transform: translateX(14px); }
     <div class="topbar-spacer"></div>
     <div id="dpAlert"></div>
     <div class="topbar-sep"></div>
-    <button class="btn btn-blue btn-sm" onclick="_cacheClear('alert');alertCampData={};loadAiAlerts()">重新分析</button>
+    <button class="btn btn-ghost btn-sm" title="重新分析" onclick="_cacheClear('alert');alertCampData={};loadAiAlerts()" style="padding:0 10px;font-size:16px">↻</button>
   </div>
   <div style="display:flex;flex:1;overflow:hidden">
     <!-- Account selector left panel -->
@@ -2624,17 +2624,27 @@ async function loadAiAlerts() {
   showEl('alertEmpty', 'none'); showEl('alertLoading', 'flex'); showEl('alertTextCards', 'none');
 
   const dp = getAlertDateParams();
+  let fetchError = false;
   await Promise.all(visible.map(async acc => {
     if(alertCampData[acc.id]) return;
     const cached = _cacheGet('alert', acc.id, dp);
     if(cached) { alertCampData[acc.id] = cached; return; }
-    const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
-    alertCampData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
-    _cacheSet('alert', acc.id, dp, alertCampData[acc.id]);
+    try {
+      const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
+      if(res.error) { fetchError = true; return; }
+      alertCampData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+      _cacheSet('alert', acc.id, dp, alertCampData[acc.id]);
+    } catch(e) { fetchError = true; }
   }));
 
   const allCamps = visible.flatMap(acc => alertCampData[acc.id] || []);
   showEl('alertLoading', 'none');
+
+  if(fetchError && !allCamps.length) {
+    showEl('alertEmpty', 'block');
+    document.getElementById('alertEmpty').textContent = '無法取得資料，請確認伺服器已啟動並重新整理';
+    return;
+  }
 
   if(!allCamps.length) {
     showEl('alertEmpty', 'block');
