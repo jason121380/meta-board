@@ -2827,7 +2827,7 @@ async function loadAiAlerts() {
     const cpcRows  = allRows.filter(r => r.tag.includes('CPC'));
     const freqRows = allRows.filter(r => r.tag.includes('頻次'));
 
-    const fbLink = (c) => { const act = (c._accountId||'').replace('act_',''); return act ? `<a href="https://www.facebook.com/adsmanager/manage/campaigns?act=${act}&selected_campaign_ids=${c.id}" target="_blank" style="margin-left:6px;color:var(--gray-300);font-size:11px;text-decoration:none;flex-shrink:0" title="開啟臉書後台">↗</a>` : ''; };
+    const fbLink = (c) => { const act = (c._accountId||'').replace('act_',''); return act ? `<a href="https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${act}&selected_campaign_ids=${c.id}" target="_blank" style="margin-left:6px;color:var(--gray-300);font-size:11px;text-decoration:none;flex-shrink:0" title="開啟臉書後台">↗</a>` : ''; };
     const campCol = {label:'行銷活動', right:false, extra:'', fn:({c})=>`<div style="display:flex;align-items:center;gap:0;max-width:220px"><span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${c.name}">${c.name}</span>${fbLink(c)}</div>`};
 
     _alertCols.msg = [
