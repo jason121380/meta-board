@@ -864,22 +864,7 @@ input:checked + .slider:before { transform: translateX(14px); }
   <div class="topbar">
     <div class="page-title">AI警示建議</div>
     <div class="topbar-spacer"></div>
-    <select id="alertDatePreset" onchange="onAlertDateChange()">
-      <option value="today">今天</option>
-      <option value="yesterday">昨天</option>
-      <option value="last_7d">近 7 天</option>
-      <option value="last_30d">近 30 天</option>
-      <option value="last_90d">近 90 天</option>
-      <option value="this_month" selected>本月</option>
-      <option value="last_month">上個月</option>
-      <option value="custom">自訂區間...</option>
-    </select>
-    <div class="date-range-wrap" id="alertDateRangeWrap">
-      <input type="date" id="alertDateFrom">
-      <span style="color:var(--gray-300)">—</span>
-      <input type="date" id="alertDateTo">
-      <button class="btn btn-blue btn-sm" onclick="applyAlertCustomDate()">套用</button>
-    </div>
+    <div id="dpAlert"></div>
     <div class="topbar-sep"></div>
     <button class="btn btn-blue btn-sm" onclick="_cacheClear('alert');alertCampData={};loadAiAlerts()">重新分析</button>
   </div>
@@ -1114,11 +1099,11 @@ let expandedCamps = new Set();  // expanded campaign IDs
 let expandedAdsets = new Set(); // expanded adset IDs
 let treeSort = { key: null, dir: 'desc' };
 let budgetTarget = null;
-let dateConfig = { preset: 'this_month', from: null, to: null };
-let aiDateConfig = { preset: 'this_month', from: null, to: null };
+let dateConfig = { preset: 'last_month', from: null, to: null };
+let aiDateConfig = { preset: 'last_month', from: null, to: null };
 let aiCampData = {}; // separate cache for AI view (keyed by accountId)
 let aiInsightData = {}; // account-level insights for AI view (accurate spend)
-let finDateConfig = { preset: 'this_month', from: null, to: null };
+let finDateConfig = { preset: 'last_month', from: null, to: null };
 let finCampData = {}; // separate cache for finance view
 let finInsightData = {}; // account-level insights (accurate total spend)
 let finSelectedAcctIds = []; // selected accounts in finance view (empty = all)
@@ -1463,22 +1448,22 @@ async function init() {
   // Initialize date pickers
   dpDash = new DatePicker('dpDash', {
     varName: 'dpDash',
-    defaultPreset: 'this_month',
+    defaultPreset: 'last_month',
     onApply: function(cfg) { dateConfig = cfg; refreshDashboard(); }
   });
   dpAi = new DatePicker('dpAi', {
     varName: 'dpAi',
-    defaultPreset: 'this_month',
+    defaultPreset: 'last_month',
     onApply: function(cfg) { aiDateConfig = cfg; aiCampData = {}; aiInsightData = {}; loadAiAnalysis(); }
   });
   dpAlert = new DatePicker('dpAlert', {
     varName: 'dpAlert',
-    defaultPreset: 'this_month',
+    defaultPreset: 'last_month',
     onApply: function(cfg) { alertDateConfig = cfg; alertCampData = {}; loadAiAlerts(); }
   });
   dpFin = new DatePicker('dpFin', {
     varName: 'dpFin',
-    defaultPreset: 'this_month',
+    defaultPreset: 'last_month',
     onApply: function(cfg) { finDateConfig = cfg; finCampData = {}; finInsightData = {}; loadFinance(); }
   });
   // Restore saved default markup
@@ -2488,7 +2473,7 @@ async function loadAiAnalysis() {
 
 // ── AI Alerts ────────────────────────────────────────────────
 let alertCampData = {};
-let alertDateConfig = { preset: 'this_month', from: null, to: null };
+let alertDateConfig = { preset: 'last_month', from: null, to: null };
 
 function onAlertDateChange() {
   const val = document.getElementById('alertDatePreset').value;
