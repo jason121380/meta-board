@@ -287,6 +287,55 @@ input:checked + .slider:before { transform: translateX(14px); }
   .hamburger { display: flex !important; }
 }
 .hamburger { display: none; position: fixed; top: 12px; left: 12px; z-index: 200; background: var(--blue); color: #fff; border: none; border-radius: var(--radius-sm); padding: 6px 10px; cursor: pointer; font-size: 16px; }
+
+/* ── Login Page ────────────────────────────────────────────── */
+#loginPage {
+  position: fixed; inset: 0; z-index: 9999;
+  background: #f7f7f5;
+  display: flex; align-items: center; justify-content: center;
+}
+#loginPage.hidden { display: none; }
+.login-card {
+  width: 400px; background: var(--white); border-radius: 12px;
+  border: 1px solid var(--border); padding: 48px 40px;
+  box-shadow: 0 2px 40px rgba(0,0,0,0.06);
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+}
+.login-logo {
+  font-size: 28px; font-weight: 800; color: var(--black); letter-spacing: -0.5px; margin-bottom: 6px;
+}
+.login-logo span { color: var(--blue); }
+.login-tagline { font-size: 13px; color: var(--gray-300); margin-bottom: 36px; }
+.login-divider { width: 100%; height: 1px; background: var(--border); margin-bottom: 24px; }
+.login-desc { font-size: 14px; color: var(--gray-500); margin-bottom: 24px; line-height: 1.6; }
+.fb-login-big {
+  width: 100%; height: 46px; background: #1877f2; color: #fff; border: none;
+  border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: background 0.15s;
+}
+.fb-login-big:hover { background: #1464cc; }
+.login-footer { font-size: 11px; color: var(--gray-300); margin-top: 28px; line-height: 1.6; }
+
+/* ── Topbar User Menu ──────────────────────────────────────── */
+.topbar-user { position: relative; display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 4px 8px; border-radius: var(--radius-sm); }
+.topbar-user:hover { background: var(--warm-white); }
+.topbar-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--blue-bg); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--blue); overflow: hidden; flex-shrink: 0; }
+.topbar-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.topbar-username { font-size: 13px; font-weight: 600; color: var(--black); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-dropdown {
+  display: none; position: absolute; top: calc(100% + 6px); right: 0;
+  background: var(--white); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow-md); width: 200px; z-index: 999; padding: 6px;
+}
+.user-dropdown.open { display: block; }
+.user-dropdown-name { padding: 8px 10px 6px; font-size: 12px; font-weight: 700; color: var(--black); border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.user-dropdown-meta { font-size: 11px; color: var(--gray-300); font-weight: 400; }
+.user-dropdown-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--radius-sm); font-size: 13px; cursor: pointer; color: var(--gray-500); }
+.user-dropdown-item:hover { background: var(--warm-white); color: var(--red); }
+
+/* ── App (hidden until logged in) ──────────────────────────── */
+#appLayout.visible { display: flex !important; }
 </style>
 </head>
 <body>
@@ -311,28 +360,32 @@ input:checked + .slider:before { transform: translateX(14px); }
   <div id="acctList"></div>
 </div>
 
+<!-- ── Login Page ───────────────────────────────────────────── -->
+<div id="loginPage">
+  <div class="login-card">
+    <div class="login-logo">Meta<span>Board</span></div>
+    <div class="login-tagline">Facebook 廣告管理後台</div>
+    <div class="login-divider"></div>
+    <p class="login-desc">使用你的 Facebook 帳號登入，即可查看並管理廣告帳戶的成效數據。</p>
+    <button class="fb-login-big" onclick="fbLogin()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+      使用 Facebook 帳號登入
+    </button>
+    <div class="login-footer">
+      登入即代表授權本應用程式讀取你的廣告數據<br>
+      本工具僅限本機使用，不上傳任何資料
+    </div>
+  </div>
+</div>
+
 <button class="hamburger" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
 
-<div class="layout">
+<div class="layout" id="appLayout" style="display:none">
 <!-- ── Sidebar ─────────────────────────────────────────────── -->
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-top">
     <div class="sidebar-logo">📊 FB Ads<span class="dot">.</span></div>
   </div>
-
-  <!-- User / Login -->
-  <div class="sidebar-user" id="userSection">
-    <div class="user-avatar" id="userAvatar">?</div>
-    <div class="user-info">
-      <div class="user-name" id="userName">未登入</div>
-      <div class="user-meta" id="userMeta">使用預設 Token</div>
-    </div>
-  </div>
-  <button class="fb-login-btn" id="fbLoginBtn" onclick="fbLogin()">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-    使用 Facebook 登入
-  </button>
-  <button class="fb-logout-btn" id="fbLogoutBtn" onclick="fbLogout()" style="display:none">登出 Facebook</button>
 
   <nav>
     <div class="nav-section">主選單</div>
@@ -380,6 +433,19 @@ input:checked + .slider:before { transform: translateX(14px); }
     </div>
     <div class="topbar-sep"></div>
     <button class="btn btn-ghost btn-sm" onclick="refreshDashboard()">↻ 重新整理</button>
+    <div class="topbar-sep"></div>
+    <div class="topbar-user" id="topbarUser" onclick="toggleUserMenu(event)">
+      <div class="topbar-avatar" id="topbarAvatar"></div>
+      <span class="topbar-username" id="topbarName"></span>
+      <span style="font-size:10px;color:var(--gray-300)">▾</span>
+      <div class="user-dropdown" id="userDropdown">
+        <div class="user-dropdown-name" id="dropdownName">
+          <div id="dropdownFullName"></div>
+          <div class="user-dropdown-meta">Facebook 帳號</div>
+        </div>
+        <div class="user-dropdown-item" onclick="fbLogout()">登出</div>
+      </div>
+    </div>
   </div>
 
   <!-- Stats -->
@@ -593,10 +659,37 @@ const getDateParams = () => {
 };
 
 // ── FB Auth ─────────────────────────────────────────────────
+function showApp(name, picture) {
+  document.getElementById('loginPage').classList.add('hidden');
+  document.getElementById('appLayout').classList.add('visible');
+  // Set topbar user
+  const initial = (name||'?')[0].toUpperCase();
+  const avatarEl = document.getElementById('topbarAvatar');
+  if(picture) avatarEl.innerHTML = `<img src="${picture.data?.url || picture}" alt="">`;
+  else avatarEl.textContent = initial;
+  document.getElementById('topbarName').textContent = name || '';
+  document.getElementById('dropdownFullName').textContent = name || '';
+}
+
+function showLogin() {
+  document.getElementById('loginPage').classList.remove('hidden');
+  document.getElementById('appLayout').classList.remove('visible');
+}
+
+function toggleUserMenu(e) {
+  e.stopPropagation();
+  document.getElementById('userDropdown').classList.toggle('open');
+}
+document.addEventListener('click', () => {
+  document.getElementById('userDropdown')?.classList.remove('open');
+});
+
 async function handleFBStatus(resp) {
   if(resp.status === 'connected') {
     const token = resp.authResponse.accessToken;
     await setToken(token);
+  } else {
+    showLogin();
   }
 }
 async function fbLogin() {
@@ -609,27 +702,33 @@ async function fbLogin() {
 async function fbLogout() {
   FB.logout();
   await fetch(`${API}/api/auth/token`, { method: 'DELETE' });
-  document.getElementById('userName').textContent = '未登入';
-  document.getElementById('userMeta').textContent = '使用預設 Token';
-  document.getElementById('userAvatar').innerHTML = '?';
-  document.getElementById('fbLoginBtn').style.display = '';
-  document.getElementById('fbLogoutBtn').style.display = 'none';
+  allAccounts = []; selectedAccounts = []; campData = {}; adsetData = {}; adData = {};
+  showLogin();
 }
 async function setToken(token) {
   const r = await fetch(`${API}/api/auth/token`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({token}) }).then(r=>r.json());
   if(r.ok) {
-    document.getElementById('userName').textContent = r.name;
-    document.getElementById('userMeta').textContent = 'Facebook 帳號';
-    document.getElementById('fbLoginBtn').style.display = 'none';
-    document.getElementById('fbLogoutBtn').style.display = '';
-    // Reload accounts
+    // Get picture separately
+    FB.api('/me', {fields:'picture'}, resp => {
+      showApp(r.name, resp?.picture);
+    });
     await loadAllAccounts();
   }
 }
 
 // ── Init ───────────────────────────────────────────────────
 async function init() {
-  await loadAllAccounts();
+  // FB SDK handles login state via handleFBStatus callback
+  // If no FB SDK response within 3s and we have a .env token, load anyway
+  setTimeout(async () => {
+    if(!document.getElementById('appLayout').classList.contains('visible')) {
+      const me = await fetch(`${API}/api/auth/me`).then(r=>r.json()).catch(()=>({logged_in:false}));
+      if(me.logged_in) {
+        showApp(me.name, me.picture);
+        await loadAllAccounts();
+      }
+    }
+  }, 2000);
 }
 
 async function loadAllAccounts() {

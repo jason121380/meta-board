@@ -92,9 +92,9 @@ async def clear_token():
 @app.get("/api/auth/me")
 async def get_me():
     try:
-        me = await fb_get("me", {"fields": "id,name,picture"})
+        me = await fb_get("me", {"fields": "id,name,picture.width(80)"})
         return {"logged_in": True, **me}
-    except:
+    except Exception:
         return {"logged_in": False}
 
 
