@@ -54,8 +54,8 @@ a { color: var(--orange); text-decoration: none; }
 
 /* ── Sidebar ───────────────────────────────────────────────── */
 .sidebar-top {
-  padding: 20px 16px 14px; border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; gap: 8px;
+  height: 60px; padding: 0 16px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
 }
 .sidebar-logo { font-size: 15px; font-weight: 700; color: var(--black); letter-spacing: -0.2px; }
 .sidebar-logo .dot { color: var(--orange); }
@@ -788,16 +788,7 @@ async function setToken(token) {
 // ── Init ───────────────────────────────────────────────────
 async function init() {
   // FB SDK handles login state via handleFBStatus callback
-  // If no FB SDK response within 3s and we have a .env token, load anyway
-  setTimeout(async () => {
-    if(!document.getElementById('appLayout').classList.contains('visible')) {
-      const me = await fetch(`${API}/api/auth/me`).then(r=>r.json()).catch(()=>({logged_in:false}));
-      if(me.logged_in) {
-        showApp(me.name, me.picture);
-        await loadAllAccounts();
-      }
-    }
-  }, 2000);
+  // Login page stays visible until FB Login button is clicked
 }
 
 async function loadAllAccounts() {
