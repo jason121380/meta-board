@@ -37,6 +37,9 @@ def get_token() -> str:
 
 DASHBOARD_HTML = Path(__file__).parent / "dashboard.html"
 STATIC_DIR = Path(__file__).parent / "static"
+# Built React app output (from frontend/ via `pnpm build`).
+# When this directory exists, FastAPI serves it instead of dashboard.html.
+DIST_DIR = Path(__file__).parent / "dist"
 
 
 @asynccontextmanager
@@ -75,9 +78,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve static files (PWA manifest, service worker, icons)
+# Serve legacy static files (PWA manifest, service worker, icons) — used
+# only when the React build dist/ is not present (transitional fallback).
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# Serve built React assets (JS / CSS chunks emitted by Vite). Vite's build
+# places hashed files under dist/assets/. Mounted before any catch-all so
+# they resolve before the SPA fallback route.
+if (DIST_DIR / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
@@ -177,27 +187,72 @@ def _insights_clause(fields: str, date_preset: str = "last_30d", time_range: Opt
 
 # ── Pages ───────────────────────────────────────────────────────────
 
+def _react_index() -> Optional[str]:
+    """Return the built React app's index.html if available, else None."""
+    idx = DIST_DIR / "index.html"
+    if idx.exists():
+        return idx.read_text(encoding="utf-8")
+    return None
+
+
+def _legacy_index() -> str:
+    """Return the hand-written dashboard.html as the fallback index."""
+    return DASHBOARD_HTML.read_text(encoding="utf-8")
+
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    return DASHBOARD_HTML.read_text(encoding="utf-8")
+    react = _react_index()
+    return react if react is not None else _legacy_index()
+
+
+@app.get("/legacy", response_class=HTMLResponse)
+async def legacy_dashboard():
+    """Always serve the old dashboard.html, even if the React build exists.
+    Kept until Phase 10 cutover for side-by-side visual regression testing.
+    """
+    return _legacy_index()
 
 
 @app.get("/sw.js")
 async def service_worker():
-    """Serve service worker from root scope."""
-    sw_path = STATIC_DIR / "sw.js"
-    if sw_path.exists():
-        return HTMLResponse(content=sw_path.read_text(encoding="utf-8"), media_type="application/javascript")
+    """Serve service worker from root scope.
+
+    Vite PWA emits sw.js into dist/ at build time; prefer that. Fall back
+    to the hand-written static/sw.js if no React build is present.
+    """
+    for candidate in (DIST_DIR / "sw.js", STATIC_DIR / "sw.js"):
+        if candidate.exists():
+            return HTMLResponse(
+                content=candidate.read_text(encoding="utf-8"),
+                media_type="application/javascript",
+            )
     return HTMLResponse(content="// no service worker", media_type="application/javascript")
 
 
 @app.get("/manifest.json")
 async def manifest():
-    """Serve PWA manifest from root."""
-    mf_path = STATIC_DIR / "manifest.json"
-    if mf_path.exists():
-        return HTMLResponse(content=mf_path.read_text(encoding="utf-8"), media_type="application/manifest+json")
+    """Serve PWA manifest from root.
+
+    Vite PWA writes manifest.webmanifest into dist/; fall back to
+    static/manifest.json during transition.
+    """
+    for candidate in (
+        DIST_DIR / "manifest.webmanifest",
+        DIST_DIR / "manifest.json",
+        STATIC_DIR / "manifest.json",
+    ):
+        if candidate.exists():
+            return HTMLResponse(
+                content=candidate.read_text(encoding="utf-8"),
+                media_type="application/manifest+json",
+            )
     return JSONResponse(content={})
+
+
+@app.get("/manifest.webmanifest")
+async def manifest_webmanifest():
+    return await manifest()
 
 
 # ── Auth ─────────────────────────────────────────────────────────────
@@ -469,6 +524,19 @@ async def ai_chat(req: ChatRequest):
 
     text = data["candidates"][0]["content"]["parts"][0]["text"]
     return {"reply": text}
+
+
+# ── SPA catch-all (MUST be registered last) ─────────────────────────
+# React Router uses client-side paths like /dashboard, /analytics, /finance.
+# A browser hard-refresh on those paths hits FastAPI, which otherwise 404s.
+# This catch-all returns the React index.html for any unmatched GET that
+# does not look like an API or asset request.
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+async def spa_fallback(full_path: str):
+    if full_path.startswith(("api/", "static/", "assets/")):
+        raise HTTPException(status_code=404, detail="Not found")
+    react = _react_index()
+    return react if react is not None else _legacy_index()
 
 
 if __name__ == "__main__":

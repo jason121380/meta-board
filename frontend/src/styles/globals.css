@@ -1,0 +1,192 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import "./tokens.css";
+
+/*
+ * Global base styles — ported from dashboard.html.
+ * Anything in this file must remain visually identical to the legacy
+ * build. Per-component styles go in component-specific files.
+ */
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    font-family: "Noto Sans TC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--warm-white);
+    color: var(--black);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a {
+    color: var(--orange);
+    text-decoration: none;
+  }
+}
+
+@layer components {
+  /*
+   * Checkbox — white-check on orange, used everywhere.
+   * Preserved class name `custom-cb` so any legacy HTML we port verbatim
+   * keeps working during transition.
+   * NEVER use `accent-color` inline — always use this class.
+   */
+  .custom-cb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    background: var(--white);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  .custom-cb:checked {
+    background: var(--orange);
+    border-color: var(--orange);
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 6l3 3 5-5' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-size: 75% 75%;
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+
+  /*
+   * Status badge — 進行中 / 已暫停 / 其他
+   */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-active {
+    background: var(--green-bg);
+    color: var(--green);
+  }
+  .badge-paused {
+    background: var(--yellow-bg);
+    color: var(--yellow);
+  }
+  .badge-other {
+    background: var(--red-bg);
+    color: var(--red);
+  }
+
+  /*
+   * Toggle switch — orange when checked
+   */
+  .toggle {
+    position: relative;
+    display: inline-block;
+    width: 32px;
+    height: 18px;
+  }
+  .toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background: #d0d0c8;
+    border-radius: 18px;
+    transition: 0.2s;
+  }
+  .slider::before {
+    position: absolute;
+    content: "";
+    height: 12px;
+    width: 12px;
+    left: 3px;
+    bottom: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: 0.2s;
+  }
+  input:checked + .slider {
+    background: var(--orange);
+  }
+  input:checked + .slider::before {
+    transform: translateX(14px);
+  }
+
+  /* Spinner used in loading states */
+  .spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--orange);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
+  /*
+   * Tree table row classes — CRITICAL: must NOT start with `ad-`
+   * (renamed from ad-row → creative-row in commit d720fa2 after an
+   * ad-blocker bug. See /MEMORY.md.)
+   */
+  table.tree tr.campaign-row {
+    background: var(--white);
+  }
+  table.tree tr.campaign-row:hover td {
+    background: #fefaf7;
+  }
+  table.tree tr.adset-row td {
+    background: #fffcfa;
+  }
+  table.tree tr.adset-row:hover td {
+    background: #fff5f0;
+  }
+  table.tree tr.creative-row td {
+    background: var(--white);
+  }
+  table.tree tr.creative-row:hover td {
+    background: #fefaf7;
+  }
+}
+
+@layer utilities {
+  /* tabular numerals for any numeric cell */
+  .num {
+    font-variant-numeric: tabular-nums;
+    color: var(--black);
+  }
+  .muted {
+    color: var(--gray-300);
+  }
+}
+
+/* Custom scrollbar matching legacy design */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-300);
+}

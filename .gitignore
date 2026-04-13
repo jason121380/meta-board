@@ -8,3 +8,13 @@ venv/
 dist/
 build/
 .DS_Store
+
+# Frontend (Vite + React)
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+frontend/playwright/.cache/
+frontend/src/api/schema.d.ts
