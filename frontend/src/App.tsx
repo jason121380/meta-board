@@ -1,17 +1,46 @@
+import { FbAuthProvider, useFbAuth } from "@/auth/FbAuthProvider";
+import { ConfirmDialogHost } from "@/components/ConfirmDialog";
+import { router } from "@/router";
+import { hydrateAllStores, installStorageSync } from "@/stores";
+import { LoginView } from "@/views/login/LoginView";
+import { useEffect } from "react";
+import { RouterProvider } from "react-router-dom";
+
 /**
- * Root application component. Currently a Phase 0 placeholder while the
- * scaffold is being set up. Router, auth provider, and view components
- * will be wired in Phase 2.
+ * Root application component.
+ *
+ * - Hydrates Zustand stores from localStorage BEFORE the first render
+ *   so views never see empty state on mount.
+ * - Wraps everything in <FbAuthProvider> so useFbAuth() works anywhere.
+ * - Shows <LoginView/> while unauthenticated; only mounts the
+ *   <RouterProvider/> after the FB SDK reports connected status.
+ * - Mounts <ConfirmDialogHost/> at the root so `confirm()` works
+ *   globally without threading state through props.
  */
+
+// Hydrate at module load time — runs once per page load, before
+// <App/> mounts. This is safe because Zustand stores are module-level
+// singletons and localStorage is synchronous.
+hydrateAllStores();
+
 export function App() {
+  useEffect(() => {
+    const cleanup = installStorageSync();
+    return cleanup;
+  }, []);
+
   return (
-    <div className="flex h-screen items-center justify-center font-sans">
-      <div className="text-center">
-        <div className="mb-2 text-2xl font-bold text-ink">
-          METADASH <span className="text-orange">by LURE</span>
-        </div>
-        <div className="text-sm text-gray-500">Phase 0 scaffold — React rewrite in progress.</div>
-      </div>
-    </div>
+    <FbAuthProvider>
+      <AuthGate />
+      <ConfirmDialogHost />
+    </FbAuthProvider>
   );
+}
+
+function AuthGate() {
+  const { status } = useFbAuth();
+  if (status === "auth") {
+    return <RouterProvider router={router} />;
+  }
+  return <LoginView />;
 }
