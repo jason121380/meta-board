@@ -1787,7 +1787,7 @@ async function loadDashboard() {
   await Promise.all(selectedAccounts.map(async acc => {
     const cached = _cacheGet('camp', acc.id, dp);
     if(cached) { campData[acc.id] = cached; return; }
-    const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}&include_archived=true`).then(r=>r.json());
+    const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
     campData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
     _cacheSet('camp', acc.id, dp, campData[acc.id]);
   }));
