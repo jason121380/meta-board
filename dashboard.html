@@ -1787,8 +1787,21 @@ async function loadDashboard() {
   await Promise.all(selectedAccounts.map(async acc => {
     const cached = _cacheGet('camp', acc.id, dp);
     if(cached) { campData[acc.id] = cached; return; }
-    const res = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
-    campData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+    let resData = [];
+    try {
+      const r1 = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}&include_archived=true`).then(r=>r.json());
+      if(Array.isArray(r1.data) && r1.data.length > 0) {
+        resData = r1.data;
+      } else {
+        // Fallback: no archived data or API error
+        const r2 = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
+        resData = r2.data || [];
+      }
+    } catch(e) {
+      const r2 = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
+      resData = r2.data || [];
+    }
+    campData[acc.id] = resData.map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
     _cacheSet('camp', acc.id, dp, campData[acc.id]);
   }));
   await loadOverviewStats();
