@@ -1791,7 +1791,7 @@ async function loadDashboard() {
     clearStats();
     return;
   }
-  document.getElementById('treeContainer').innerHTML = _skelTable(8, 9);
+  document.getElementById('treeContainer').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
   // Show shimmer on stats immediately
   ['spend','imp','reach','clicks','ctr','cpc','cpm','freq','purchase','lead','msg','cpm-msg'].forEach(k => {
     const el = document.getElementById('st-'+k);
