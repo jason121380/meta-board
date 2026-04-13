@@ -49,9 +49,6 @@ export function useMultiAccountCampaigns(
       },
       enabled: status === "auth",
       staleTime: 30_000,
-      // Keep previous data visible on refetch (e.g. date change) so
-      // the table doesn't flash blank while new data streams in.
-      placeholderData: (previous: FbCampaign[] | undefined) => previous,
     })),
   });
 

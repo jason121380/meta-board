@@ -178,7 +178,7 @@ export function FinanceView() {
           <div className="min-h-0 flex-1 overflow-auto">
             {visible.length === 0 ? (
               <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
-            ) : campaignsQuery.isLoading && campaignsQuery.campaigns.length === 0 ? (
+            ) : campaignsQuery.isLoading ? (
               <LoadingState
                 title="載入財務資料中..."
                 loaded={campaignsQuery.loadedCount}

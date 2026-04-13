@@ -11,8 +11,6 @@ import { useQuery } from "@tanstack/react-query";
  * IMPORTANT: The class used to render these rows is `creative-row`
  * (NOT `ad-row`) — ad blockers match `[class^="ad-"]` and hide any
  * element whose class name starts with `ad-`. See commit d720fa2.
- *
- * placeholderData keeps previously-fetched rows visible during refetch.
  */
 export function useCreatives(adsetId: string | null, date: DateConfig, enabled: boolean) {
   const { status } = useFbAuth();
@@ -25,6 +23,5 @@ export function useCreatives(adsetId: string | null, date: DateConfig, enabled: 
     },
     enabled: status === "auth" && !!adsetId && enabled,
     staleTime: 30_000,
-    placeholderData: (previous) => previous,
   });
 }

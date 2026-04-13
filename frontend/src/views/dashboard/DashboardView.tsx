@@ -141,7 +141,7 @@ export function DashboardView() {
             <div className="min-h-0 flex-1 overflow-y-auto">
               {activeAccounts.length === 0 ? (
                 <EmptyState>從左側選擇廣告帳戶</EmptyState>
-              ) : campaignsQuery.isLoading && campaignsQuery.campaigns.length === 0 ? (
+              ) : campaignsQuery.isLoading ? (
                 <LoadingState
                   title="載入行銷活動中..."
                   loaded={campaignsQuery.loadedCount}

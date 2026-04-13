@@ -80,7 +80,7 @@ export function AlertsView() {
         <div className="flex-1 overflow-y-auto p-5">
           {visibleAll.length === 0 ? (
             <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
-          ) : campaignsQuery.isLoading && campaignsQuery.campaigns.length === 0 ? (
+          ) : campaignsQuery.isLoading ? (
             <LoadingState
               title="分析廣告資料中..."
               loaded={campaignsQuery.loadedCount}
