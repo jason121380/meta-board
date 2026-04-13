@@ -2144,6 +2144,7 @@ async function toggleAdset(e, id) {
   renderTree();
   if(adData[id] !== undefined && adData[id] !== null) {
     console.log('[toggleAdset] using cached ads for', id, ':', adData[id]?.length, 'ads');
+    renderTree(); // ensure ads are visible even if renderTree ran without expandedAdsets having this id
     return;
   }
   adData[id] = undefined;
@@ -2163,6 +2164,8 @@ async function toggleAdset(e, id) {
     adData[id] = null;
   }
   console.log('[toggleAdset] adData[id] after fetch:', adData[id] === null ? 'null(error)' : adData[id]?.length + ' ads');
+  // Re-add to expandedAdsets in case something cleared it during the fetch (e.g. date change, refresh)
+  expandedAdsets.add(id);
   renderTree();
 }
 
