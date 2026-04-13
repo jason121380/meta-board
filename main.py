@@ -218,18 +218,35 @@ async def get_campaigns(account_id: str, date_preset: str = "last_30d", time_ran
     if include_archived:
         extra["effective_status"] = '["ACTIVE","PAUSED","ARCHIVED","DELETED"]'
     try:
-        data = await fb_get(f"{account_id}/campaigns", {
-            "fields": f"id,name,status,objective,daily_budget,lifetime_budget,{ins}",
-            "limit": "200",
-            **extra
-        })
+        fields = f"id,name,status,objective,daily_budget,lifetime_budget,{ins}"
+        all_camps = []
+        next_url = f"{BASE_URL}/{account_id}/campaigns"
+        params = {"fields": fields, "limit": "100", "access_token": get_token(), **extra}
+        while next_url:
+            r = await _http_client.get(next_url, params=params)
+            data = r.json()
+            if "error" in data:
+                raise HTTPException(status_code=400, detail=data["error"].get("message", "FB API Error"))
+            all_camps.extend(data.get("data", []))
+            next_url = data.get("paging", {}).get("next")
+            params = {}
+        return {"data": all_camps}
+    except HTTPException:
+        raise
     except Exception:
-        data = await fb_get(f"{account_id}/campaigns", {
-            "fields": "id,name,status,objective,daily_budget,lifetime_budget",
-            "limit": "200",
-            **extra
-        })
-    return data
+        # Fallback: fetch without insights, still paginate
+        all_camps = []
+        next_url = f"{BASE_URL}/{account_id}/campaigns"
+        params = {"fields": "id,name,status,objective,daily_budget,lifetime_budget", "limit": "100", "access_token": get_token(), **extra}
+        while next_url:
+            r = await _http_client.get(next_url, params=params)
+            data = r.json()
+            if "error" in data:
+                break
+            all_camps.extend(data.get("data", []))
+            next_url = data.get("paging", {}).get("next")
+            params = {}
+        return {"data": all_camps}
 
 
 @app.post("/api/campaigns/{campaign_id}/status")
