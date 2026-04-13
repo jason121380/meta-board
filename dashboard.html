@@ -1038,6 +1038,7 @@ input:checked + .slider:before { transform: translateX(14px); }
     <div class="topbar-spacer"></div>
     <div id="dpFin"></div>
     <div class="topbar-sep"></div>
+    <button class="btn btn-ghost btn-sm" title="重新整理" onclick="refreshFinance()" style="padding:0 10px;font-size:16px">↻</button>
     <button class="btn btn-ghost btn-sm" title="下載資料" onclick="downloadFinanceCsv()" style="padding:0 10px;font-size:16px">⬇</button>
   </div>
   <div class="finance-body">
@@ -1872,6 +1873,12 @@ function refreshDashboard() {
   campData = {}; adsetData = {}; adData = {};
   expandedCamps = new Set(); expandedAdsets = new Set();
   loadDashboard();
+}
+function refreshFinance() {
+  _cacheClear('fin');
+  _cacheClear('fin_ins');
+  finCampData = {}; finInsightData = {};
+  loadFinance();
 }
 
 // ── Tree Render ─────────────────────────────────────────────
