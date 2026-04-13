@@ -1790,12 +1790,23 @@ async function loadDashboard() {
     let resData = [];
     try {
       const r1 = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}&include_archived=true`).then(r=>r.json());
-      if(Array.isArray(r1.data) && r1.data.length > 0) {
+      // Check that insights data survived the archived fetch (FB sometimes strips insights when DELETED is included)
+      const hasSpend = Array.isArray(r1.data) && r1.data.some(c => {
+        const ins = c.insights?.data?.[0];
+        return ins && +ins.spend > 0;
+      });
+      if(hasSpend) {
         resData = r1.data;
       } else {
-        // Fallback: no archived data or API error
+        // Fallback: insights missing — use regular fetch, merge archived (status-only)
         const r2 = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
-        resData = r2.data || [];
+        const base = r2.data || [];
+        // Append archived/deleted campaigns from r1 that are not in base (may have no insights)
+        const baseIds = new Set(base.map(c=>c.id));
+        const extra = Array.isArray(r1.data)
+          ? r1.data.filter(c => !baseIds.has(c.id) && (c.status==='ARCHIVED'||c.status==='DELETED'))
+          : [];
+        resData = [...base, ...extra];
       }
     } catch(e) {
       const r2 = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
@@ -3110,10 +3121,31 @@ async function loadFinance() {
       const cCamp = _cacheGet('fin', acc.id, dp);
       if(cCamp) { finCampData[acc.id] = cCamp; }
       else tasks.push(
-        fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}&include_archived=true`).then(r=>r.json()).then(res => {
-          finCampData[acc.id] = (res.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+        (async () => {
+          try {
+            const r1 = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}&include_archived=true`).then(r=>r.json());
+            const hasSpend = Array.isArray(r1.data) && r1.data.some(c => {
+              const ins = c.insights?.data?.[0]; return ins && +ins.spend > 0;
+            });
+            let resData;
+            if(hasSpend) {
+              resData = r1.data;
+            } else {
+              const r2 = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
+              const base = r2.data || [];
+              const baseIds = new Set(base.map(c=>c.id));
+              const extra = Array.isArray(r1.data)
+                ? r1.data.filter(c => !baseIds.has(c.id) && (c.status==='ARCHIVED'||c.status==='DELETED'))
+                : [];
+              resData = [...base, ...extra];
+            }
+            finCampData[acc.id] = resData.map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+          } catch(e) {
+            const r2 = await fetch(`${API}/api/accounts/${acc.id}/campaigns?${dp}`).then(r=>r.json());
+            finCampData[acc.id] = (r2.data||[]).map(c=>({...c, _accountId: acc.id, _accountName: acc.name}));
+          }
           _cacheSet('fin', acc.id, dp, finCampData[acc.id]);
-        }).catch(()=>{ finCampData[acc.id] = []; })
+        })()
       );
     }
     if(tasks.length) await Promise.all(tasks);
