@@ -3017,8 +3017,8 @@ async function loadAiAlerts() {
     _alertRows.msg = msgRows;
     _alertRows.cpc = cpcRows;
     _alertRows.freq = freqRows;
-    // Reset sort + filter state
-    _alertSort = {msg:{col:null,dir:-1}, cpc:{col:null,dir:-1}, freq:{col:null,dir:-1}};
+    // Default sort: high to low by main metric
+    _alertSort = {msg:{col:'私訊成本',dir:-1}, cpc:{col:'CPC',dir:-1}, freq:{col:'頻次',dir:-1}};
     _alertFilter = {msg: true, cpc: true};
 
     const filterBadges = {
