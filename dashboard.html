@@ -1896,20 +1896,19 @@ function refreshFinance() {
 }
 
 // ── Tree Render ─────────────────────────────────────────────
-const showCols = [
-  { key:'name', label:'名稱', w:'240px' },
-  ...(selectedAccounts.length > 1 ? [{ key:'account', label:'帳戶', w:'120px' }] : []),
-  { key:'status', label:'狀態', w:'90px' },
-  { key:'spend', label:'花費', w:'80px', sortKey: i=>+getIns(i).spend||0 },
-  { key:'impressions', label:'曝光', w:'80px', sortKey: i=>+getIns(i).impressions||0 },
-  { key:'clicks', label:'點擊', w:'70px', sortKey: i=>+getIns(i).clicks||0 },
-  { key:'ctr', label:'CTR', w:'70px', sortKey: i=>+getIns(i).ctr||0 },
-  { key:'cpc', label:'CPC', w:'70px', sortKey: i=>+getIns(i).cpc||0 },
-  { key:'budget', label:'預算', w:'90px' },
-  { key:'actions', label:'', w:'90px' },
-];
-
 function renderTree() {
+  try {
+    return _renderTreeImpl();
+  } catch(err) {
+    console.error('[renderTree] fatal error', err);
+    const container = document.getElementById('treeContainer');
+    if(container) {
+      container.innerHTML = `<div style="padding:24px;background:#FFEBEE;color:var(--red);border-radius:8px;margin:16px;font-size:13px"><b>樹狀表格渲染失敗</b><br>${(err && err.stack || err && err.message || String(err)).replace(/</g,'&lt;')}</div>`;
+    }
+  }
+}
+
+function _renderTreeImpl() {
   const search = document.getElementById('treeSearch').value.toLowerCase();
   const container = document.getElementById('treeContainer');
   const savedScroll = container.scrollTop;
@@ -1921,17 +1920,6 @@ function renderTree() {
   // Filter
   if(filterActiveOnly) allCamps = allCamps.filter(c => +getIns(c).spend > 0);
   if(search) allCamps = allCamps.filter(c => c.name.toLowerCase().includes(search));
-
-  // Sort campaigns
-  if(treeSort.key) {
-    const col = showCols.find(c=>c.key===treeSort.key);
-    if(col?.sortKey) {
-      allCamps.sort((a,b)=>{
-        const va=col.sortKey(a), vb=col.sortKey(b);
-        return treeSort.dir==='asc'?(va>vb?1:-1):(va<vb?1:-1);
-      });
-    }
-  }
 
   document.getElementById('treeCount').textContent = `${allCamps.length} 個活動`;
 
@@ -1958,6 +1946,17 @@ function renderTree() {
     { key:'budget', label:'預算' },
     { key:'actions', label:'' },
   ];
+
+  // Sort campaigns (uses cols, after definition above so msg/msgcost columns work)
+  if(treeSort.key) {
+    const col = cols.find(c=>c.key===treeSort.key);
+    if(col?.sortKey) {
+      allCamps.sort((a,b)=>{
+        const va=col.sortKey(a), vb=col.sortKey(b);
+        return treeSort.dir==='asc'?(va>vb?1:-1):(va<vb?1:-1);
+      });
+    }
+  }
 
   const thead = `<thead><tr>${cols.map(c=>{
     const sc = treeSort.key===c.key?` sorted-${treeSort.dir}`:'';
@@ -2042,12 +2041,14 @@ function renderTree() {
           </tr>`;
 
           if(adsetOpen) {
-            if(ads === null) {
-              rows += `<tr class="ad-row"><td colspan="${cols.length}"><div style="padding:10px 72px;color:var(--red,#c0392b);font-size:12px">無法載入廣告（點擊廣告組合重試）</div></td></tr>`;
+            const isErrObj = ads && typeof ads === 'object' && !Array.isArray(ads) && ads.__error;
+            if(ads === null || isErrObj) {
+              const errMsg = isErrObj ? `無法載入廣告：${ads.message || '未知錯誤'}（點擊廣告組合重試）` : '無法載入廣告（點擊廣告組合重試）';
+              rows += `<tr class="ad-row"><td colspan="${cols.length}" style="background:#FFF5F0 !important"><div style="padding:14px 72px;color:var(--red,#c0392b);font-size:13px;font-weight:600">${errMsg}</div></td></tr>`;
             } else if(ads === undefined) {
-              rows += `<tr class="ad-row"><td colspan="${cols.length}"><div style="padding:10px 72px;color:var(--gray-300);font-size:12px;display:flex;align-items:center;gap:8px"><div class="spinner" style="width:14px;height:14px;border-width:2px"></div>載入廣告...</div></td></tr>`;
+              rows += `<tr class="ad-row"><td colspan="${cols.length}" style="background:#FFFCFA !important"><div style="padding:14px 72px;color:var(--orange);font-size:13px;font-weight:600;display:flex;align-items:center;gap:10px"><div class="spinner" style="width:16px;height:16px;border-width:2px"></div>載入廣告中...</div></td></tr>`;
             } else if(!ads.length) {
-              rows += `<tr class="ad-row"><td colspan="${cols.length}"><div style="padding:10px 72px;color:var(--gray-300);font-size:12px">無廣告</div></td></tr>`;
+              rows += `<tr class="ad-row"><td colspan="${cols.length}" style="background:#FFFCFA !important"><div style="padding:14px 72px;color:var(--gray-500);font-size:13px;font-weight:500">此廣告組合下沒有廣告</div></td></tr>`;
             } else {
               try {
                 ads.forEach(ad => {
@@ -2104,6 +2105,25 @@ function renderTree() {
   </tr>`;
   container.innerHTML = `<table class="tree">${thead}<tbody>${rows}${totalRow}</tbody></table>`;
   container.scrollTop = savedScroll;
+  // Diagnostic: surface state of every expanded adset so users can debug missing 3rd level
+  if(expandedAdsets.size > 0) {
+    const summary = [...expandedAdsets].map(id => {
+      const v = adData[id];
+      let state;
+      if(v === undefined) state = 'loading';
+      else if(v === null) state = 'error(null)';
+      else if(Array.isArray(v)) state = `loaded(${v.length})`;
+      else if(v && v.__error) state = `error(${v.message})`;
+      else state = `unknown(${typeof v})`;
+      return { id, state };
+    });
+    console.debug('[renderTree] expanded adsets', summary);
+    // Also verify that the DOM actually contains ad-row elements for any loaded adsets
+    requestAnimationFrame(() => {
+      const adRowsInDom = container.querySelectorAll('tr.ad-row').length;
+      console.debug('[renderTree] ad-row count in DOM:', adRowsInDom);
+    });
+  }
 }
 
 async function toggleCamp(e, id) {
@@ -2133,6 +2153,7 @@ async function toggleCamp(e, id) {
 
 async function toggleAdset(e, id) {
   e.stopPropagation();
+  console.debug('[toggleAdset] click', { id, alreadyOpen: expandedAdsets.has(id), currentAds: adData[id] });
   if(expandedAdsets.has(id)) {
     expandedAdsets.delete(id);
     renderTree();
@@ -2140,30 +2161,53 @@ async function toggleAdset(e, id) {
   }
   expandedAdsets.add(id);
   renderTree();
-  if(adData[id] !== undefined && adData[id] !== null) {
+  // Always re-fetch if we don't already have a successful array result
+  if(Array.isArray(adData[id]) && adData[id].length > 0) {
+    console.debug('[toggleAdset] using cached ads', { id, count: adData[id].length });
+    // Force scroll so user can see them
+    requestAnimationFrame(() => _scrollToFirstAd(id));
     return;
   }
+  // Mark loading
   adData[id] = undefined;
+  renderTree();
   const dp = getDateParams();
+  const url = `${API}/api/adsets/${id}/ads?${dp}`;
+  console.debug('[toggleAdset] fetching', url);
   try {
-    const r = await fetch(`${API}/api/adsets/${id}/ads?${dp}`);
-    const res = await r.json();
-    if(r.ok && Array.isArray(res.data)) {
+    const r = await fetch(url);
+    let res = null;
+    try { res = await r.json(); } catch(jsonErr) { console.error('[toggleAdset] JSON parse failed', jsonErr); }
+    console.debug('[toggleAdset] response', { id, status: r.status, ok: r.ok, body: res });
+    if(r.ok && res && Array.isArray(res.data)) {
       adData[id] = res.data;
     } else {
-      adData[id] = null;
+      // Store the actual error so the UI can show it
+      adData[id] = { __error: true, status: r.status, message: (res && (res.detail || res.error?.message)) || `HTTP ${r.status}` };
+      console.warn('[toggleAdset] fetch returned non-success', adData[id]);
     }
   } catch(err) {
-    adData[id] = null;
+    console.error('[toggleAdset] network error', err);
+    adData[id] = { __error: true, status: 0, message: err.message || 'Network error' };
   }
   // Re-add to expandedAdsets in case something cleared it during the fetch (e.g. date change, refresh)
   expandedAdsets.add(id);
   renderTree();
-  // Scroll the adset row into view so the ads below it are visible
-  requestAnimationFrame(() => {
-    const row = document.querySelector(`tr[data-adset="${id}"]`);
-    if(row) row.scrollIntoView({block: 'nearest', behavior: 'smooth'});
-  });
+  requestAnimationFrame(() => _scrollToFirstAd(id));
+}
+
+// Scroll the first ad row of an adset into view (so the user can see the third level)
+function _scrollToFirstAd(adsetId) {
+  const adsetRow = document.querySelector(`tr[data-adset="${adsetId}"]`);
+  if(!adsetRow) return;
+  // Find the next ad-row sibling (or fallback to the adset row itself)
+  let next = adsetRow.nextElementSibling;
+  let target = adsetRow;
+  while(next && next.classList.contains('ad-row')) {
+    target = next;
+    next = next.nextElementSibling;
+  }
+  target.scrollIntoView({block: 'nearest', behavior: 'smooth'});
 }
 
 function expandAll() {
