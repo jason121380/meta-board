@@ -2036,7 +2036,22 @@ function renderTree() {
     }
   });
 
-  container.innerHTML = `<table class="tree">${thead}<tbody>${rows}</tbody></table>`;
+  // Total row
+  const totalSpend = allCamps.reduce((s,c)=>s+(+getIns(c).spend||0),0);
+  const totalMsgs = allCamps.reduce((s,c)=>s+getMsgTree(c),0);
+  const totalMsgSpend = allCamps.filter(c=>getMsgTree(c)>0).reduce((s,c)=>s+(+getIns(c).spend||0),0);
+  const nCols = cols.length;
+  const totalRow = `<tr style="background:var(--warm-white);border-top:2px solid var(--border-strong)">
+    <td colspan="${multiAcct?3:2}" style="padding:10px 14px;font-weight:700;font-size:13px">合計</td>
+    ${multiAcct?'':''}
+    <td></td>
+    <td class="num" style="font-weight:700;font-size:13px">$${fM(totalSpend)}</td>
+    <td></td><td></td><td></td><td></td>
+    <td class="num" style="font-weight:700;font-size:13px">${totalMsgs>0?fN(totalMsgs):'—'}</td>
+    <td class="num" style="font-weight:700;font-size:13px">${totalMsgs>0?'$'+fM(totalMsgSpend/totalMsgs):'—'}</td>
+    <td colspan="2"></td>
+  </tr>`;
+  container.innerHTML = `<table class="tree">${thead}<tbody>${rows}${totalRow}</tbody></table>`;
 }
 
 async function toggleCamp(e, id) {
@@ -3102,9 +3117,8 @@ function renderFinanceAcctList(accounts) {
     return;
   }
   const defaultMarkup = parseFloat(document.getElementById('financeMarkupDefault')?.value) || 0;
-  // Use account-level insights for accurate spend; fallback to campaign sum
+  // Always use campaign sum so left panel matches right panel table
   const getAcctSpend = (accId) => {
-    if(finInsightData[accId]?.spend) return +finInsightData[accId].spend;
     return (finCampData[accId]||[]).reduce((s,c)=>s+(+getIns(c).spend||0),0);
   };
   const getAcctPlus = (accId) => {
@@ -3264,7 +3278,16 @@ function renderFinanceTable() {
       </tr>`;
     }).join('');
 
-    const kpiSpend = acctInsightSpend !== null ? acctInsightSpend : campSpendSum;
+    // Append total row
+    const totalPlus = campSpendSum * (1 + defaultMarkup/100);
+    body.innerHTML += `<tr style="background:var(--warm-white);border-top:2px solid var(--border-strong)">
+      <td colspan="3" style="padding:10px 12px;font-weight:700;font-size:13px;color:var(--black)">合計</td>
+      <td style="font-variant-numeric:tabular-nums;font-weight:700;font-size:13px">$${fM(campSpendSum)}</td>
+      <td></td>
+      <td class="num" style="font-weight:700;font-size:13px;color:var(--orange)">$${fM(Math.ceil(totalPlus))}</td>
+      <td></td>
+    </tr>`;
+    const kpiSpend = campSpendSum;
     const kpiPlus = kpiSpend * (1 + defaultMarkup/100);
     document.getElementById('fin-kpi-spend').textContent = '$' + fM(kpiSpend);
     document.getElementById('fin-kpi-plus').textContent = '$' + fM(Math.ceil(kpiPlus));
@@ -3344,6 +3367,15 @@ function renderFinanceTable() {
     </tr>`;
   }).join('');
 
+  // Total row for all-accounts mode
+  const allTotalPlus = campSpendSum * (1 + defaultMarkup/100);
+  body.innerHTML += `<tr style="background:var(--warm-white);border-top:2px solid var(--border-strong)">
+    <td colspan="4" style="padding:10px 12px;font-weight:700;font-size:13px;color:var(--black)">合計</td>
+    <td style="font-variant-numeric:tabular-nums;font-weight:700;font-size:13px">$${fM(campSpendSum)}</td>
+    <td></td>
+    <td class="num" style="font-weight:700;font-size:13px;color:var(--orange)">$${fM(Math.ceil(allTotalPlus))}</td>
+    <td></td>
+  </tr>`;
   document.getElementById('fin-kpi-spend').textContent = '$' + fM(campSpendSum);
   document.getElementById('fin-kpi-plus').textContent = '$' + fM(Math.ceil(campSpendSum * (1 + defaultMarkup/100)));
 }
