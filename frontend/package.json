@@ -9,13 +9,15 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check src",
+    "lint": "biome check src && pnpm lint:no-ad-class",
     "lint:fix": "biome check --write src",
+    "lint:no-ad-class": "node scripts/check-no-ad-class.mjs",
     "format": "biome format --write src",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "check": "pnpm typecheck && pnpm lint && pnpm test",
     "gen:api": "openapi-typescript http://localhost:8001/openapi.json -o src/api/schema.d.ts"
   },
   "dependencies": {
@@ -43,7 +45,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
-    "@playwright/test": "^1.48.2",
+    "@playwright/test": "1.56.0",
     "@tanstack/react-query-devtools": "^5.62.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.0.1",

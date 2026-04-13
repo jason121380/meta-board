@@ -143,14 +143,18 @@ export function FbAuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Guard against React 18 Strict Mode double-invoke so we don't
-    // check login status twice.
+    // check login status twice. This effect is ONE-SHOT — no cleanup.
     if (didRunRef.current) return;
     didRunRef.current = true;
 
     // Safety fallback: if the FB SDK never loads (ad blocker, network),
     // reveal the login form after 6 seconds — matches legacy behavior.
-    const timeout = setTimeout(() => {
-      if (status === "checking") setStatus("unauth");
+    // We do NOT return a cleanup clearing this timer because cleanup
+    // would also run on Strict Mode's synthetic unmount and cancel the
+    // fallback; we rely on the functional `setStatus(prev => ...)`
+    // update to only fire when the status is still "checking".
+    setTimeout(() => {
+      setStatus((prev) => (prev === "checking" ? "unauth" : prev));
     }, 6000);
 
     ensureSdkLoaded().then(() => {
@@ -158,13 +162,11 @@ export function FbAuthProvider({ children }: { children: ReactNode }) {
         if (resp.status === "connected" && resp.authResponse) {
           void exchangeToken(resp.authResponse.accessToken);
         } else {
-          setStatus("unauth");
+          setStatus((prev) => (prev === "checking" ? "unauth" : prev));
         }
       });
     });
-
-    return () => clearTimeout(timeout);
-  }, [status, exchangeToken]);
+  }, [exchangeToken]);
 
   const login = useCallback(() => {
     ensureSdkLoaded().then(() => {
