@@ -1,10 +1,10 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useMultiAccountCampaigns } from "@/api/hooks/useMultiAccountCampaigns";
 import { useMultiAccountInsights } from "@/api/hooks/useMultiAccountInsights";
-import { Button } from "@/components/Button";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
-import { Loading } from "@/components/Loading";
+import { LoadingState } from "@/components/LoadingState";
+import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { getIns } from "@/lib/insights";
 import { useAccountsStore } from "@/stores/accountsStore";
@@ -104,15 +104,10 @@ export function DashboardView() {
             只顯示有花費
           </label>
           <TopbarSeparator />
-          <Button
-            variant="ghost"
-            size="sm"
-            title="重新整理"
+          <RefreshButton
+            isFetching={campaignsQuery.isFetching || insights.isFetching}
             onClick={onRefresh}
-            className="px-2.5 text-base"
-          >
-            ↻
-          </Button>
+          />
         </div>
       </Topbar>
 
@@ -146,8 +141,12 @@ export function DashboardView() {
             <div className="min-h-0 flex-1 overflow-y-auto">
               {activeAccounts.length === 0 ? (
                 <EmptyState>從左側選擇廣告帳戶</EmptyState>
-              ) : campaignsQuery.isLoading ? (
-                <Loading />
+              ) : campaignsQuery.isLoading && campaignsQuery.campaigns.length === 0 ? (
+                <LoadingState
+                  title="載入行銷活動中..."
+                  loaded={campaignsQuery.loadedCount}
+                  total={campaignsQuery.totalCount}
+                />
               ) : (
                 <TreeTable
                   campaigns={filteredCampaigns}

@@ -16,12 +16,18 @@ import { useQueries } from "@tanstack/react-query";
  */
 export interface MultiCampaignsResult {
   campaigns: FbCampaign[];
-  /** true while ANY account is still loading. */
+  /** true while ANY account is in initial pending state (no data yet). */
   isLoading: boolean;
+  /** true while ANY account has a request in flight — initial OR refetch. */
+  isFetching: boolean;
   /** true if ALL selected accounts errored. */
   isError: boolean;
   /** Per-account error messages, keyed by account id. */
   errors: Record<string, string>;
+  /** Number of accounts whose query has resolved (success OR error). */
+  loadedCount: number;
+  /** Total number of account queries (== accounts.length). */
+  totalCount: number;
 }
 
 export function useMultiAccountCampaigns(
@@ -43,18 +49,25 @@ export function useMultiAccountCampaigns(
       },
       enabled: status === "auth",
       staleTime: 30_000,
+      // Keep previous data visible on refetch (e.g. date change) so
+      // the table doesn't flash blank while new data streams in.
+      placeholderData: (previous: FbCampaign[] | undefined) => previous,
     })),
   });
 
   const campaigns: FbCampaign[] = [];
   const errors: Record<string, string> = {};
   let isLoading = false;
+  let isFetching = false;
   let allErrored = accounts.length > 0;
+  let loadedCount = 0;
 
   accounts.forEach((acc, i) => {
     const q = queries[i];
     if (!q) return;
     if (q.isLoading) isLoading = true;
+    else loadedCount += 1;
+    if (q.isFetching) isFetching = true;
     if (q.isError) {
       errors[acc.id] = q.error instanceof Error ? q.error.message : "Unknown error";
     } else {
@@ -64,5 +77,13 @@ export function useMultiAccountCampaigns(
     }
   });
 
-  return { campaigns, isLoading, isError: allErrored, errors };
+  return {
+    campaigns,
+    isLoading,
+    isFetching,
+    isError: allErrored,
+    errors,
+    loadedCount,
+    totalCount: accounts.length,
+  };
 }

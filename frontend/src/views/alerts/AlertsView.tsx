@@ -1,9 +1,9 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useMultiAccountCampaigns } from "@/api/hooks/useMultiAccountCampaigns";
-import { Button } from "@/components/Button";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
-import { Loading } from "@/components/Loading";
+import { LoadingState } from "@/components/LoadingState";
+import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
@@ -62,15 +62,11 @@ export function AlertsView() {
         <div className="flex items-center gap-3">
           <DatePicker value={date} onChange={(cfg) => setDate("alerts", cfg)} />
           <TopbarSeparator />
-          <Button
-            variant="ghost"
-            size="sm"
-            title="重新分析"
+          <RefreshButton
+            isFetching={campaignsQuery.isFetching}
             onClick={onRefresh}
-            className="px-2.5 text-base"
-          >
-            ↻
-          </Button>
+            title="重新分析"
+          />
         </div>
       </Topbar>
 
@@ -84,8 +80,12 @@ export function AlertsView() {
         <div className="flex-1 overflow-y-auto p-5">
           {visibleAll.length === 0 ? (
             <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
-          ) : campaignsQuery.isLoading ? (
-            <Loading>分析中...</Loading>
+          ) : campaignsQuery.isLoading && campaignsQuery.campaigns.length === 0 ? (
+            <LoadingState
+              title="分析廣告資料中..."
+              loaded={campaignsQuery.loadedCount}
+              total={campaignsQuery.totalCount}
+            />
           ) : campaignsQuery.campaigns.length === 0 ? (
             <EmptyState>無廣告資料可分析</EmptyState>
           ) : (
