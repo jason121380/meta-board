@@ -1,11 +1,199 @@
-import { Topbar } from "@/layout/Topbar";
+import { useAccounts } from "@/api/hooks/useAccounts";
+import { useMultiAccountCampaigns } from "@/api/hooks/useMultiAccountCampaigns";
+import { useMultiAccountInsights } from "@/api/hooks/useMultiAccountInsights";
+import { Button } from "@/components/Button";
+import { DatePicker } from "@/components/DatePicker";
+import { EmptyState } from "@/components/EmptyState";
+import { Loading } from "@/components/Loading";
+import { Topbar, TopbarSeparator } from "@/layout/Topbar";
+import { toLabel } from "@/lib/datePicker";
+import { useAccountsStore } from "@/stores/accountsStore";
+import { useFiltersStore } from "@/stores/filtersStore";
+import { useFinanceStore } from "@/stores/financeStore";
+import { useUiStore } from "@/stores/uiStore";
+import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { FinanceAccountPanel } from "./FinanceAccountPanel";
+import { FinanceTable } from "./FinanceTable";
+import {
+  buildAccountRows,
+  buildFinanceCsv,
+  filterFinanceRows,
+  sortFinanceRows,
+} from "./financeData";
 
+/**
+ * Finance view (財務專區) — left account panel + toolbar + campaign
+ * table with per-row markup calculator and pin-to-top.
+ *
+ * The "全部帳戶 / single account" mode switch is driven by
+ * uiStore.finSelectedAcctIds: empty = all, [id] = single.
+ *
+ * CSV export builds a string via buildFinanceCsv() and pushes it to
+ * the browser via a data URL anchor click (matches legacy).
+ */
 export function FinanceView() {
+  const queryClient = useQueryClient();
+
+  const accountsQuery = useAccounts();
+  const allAccounts = accountsQuery.data ?? [];
+  const visible = useAccountsStore((s) => s.visibleAccounts)(allAccounts);
+
+  const date = useFiltersStore((s) => s.date.finance);
+  const setDate = useFiltersStore((s) => s.setDate);
+
+  const finSelectedAcctIds = useUiStore((s) => s.finSelectedAcctIds);
+  const setFinSelectedAcctIds = useUiStore((s) => s.setFinSelectedAcctIds);
+
+  const rowMarkups = useFinanceStore((s) => s.rowMarkups);
+  const defaultMarkup = useFinanceStore((s) => s.defaultMarkup);
+  const setDefaultMarkup = useFinanceStore((s) => s.setDefaultMarkup);
+  const pinnedIds = useFinanceStore((s) => s.pinnedIds);
+
+  const [search, setSearch] = useState("");
+  const [hideZero, setHideZero] = useState(true);
+
+  // Fetch per-account insights (authoritative spend) and campaigns
+  // for every visible account, even in single-account drilldown mode
+  // so the left panel can still render totals.
+  const insights = useMultiAccountInsights(
+    visible.map((a) => a.id),
+    date,
+  );
+  const campaignsQuery = useMultiAccountCampaigns(visible, date, {
+    includeArchived: true,
+  });
+
+  const selectedId = finSelectedAcctIds.length === 1 ? (finSelectedAcctIds[0] ?? null) : null;
+
+  // Slice campaigns for the right-side table based on selection
+  const tableCampaigns = useMemo(() => {
+    if (selectedId === null) return campaignsQuery.campaigns;
+    return campaignsQuery.campaigns.filter((c) => c._accountId === selectedId);
+  }, [campaignsQuery.campaigns, selectedId]);
+
+  // Build left-panel rows (always across ALL visible accounts)
+  const accountRows = useMemo(
+    () =>
+      buildAccountRows(visible, insights.data, campaignsQuery.campaigns, rowMarkups, defaultMarkup),
+    [visible, insights.data, campaignsQuery.campaigns, rowMarkups, defaultMarkup],
+  );
+
+  const onRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+    queryClient.invalidateQueries({ queryKey: ["insights"] });
+  };
+
+  const onDownloadCsv = () => {
+    const filtered = filterFinanceRows(tableCampaigns, hideZero, search);
+    const sorted = sortFinanceRows(
+      filtered,
+      { key: null, dir: "desc" },
+      pinnedIds,
+      rowMarkups,
+      defaultMarkup,
+    );
+    const csv = buildFinanceCsv({
+      rows: sorted,
+      defaultMarkup,
+      rowMarkups,
+      includeAccountColumn: selectedId === null,
+    });
+    // Format the filename using the date label so users know which
+    // period the export covers.
+    const label = toLabel(date).replace(/[/ ~]/g, "_");
+    const filename = `財務報表_${label}.csv`;
+    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <>
-      <Topbar title="財務專區" />
-      <div className="flex flex-1 items-center justify-center text-sm text-gray-500">
-        Finance view — Phase 6.
+      <Topbar title="財務專區">
+        <div className="flex items-center gap-3">
+          <DatePicker value={date} onChange={(cfg) => setDate("finance", cfg)} />
+          <TopbarSeparator />
+          <Button
+            variant="ghost"
+            size="sm"
+            title="重新整理"
+            onClick={onRefresh}
+            className="px-2.5 text-base"
+          >
+            ↻
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            title="下載資料"
+            onClick={onDownloadCsv}
+            className="px-2.5 text-base"
+          >
+            ⬇
+          </Button>
+        </div>
+      </Topbar>
+
+      <div className="flex flex-1 overflow-hidden">
+        <FinanceAccountPanel
+          rows={accountRows}
+          selectedId={selectedId}
+          onSelect={(id) => setFinSelectedAcctIds(id ? [id] : [])}
+        />
+
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex shrink-0 items-center gap-2.5 border-b border-border bg-white px-5 py-2.5">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              placeholder="搜尋活動名稱..."
+              className="h-8 flex-1 rounded-lg border-[1.5px] border-border px-2.5 text-[13px] outline-none focus:border-orange"
+            />
+            <label className="flex cursor-pointer items-center gap-1 whitespace-nowrap text-xs text-gray-500">
+              <input
+                type="checkbox"
+                className="custom-cb"
+                checked={hideZero}
+                onChange={(e) => setHideZero(e.currentTarget.checked)}
+              />
+              只顯示有花費
+            </label>
+            <span className="whitespace-nowrap text-xs text-gray-500">預設月%:</span>
+            <input
+              type="number"
+              value={defaultMarkup}
+              min={0}
+              max={100}
+              step={0.5}
+              onChange={(e) => {
+                const v = Number.parseFloat(e.currentTarget.value);
+                if (!Number.isNaN(v)) setDefaultMarkup(v);
+              }}
+              className="h-8 w-[54px] rounded-lg border-[1.5px] border-border px-1 text-center text-[13px]"
+            />
+            <span className="text-xs text-gray-500">%</span>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-auto">
+            {visible.length === 0 ? (
+              <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
+            ) : campaignsQuery.isLoading ? (
+              <Loading />
+            ) : (
+              <FinanceTable
+                campaigns={tableCampaigns}
+                multiAcct={selectedId === null}
+                search={search}
+                hideZero={hideZero}
+              />
+            )}
+          </div>
+        </div>
       </div>
     </>
   );
