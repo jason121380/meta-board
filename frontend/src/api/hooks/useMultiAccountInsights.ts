@@ -16,7 +16,12 @@ import { useQueries } from "@tanstack/react-query";
 export interface MultiAccountInsightsResult {
   data: Record<string, FbInsights | null>;
   isLoading: boolean;
+  isFetching: boolean;
   isError: boolean;
+  /** How many account insights have resolved so far (success or error). */
+  loadedCount: number;
+  /** Total number of account insights queries. */
+  totalCount: number;
 }
 
 export function useMultiAccountInsights(
@@ -33,18 +38,32 @@ export function useMultiAccountInsights(
       },
       enabled: status === "auth",
       staleTime: 30_000,
+      // Keep previous data on refetch to avoid flashing back to a
+      // blank KPI grid when the user changes the date.
+      placeholderData: (previous: FbInsights | null | undefined) => previous,
     })),
   });
 
   const data: Record<string, FbInsights | null> = {};
   let isLoading = false;
+  let isFetching = false;
   let isError = false;
+  let loadedCount = 0;
   accountIds.forEach((id, i) => {
     const q = queries[i];
     data[id] = (q?.data as FbInsights | null | undefined) ?? null;
     if (q?.isLoading) isLoading = true;
+    else loadedCount += 1;
+    if (q?.isFetching) isFetching = true;
     if (q?.isError) isError = true;
   });
 
-  return { data, isLoading, isError };
+  return {
+    data,
+    isLoading,
+    isFetching,
+    isError,
+    loadedCount,
+    totalCount: accountIds.length,
+  };
 }

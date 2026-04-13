@@ -1,10 +1,10 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useMultiAccountCampaigns } from "@/api/hooks/useMultiAccountCampaigns";
 import { useMultiAccountInsights } from "@/api/hooks/useMultiAccountInsights";
-import { Button } from "@/components/Button";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
-import { Loading } from "@/components/Loading";
+import { LoadingState } from "@/components/LoadingState";
+import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { toLabel } from "@/lib/datePicker";
 import { fM } from "@/lib/format";
@@ -75,15 +75,11 @@ export function AnalyticsView() {
         <div className="flex items-center gap-3">
           <DatePicker value={date} onChange={(cfg) => setDate("analytics", cfg)} />
           <TopbarSeparator />
-          <Button
-            variant="ghost"
-            size="sm"
-            title="重新分析"
+          <RefreshButton
+            isFetching={campaignsQuery.isFetching || insightsQuery.isFetching}
             onClick={onRefresh}
-            className="px-2.5 text-base"
-          >
-            ↻
-          </Button>
+            title="重新分析"
+          />
         </div>
       </Topbar>
 
@@ -91,7 +87,11 @@ export function AnalyticsView() {
         {visible.length === 0 ? (
           <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
         ) : isLoading && data.kpis.totalCampaigns === 0 ? (
-          <Loading>分析中...</Loading>
+          <LoadingState
+            title="分析資料中..."
+            loaded={Math.min(campaignsQuery.loadedCount, insightsQuery.loadedCount)}
+            total={campaignsQuery.totalCount}
+          />
         ) : (
           <AnalyticsBody data={data} visible={visible} periodLabel={toLabel(date)} />
         )}

@@ -4,7 +4,8 @@ import { useMultiAccountInsights } from "@/api/hooks/useMultiAccountInsights";
 import { Button } from "@/components/Button";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
-import { Loading } from "@/components/Loading";
+import { LoadingState } from "@/components/LoadingState";
+import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { toLabel } from "@/lib/datePicker";
 import { useAccountsStore } from "@/stores/accountsStore";
@@ -118,15 +119,10 @@ export function FinanceView() {
         <div className="flex items-center gap-3">
           <DatePicker value={date} onChange={(cfg) => setDate("finance", cfg)} />
           <TopbarSeparator />
-          <Button
-            variant="ghost"
-            size="sm"
-            title="重新整理"
+          <RefreshButton
+            isFetching={campaignsQuery.isFetching || insights.isFetching}
             onClick={onRefresh}
-            className="px-2.5 text-base"
-          >
-            ↻
-          </Button>
+          />
           <Button
             variant="ghost"
             size="sm"
@@ -182,8 +178,12 @@ export function FinanceView() {
           <div className="min-h-0 flex-1 overflow-auto">
             {visible.length === 0 ? (
               <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
-            ) : campaignsQuery.isLoading ? (
-              <Loading />
+            ) : campaignsQuery.isLoading && campaignsQuery.campaigns.length === 0 ? (
+              <LoadingState
+                title="載入財務資料中..."
+                loaded={campaignsQuery.loadedCount}
+                total={campaignsQuery.totalCount}
+              />
             ) : (
               <FinanceTable
                 campaigns={tableCampaigns}
