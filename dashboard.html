@@ -176,8 +176,8 @@ table.tree tr.campaign-row { background: var(--white); }
 table.tree tr.campaign-row:hover td { background: #FEFAF7; }
 table.tree tr.adset-row td { background: #FFFCFA; }
 table.tree tr.adset-row:hover td { background: #FFF5F0; }
-table.tree tr.ad-row td { background: var(--white); }
-table.tree tr.ad-row:hover td { background: #FEFAF7; }
+table.tree tr.creative-row td { background: var(--white); }
+table.tree tr.creative-row:hover td { background: #FEFAF7; }
 table.tree tr { cursor: pointer; }
 table.tree tr.disabled-row { opacity: 0.5; }
 
@@ -2046,18 +2046,18 @@ function _renderTreeImpl() {
             console.log('[renderTree] adset ' + adset.id + ' OPEN branch=' + branch);
             if(ads === null || isErrObj) {
               const errMsg = isErrObj ? `無法載入廣告：${ads.message || '未知錯誤'}（點擊廣告組合重試）` : '無法載入廣告（點擊廣告組合重試）';
-              rows += `<tr class="ad-row"><td colspan="${cols.length}" style="background:#FFF5F0 !important"><div style="padding:14px 72px;color:var(--red,#c0392b);font-size:13px;font-weight:600">${errMsg}</div></td></tr>`;
+              rows += `<tr class="creative-row"><td colspan="${cols.length}" style="background:#FFF5F0 !important"><div style="padding:14px 72px;color:var(--red,#c0392b);font-size:13px;font-weight:600">${errMsg}</div></td></tr>`;
             } else if(ads === undefined) {
-              rows += `<tr class="ad-row"><td colspan="${cols.length}" style="background:#FFFCFA !important"><div style="padding:14px 72px;color:var(--orange);font-size:13px;font-weight:600;display:flex;align-items:center;gap:10px"><div class="spinner" style="width:16px;height:16px;border-width:2px"></div>載入廣告中...</div></td></tr>`;
+              rows += `<tr class="creative-row"><td colspan="${cols.length}" style="background:#FFFCFA !important"><div style="padding:14px 72px;color:var(--orange);font-size:13px;font-weight:600;display:flex;align-items:center;gap:10px"><div class="spinner" style="width:16px;height:16px;border-width:2px"></div>載入廣告中...</div></td></tr>`;
             } else if(!ads.length) {
-              rows += `<tr class="ad-row"><td colspan="${cols.length}" style="background:#FFFCFA !important"><div style="padding:14px 72px;color:var(--gray-500);font-size:13px;font-weight:500">此廣告組合下沒有廣告</div></td></tr>`;
+              rows += `<tr class="creative-row"><td colspan="${cols.length}" style="background:#FFFCFA !important"><div style="padding:14px 72px;color:var(--gray-500);font-size:13px;font-weight:500">此廣告組合下沒有廣告</div></td></tr>`;
             } else {
               const beforeLen = rows.length;
               try {
                 ads.forEach(ad => {
                   const adi = getIns(ad);
                   const thumb = ad.creative?.thumbnail_url;
-                  rows += `<tr class="ad-row">
+                  rows += `<tr class="creative-row">
                     <td></td>
                     <td>
                       <div class="name-cell indent-2" style="padding-left:72px">
@@ -2080,10 +2080,10 @@ function _renderTreeImpl() {
                     </td>
                   </tr>`;
                 });
-                console.log('[renderTree] emitted ' + ads.length + ' ad-rows for adset ' + adset.id + ' (rows grew by ' + (rows.length - beforeLen) + ' chars)');
+                console.log('[renderTree] emitted ' + ads.length + ' creative-rows for adset ' + adset.id + ' (rows grew by ' + (rows.length - beforeLen) + ' chars)');
               } catch(renderErr) {
                 console.error('[renderTree] ad render error for adset ' + adset.id + ':', renderErr);
-                rows += `<tr class="ad-row"><td colspan="${cols.length}" style="background:#FFEBEE !important"><div style="padding:14px 72px;color:var(--red);font-size:13px;font-weight:600">廣告列表渲染錯誤：${String(renderErr).replace(/</g,'&lt;')}</div></td></tr>`;
+                rows += `<tr class="creative-row"><td colspan="${cols.length}" style="background:#FFEBEE !important"><div style="padding:14px 72px;color:var(--red);font-size:13px;font-weight:600">廣告列表渲染錯誤：${String(renderErr).replace(/</g,'&lt;')}</div></td></tr>`;
               }
             }
           }
@@ -2112,20 +2112,20 @@ function _renderTreeImpl() {
   container.innerHTML = finalHtml;
   container.scrollTop = savedScroll;
   // Synchronous DOM check right after innerHTML set
-  const adRowsInDom = container.querySelectorAll('tr.ad-row').length;
+  const adRowsInDom = container.querySelectorAll('tr.creative-row').length;
   const adsetRowsInDom = container.querySelectorAll('tr.adset-row').length;
   const campRowsInDom = container.querySelectorAll('tr.campaign-row').length;
-  console.log('[renderTree] DOM after innerHTML: campaign-row=' + campRowsInDom + ' adset-row=' + adsetRowsInDom + ' ad-row=' + adRowsInDom);
-  // Visibility diagnostic: for each ad-row, log computed style + bounding rect
-  // so we can tell if ad-rows are rendered but invisible due to CSS/layout.
+  console.log('[renderTree] DOM after innerHTML: campaign-row=' + campRowsInDom + ' adset-row=' + adsetRowsInDom + ' creative-row=' + adRowsInDom);
+  // Visibility diagnostic: for each creative-row, log computed style + bounding rect
+  // so we can tell if creative-rows are rendered but invisible due to CSS/layout.
   if(adRowsInDom > 0) {
     const containerRect = container.getBoundingClientRect();
     console.log('[renderTree] container rect: top=' + Math.round(containerRect.top) + ' bottom=' + Math.round(containerRect.bottom) + ' height=' + Math.round(containerRect.height) + ' scrollTop=' + container.scrollTop + ' scrollHeight=' + container.scrollHeight + ' clientHeight=' + container.clientHeight);
-    container.querySelectorAll('tr.ad-row').forEach((row, i) => {
+    container.querySelectorAll('tr.creative-row').forEach((row, i) => {
       const rect = row.getBoundingClientRect();
       const cs = getComputedStyle(row);
       const parentTable = row.closest('table');
-      console.log('[renderTree] ad-row[' + i + '] display=' + cs.display + ' vis=' + cs.visibility + ' opacity=' + cs.opacity + ' height=' + cs.height + ' offsetHeight=' + row.offsetHeight + ' rect.top=' + Math.round(rect.top) + ' rect.bottom=' + Math.round(rect.bottom) + ' width=' + Math.round(rect.width) + ' inTable=' + !!parentTable + ' text="' + (row.textContent || '').replace(/\s+/g,' ').trim().slice(0, 80) + '"');
+      console.log('[renderTree] creative-row[' + i + '] display=' + cs.display + ' vis=' + cs.visibility + ' opacity=' + cs.opacity + ' height=' + cs.height + ' offsetHeight=' + row.offsetHeight + ' rect.top=' + Math.round(rect.top) + ' rect.bottom=' + Math.round(rect.bottom) + ' width=' + Math.round(rect.width) + ' inTable=' + !!parentTable + ' text="' + (row.textContent || '').replace(/\s+/g,' ').trim().slice(0, 80) + '"');
     });
   }
   // Surface state of every expanded adset
@@ -2223,10 +2223,10 @@ async function toggleAdset(e, id) {
 function _scrollToFirstAd(adsetId) {
   const adsetRow = document.querySelector(`tr[data-adset="${adsetId}"]`);
   if(!adsetRow) return;
-  // Find the next ad-row sibling (or fallback to the adset row itself)
+  // Find the next creative-row sibling (or fallback to the adset row itself)
   let next = adsetRow.nextElementSibling;
   let target = adsetRow;
-  while(next && next.classList.contains('ad-row')) {
+  while(next && next.classList.contains('creative-row')) {
     target = next;
     next = next.nextElementSibling;
   }
