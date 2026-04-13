@@ -216,8 +216,11 @@ input:checked + .slider:before { transform: translateX(14px); }
 
 /* ── Loading / Empty ───────────────────────────────────────── */
 .loading { display: flex; align-items: center; justify-content: center; padding: 60px; color: var(--gray-300); gap: 10px; }
-.spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.7s linear infinite; }
+.spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--orange); border-radius: 50%; animation: spin 0.7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.fade-in { animation: fadeIn 0.25s ease-out both; }
+.skel { height: 13px; border-radius: 4px; background: linear-gradient(90deg, var(--border) 25%, var(--warm-white) 50%, var(--border) 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
 .empty-state { padding: 60px; text-align: center; color: var(--gray-300); }
 .empty-icon { font-size: 36px; margin-bottom: 10px; }
 
@@ -1770,6 +1773,17 @@ function saveSelectedIds() {
   syncToCloud();
 }
 
+// ── Skeleton loader helper ───────────────────────────────────
+function _skelRow(cols) {
+  const widths = [40, 200, 80, 70, 70, 70, 60, 60, 80];
+  return '<tr>' + Array.from({length: cols}, (_,i) =>
+    `<td style="padding:12px 14px"><div class="skel" style="width:${widths[i]||60}px"></div></td>`
+  ).join('') + '</tr>';
+}
+function _skelTable(rows, cols) {
+  return `<table class="tree"><tbody>${Array.from({length:rows}, ()=>_skelRow(cols)).join('')}</tbody></table>`;
+}
+
 // ── Dashboard ───────────────────────────────────────────────
 async function loadDashboard() {
   if(!selectedAccounts.length) {
@@ -1777,7 +1791,7 @@ async function loadDashboard() {
     clearStats();
     return;
   }
-  document.getElementById('treeContainer').innerHTML = '<div class="loading"><div class="spinner"></div>載入中...</div>';
+  document.getElementById('treeContainer').innerHTML = _skelTable(8, 9);
   // Show shimmer on stats immediately
   ['spend','imp','reach','clicks','ctr','cpc','cpm','freq','purchase','lead','msg','cpm-msg'].forEach(k => {
     const el = document.getElementById('st-'+k);
@@ -2082,7 +2096,12 @@ function renderTree() {
     <td class="num" style="font-weight:700;font-size:13px">${totalMsgs>0?'$'+fM(totalMsgSpend/totalMsgs):'—'}</td>
     <td colspan="2"></td>
   </tr>`;
-  container.innerHTML = `<table class="tree">${thead}<tbody>${rows}${totalRow}</tbody></table>`;
+  const wrap = document.createElement('div');
+  wrap.className = 'fade-in';
+  wrap.style.cssText = 'flex:1;display:flex;flex-direction:column;overflow:hidden';
+  wrap.innerHTML = `<table class="tree">${thead}<tbody>${rows}${totalRow}</tbody></table>`;
+  container.innerHTML = '';
+  container.appendChild(wrap);
 }
 
 async function toggleCamp(e, id) {
@@ -3298,13 +3317,18 @@ function renderFinanceTable() {
     const body = document.getElementById('financeTableBody');
     if(!financeRows.length) {
       const loaded = finCampData[accId] !== undefined;
-      body.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--gray-300)">${loaded?'無花費資料':'載入中...'}</td></tr>`;
+      body.innerHTML = loaded
+        ? `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--gray-300)">無花費資料</td></tr>`
+        : Array.from({length:6}, () => `<tr>${[40,80,0,110,110,110,48].map(w=>`<td style="padding:12px ${w?14:20}px"><div class="skel"${w?` style="width:${w}px"`:' style="width:100%"'}></div></td>`).join('')}</tr>`).join('');
       return;
     }
 
     // Use account-level insight spend for KPI (accurate, includes archived campaigns)
     const acctInsightSpend = finInsightData[accId]?.spend ? +finInsightData[accId].spend : null;
     let campSpendSum = 0;
+    body.classList.remove('fade-in');
+    void body.offsetWidth; // reflow to restart animation
+    body.classList.add('fade-in');
     body.innerHTML = financeRows.map(({camp}, i) => {
       const isPinned = finPinnedIds.includes(camp.id);
       const sp = +getIns(camp).spend || 0;
@@ -3388,10 +3412,15 @@ function renderFinanceTable() {
   const body = document.getElementById('financeTableBody');
   if(!financeRows.length) {
     const allLoaded = accsToShow.length > 0;
-    body.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--gray-300)">${allLoaded?'無花費資料':'載入中...'}</td></tr>`;
+    body.innerHTML = allLoaded
+      ? `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--gray-300)">無花費資料</td></tr>`
+      : Array.from({length:6}, () => `<tr>${[40,80,80,0,70,70,70,48].map(w=>`<td style="padding:12px ${w?14:20}px"><div class="skel"${w?` style="width:${w}px"`:' style="width:100%"'}></div></td>`).join('')}</tr>`).join('');
     return;
   }
 
+  body.classList.remove('fade-in');
+  void body.offsetWidth;
+  body.classList.add('fade-in');
   let campSpendSum = 0;
   body.innerHTML = financeRows.map(({camp}, i) => {
     const isPinned = finPinnedIds.includes(camp.id);
