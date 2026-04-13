@@ -38,9 +38,6 @@ export function useMultiAccountInsights(
       },
       enabled: status === "auth",
       staleTime: 30_000,
-      // Keep previous data on refetch to avoid flashing back to a
-      // blank KPI grid when the user changes the date.
-      placeholderData: (previous: FbInsights | null | undefined) => previous,
     })),
   });
 

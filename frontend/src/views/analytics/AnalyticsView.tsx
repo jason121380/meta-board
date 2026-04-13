@@ -86,7 +86,7 @@ export function AnalyticsView() {
       <div className="flex-1 overflow-y-auto p-6">
         {visible.length === 0 ? (
           <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
-        ) : isLoading && data.kpis.totalCampaigns === 0 ? (
+        ) : isLoading ? (
           <LoadingState
             title="分析資料中..."
             loaded={Math.min(campaignsQuery.loadedCount, insightsQuery.loadedCount)}
