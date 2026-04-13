@@ -2102,6 +2102,10 @@ function renderTree() {
     <td colspan="2"></td>
   </tr>`;
   container.innerHTML = `<table class="tree">${thead}<tbody>${rows}${totalRow}</tbody></table>`;
+  const adRowCount = container.querySelectorAll('tr.ad-row').length;
+  if(expandedAdsets.size > 0 || adRowCount > 0) {
+    console.log('[renderTree] expandedAdsets:', [...expandedAdsets], 'ad-rows in DOM:', adRowCount, 'allCamps:', allCamps.length);
+  }
 }
 
 async function toggleCamp(e, id) {
