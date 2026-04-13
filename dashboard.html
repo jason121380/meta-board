@@ -2116,6 +2116,18 @@ function _renderTreeImpl() {
   const adsetRowsInDom = container.querySelectorAll('tr.adset-row').length;
   const campRowsInDom = container.querySelectorAll('tr.campaign-row').length;
   console.log('[renderTree] DOM after innerHTML: campaign-row=' + campRowsInDom + ' adset-row=' + adsetRowsInDom + ' ad-row=' + adRowsInDom);
+  // Visibility diagnostic: for each ad-row, log computed style + bounding rect
+  // so we can tell if ad-rows are rendered but invisible due to CSS/layout.
+  if(adRowsInDom > 0) {
+    const containerRect = container.getBoundingClientRect();
+    console.log('[renderTree] container rect: top=' + Math.round(containerRect.top) + ' bottom=' + Math.round(containerRect.bottom) + ' height=' + Math.round(containerRect.height) + ' scrollTop=' + container.scrollTop + ' scrollHeight=' + container.scrollHeight + ' clientHeight=' + container.clientHeight);
+    container.querySelectorAll('tr.ad-row').forEach((row, i) => {
+      const rect = row.getBoundingClientRect();
+      const cs = getComputedStyle(row);
+      const parentTable = row.closest('table');
+      console.log('[renderTree] ad-row[' + i + '] display=' + cs.display + ' vis=' + cs.visibility + ' opacity=' + cs.opacity + ' height=' + cs.height + ' offsetHeight=' + row.offsetHeight + ' rect.top=' + Math.round(rect.top) + ' rect.bottom=' + Math.round(rect.bottom) + ' width=' + Math.round(rect.width) + ' inTable=' + !!parentTable + ' text="' + (row.textContent || '').replace(/\s+/g,' ').trim().slice(0, 80) + '"');
+    });
+  }
   // Surface state of every expanded adset
   if(expandedAdsets.size > 0) {
     const summary = [...expandedAdsets].map(id => {
