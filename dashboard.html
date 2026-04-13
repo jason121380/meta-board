@@ -342,7 +342,7 @@ input:checked + .slider:before { transform: translateX(14px); }
   /* ── 警示列表 mobile 30/70 ── */
   #alertBody { flex-direction: column; overflow: auto; }
   #alertAcctPanel { width: 100% !important; border-right: none; border-bottom: 1px solid var(--border); flex-shrink: 0; max-height: 160px; overflow-y: auto; }
-  #alertMainContent { padding: 10px 10px !important; overflow-y: auto; }
+  #alertMainContent { padding: 10px 10px !important; overflow-y: auto; overflow-x: hidden; }
   #alertTextCards > div { flex-direction: column !important; }
   #alertTextCards > div > div { flex: none !important; width: 100% !important; }
 
@@ -376,7 +376,7 @@ input:checked + .slider:before { transform: translateX(14px); }
   .dash-acct-item { flex-shrink: 0; min-width: 120px; border-bottom: none; border-right: 1px solid var(--border); padding: 5px 8px; }
   .dash-acct-name { font-size: 11px; }
   .dash-acct-dot { width: 6px; height: 6px; }
-  .dash-content { flex: 1; overflow-y: auto; }
+  .dash-content { flex: 1; overflow-y: auto; overflow-x: hidden; }
 
   /* ── Tree ── */
   .tree-wrap { margin: 6px 8px 8px; border-radius: 10px; overflow: auto; display: flex; flex-direction: column; }
@@ -2048,32 +2048,37 @@ function renderTree() {
             } else if(!ads.length) {
               rows += `<tr class="ad-row"><td colspan="${cols.length}"><div style="padding:10px 72px;color:var(--gray-300);font-size:12px">無廣告</div></td></tr>`;
             } else {
-              ads.forEach(ad => {
-                const adi = getIns(ad);
-                const thumb = ad.creative?.thumbnail_url;
-                rows += `<tr class="ad-row">
-                  <td></td>
-                  <td>
-                    <div class="name-cell indent-2" style="padding-left:72px">
-                      ${thumb ? `<img class="thumb" src="${thumb}" alt="">` : '<div style="width:30px;height:30px;background:var(--warm-white);border-radius:3px;flex-shrink:0"></div>'}
-                      <span class="name-text" title="${escHtml(ad.name)}" style="font-weight:400;color:var(--gray-500)">${escHtml(ad.name)}</span>
-                    </div>
-                  </td>
-                  ${multiAcct ? `<td></td>` : ''}
-                  <td>${statusBadge(ad.status)}</td>
-                  <td class="num">${fM(adi.spend)}</td>
-                  <td class="num">${fN(adi.impressions)}</td>
-                  <td class="num">${fN(adi.clicks)}</td>
-                  <td class="num">${fP(adi.ctr)}</td>
-                  <td class="num">${fM(adi.cpc)}</td>
-                  <td class="num">${(()=>{const m=getMsgTree(ad);return m>0?fN(m):'—';})()}</td>
-                  <td class="num">${(()=>{const m=getMsgTree(ad),s=+adi.spend||0;return m>0?'$'+fM(s/m):'—';})()}</td>
-                  <td class="muted">—</td>
-                  <td onclick="event.stopPropagation()">
-                    <label class="toggle"><input type="checkbox" ${ad.status==='ACTIVE'?'checked':''} onchange="toggleStatus('ads','${ad.id}',this,false)"><span class="slider"></span></label>
-                  </td>
-                </tr>`;
-              });
+              try {
+                ads.forEach(ad => {
+                  const adi = getIns(ad);
+                  const thumb = ad.creative?.thumbnail_url;
+                  rows += `<tr class="ad-row">
+                    <td></td>
+                    <td>
+                      <div class="name-cell indent-2" style="padding-left:72px">
+                        ${thumb ? `<img class="thumb" src="${escHtml(thumb)}" alt="">` : '<div style="width:30px;height:30px;background:var(--warm-white);border-radius:3px;flex-shrink:0"></div>'}
+                        <span class="name-text" title="${escHtml(ad.name)}" style="font-weight:400;color:var(--gray-500)">${escHtml(ad.name)}</span>
+                      </div>
+                    </td>
+                    ${multiAcct ? `<td></td>` : ''}
+                    <td>${statusBadge(ad.status)}</td>
+                    <td class="num">${fM(adi.spend)}</td>
+                    <td class="num">${fN(adi.impressions)}</td>
+                    <td class="num">${fN(adi.clicks)}</td>
+                    <td class="num">${fP(adi.ctr)}</td>
+                    <td class="num">${fM(adi.cpc)}</td>
+                    <td class="num">${(()=>{const m=getMsgTree(ad);return m>0?fN(m):'—';})()}</td>
+                    <td class="num">${(()=>{const m=getMsgTree(ad),s=+adi.spend||0;return m>0?'$'+fM(s/m):'—';})()}</td>
+                    <td class="muted">—</td>
+                    <td onclick="event.stopPropagation()">
+                      <label class="toggle"><input type="checkbox" ${ad.status==='ACTIVE'?'checked':''} onchange="toggleStatus('ads','${ad.id}',this,false)"><span class="slider"></span></label>
+                    </td>
+                  </tr>`;
+                });
+              } catch(renderErr) {
+                console.error('[renderTree] ad render error:', renderErr, adData);
+                rows += `<tr class="ad-row"><td colspan="${cols.length}"><div style="padding:10px 72px;color:var(--red);font-size:12px">廣告列表渲染錯誤（請聯絡技術支援）</div></td></tr>`;
+              }
             }
           }
         });
@@ -2133,22 +2138,28 @@ async function toggleAdset(e, id) {
   }
   expandedAdsets.add(id);
   renderTree();
-  // null = error sentinel; undefined = not yet fetched; [] = empty; [...] = loaded
-  // Allow retry on null by clearing on second click (open→close→open cycle resets)
-  if(adData[id] === undefined || adData[id] === null) {
-    adData[id] = undefined; // reset to loading state for re-render
-    const dp = getDateParams();
-    try {
-      const r = await fetch(`${API}/api/adsets/${id}/ads?${dp}`);
-      const res = await r.json();
-      if(r.ok && res.data) {
-        adData[id] = res.data;
-      } else {
-        adData[id] = null; // error sentinel — stops retry
-      }
-    } catch(e) { adData[id] = null; }
-    renderTree();
+  if(adData[id] !== undefined && adData[id] !== null) {
+    console.log('[toggleAdset] using cached ads for', id, ':', adData[id]?.length, 'ads');
+    return;
   }
+  adData[id] = undefined;
+  const dp = getDateParams();
+  console.log('[toggleAdset] fetching ads for', id, 'dp:', dp);
+  try {
+    const r = await fetch(`${API}/api/adsets/${id}/ads?${dp}`);
+    const res = await r.json();
+    console.log('[toggleAdset] response status:', r.status, 'data:', Array.isArray(res.data) ? res.data.length + ' ads' : JSON.stringify(res).substring(0, 200));
+    if(r.ok && Array.isArray(res.data)) {
+      adData[id] = res.data;
+    } else {
+      adData[id] = null;
+    }
+  } catch(err) {
+    console.error('[toggleAdset] fetch error:', err);
+    adData[id] = null;
+  }
+  console.log('[toggleAdset] adData[id] after fetch:', adData[id] === null ? 'null(error)' : adData[id]?.length + ' ads');
+  renderTree();
 }
 
 function expandAll() {
