@@ -29,18 +29,6 @@
       "style": {
         "noNonNullAssertion": "warn",
         "useImportType": "error"
-      },
-      "nursery": {
-        "noRestrictedImports": {
-          "level": "error",
-          "options": {
-            "paths": {
-              "react": {
-                "message": "Use `import { ... } from 'react'` — default export is deprecated."
-              }
-            }
-          }
-        }
       }
     }
   },

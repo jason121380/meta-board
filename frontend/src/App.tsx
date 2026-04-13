@@ -10,9 +10,7 @@ export function App() {
         <div className="mb-2 text-2xl font-bold text-ink">
           METADASH <span className="text-orange">by LURE</span>
         </div>
-        <div className="text-sm text-gray-500">
-          Phase 0 scaffold — React rewrite in progress.
-        </div>
+        <div className="text-sm text-gray-500">Phase 0 scaffold — React rewrite in progress.</div>
       </div>
     </div>
   );
