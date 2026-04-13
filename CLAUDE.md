@@ -154,10 +154,38 @@ Do NOT use `accent-color` inline style — always use the `custom-cb` class.
 ## Do Not
 
 - Commit `.env`
-- Add a build step — keep frontend as single HTML file
 - Use sync httpx — all FB calls must be async
 - Use `str | None` syntax (Python 3.9 — use `Optional[str]` from typing)
 - Add emojis to the UI
-- Define `getMsgCount` locally inside a function — it must remain a global function
+- Define `getMsgCount` locally inside a function — it must remain a global function (legacy) or a module-level named export (React rewrite). NEVER copy its logic inline.
 - Use `onsite_conversion.total_messaging_connection` for message counting (double-counts)
 - Use `accent-color` on checkboxes — always use `class="custom-cb"`
+- **Use any CSS class name starting with `ad-` or `ads-`**. Ad blockers
+  (uBlock Origin, AdBlock Plus) include filter list rules like
+  `[class^="ad-"]` that set `display:none !important` on matching
+  elements. This is the root cause of commit `d720fa2` (3rd-level ads
+  invisible). Use `creative-*` or another prefix instead. The
+  `frontend/scripts/check-no-ad-class.mjs` pre-commit guard enforces
+  this automatically — it runs as part of `pnpm lint`.
+
+## React rewrite (as of 2026-04-13)
+
+The frontend is being migrated from the single `dashboard.html` file
+to a React + Vite + TypeScript app under `frontend/`. Both coexist
+during the transition:
+
+- `main.py` serves the built React bundle at `/` when `dist/` exists,
+  falling back to `dashboard.html`
+- `/legacy` always serves `dashboard.html` for side-by-side diffing
+- `pnpm build` output goes to repo-root `dist/` so FastAPI serves it
+  via `StaticFiles(directory="dist")`
+- Zeabur deploy config: `zeabur.json` runs
+  `corepack enable && cd frontend && pnpm install && pnpm build && cd .. && pip install -r requirements.txt`
+- The "no build step" rule is dropped for the React app but the
+  legacy `dashboard.html` is still editable without a build
+
+Quality gates (all run in CI, enforced by `pnpm check`):
+- `pnpm typecheck` — strict TS + `noUncheckedIndexedAccess`
+- `pnpm lint`      — Biome + `lint:no-ad-class` guard
+- `pnpm test`      — Vitest (~115 unit tests for pure business logic)
+- `pnpm test:e2e`  — Playwright visual regression (Phase 9b)

@@ -1,0 +1,17 @@
+node_modules
+dist
+coverage
+*.log
+.DS_Store
+
+# Generated from OpenAPI — regenerated during build
+src/api/schema.d.ts
+
+# Playwright
+/playwright-report
+/test-results
+/blob-report
+/playwright/.cache
+
+# Vitest
+/coverage

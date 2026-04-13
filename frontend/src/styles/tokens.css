@@ -1,0 +1,52 @@
+/*
+ * Design tokens — literal port of dashboard.html :root block.
+ * DO NOT add / rename / remove a token without a side-by-side visual diff:
+ * every existing component in the legacy build uses `var(--*)` and assumes
+ * these exact values. See /style.md for the authoritative spec.
+ */
+
+:root {
+  /* Brand orange */
+  --orange: #ff6b2c;
+  --orange-dark: #e55a1c;
+  --orange-bg: #fff5f0;
+  --orange-border: #ffe8d9;
+  --orange-muted: #b07a50;
+
+  /* Legacy aliases — several dashboard.html components still reference
+     `--blue` / `--blue-dark` / `--blue-bg` (a holdover from the original
+     "Google My Business" blue theme before rebrand). Keep them so any
+     component CSS we port verbatim continues to work. */
+  --blue: #ff6b2c;
+  --blue-dark: #e55a1c;
+  --blue-bg: #fff5f0;
+
+  /* Neutrals */
+  --black: #1a1a1a;
+  --gray-500: #666666;
+  --gray-300: #aaaaaa;
+  --warm-white: #fafafa;
+  --white: #ffffff;
+  --border: #f0f0f0;
+  --border-strong: #e0e0e0;
+
+  /* Semantic */
+  --green: #2e7d32;
+  --green-bg: #e8f5e9;
+  --red: #c62828;
+  --red-bg: #ffebee;
+  --yellow: #e65100;
+  --yellow-bg: #fff3e0;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 24px rgba(0, 0, 0, 0.08);
+
+  /* Layout */
+  --sidebar-w: 220px;
+
+  /* Radii */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-pill: 50px;
+}
