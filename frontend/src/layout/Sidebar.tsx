@@ -145,12 +145,28 @@ const TOOL_ITEMS: NavItem[] = [
   },
 ];
 
-export function Sidebar() {
+export interface SidebarProps {
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+}
+
+export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const { user, logout } = useFbAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-[100] flex w-[220px] flex-col overflow-y-auto border-r border-border bg-white">
+    <aside
+      data-mobile-open={mobileOpen ? "true" : "false"}
+      className={cn(
+        "shell-sidebar fixed inset-y-0 left-0 z-[100] flex w-[220px] flex-col overflow-y-auto border-r border-border bg-white",
+      )}
+      onClick={() => {
+        // Tapping a link inside the sidebar triggers a route change
+        // (handled in Shell's useEffect) which auto-closes. This extra
+        // onClick is a belt-and-suspenders close for non-link children.
+        if (onMobileClose && mobileOpen) onMobileClose();
+      }}
+    >
       {/* Logo header */}
       <div className="flex h-[60px] shrink-0 items-center gap-2 border-b border-border px-4">
         <div className="text-[15px] font-bold tracking-[-0.2px] text-ink">
