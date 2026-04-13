@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'lure-meta-v2';
+const CACHE_VERSION = 'lure-meta-v3';
 
 const APP_SHELL = [
   '/',
