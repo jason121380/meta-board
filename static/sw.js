@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'lure-meta-v1';
+const CACHE_VERSION = 'lure-meta-v2';
 
 const APP_SHELL = [
   '/',
@@ -31,6 +31,17 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // Only handle http(s) — chrome-extension://, data:, blob: etc. cannot be cached
+  // and would throw "Request scheme 'chrome-extension' is unsupported".
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return;
+  }
+  // Only cache same-origin or the specific CDN assets we pre-cached; skip
+  // third-party requests (analytics, fb SDK, etc.) to avoid cache errors.
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
   // Network-first for API calls
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
@@ -52,13 +63,19 @@ self.addEventListener('fetch', (event) => {
         return cached;
       }
       return fetch(event.request).then((response) => {
-        if (!response || response.status !== 200) {
+        if (!response || response.status !== 200 || response.type === 'opaque') {
           return response;
         }
         const clone = response.clone();
         caches.open(CACHE_VERSION).then((cache) => {
-          cache.put(event.request, clone);
-        });
+          // Wrap put in try/catch because some URLs (chrome-extension, etc.)
+          // cannot be cached and would throw.
+          try {
+            cache.put(event.request, clone);
+          } catch (e) {
+            // Silently ignore — browser extensions etc.
+          }
+        }).catch(() => {});
         return response;
       });
     })

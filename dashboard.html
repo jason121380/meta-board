@@ -2117,11 +2117,11 @@ function _renderTreeImpl() {
       else state = `unknown(${typeof v})`;
       return { id, state };
     });
-    console.debug('[renderTree] expanded adsets', summary);
+    console.log('[renderTree] expanded adsets', summary);
     // Also verify that the DOM actually contains ad-row elements for any loaded adsets
     requestAnimationFrame(() => {
       const adRowsInDom = container.querySelectorAll('tr.ad-row').length;
-      console.debug('[renderTree] ad-row count in DOM:', adRowsInDom);
+      console.log('[renderTree] ad-row count in DOM:', adRowsInDom);
     });
   }
 }
@@ -2153,7 +2153,7 @@ async function toggleCamp(e, id) {
 
 async function toggleAdset(e, id) {
   e.stopPropagation();
-  console.debug('[toggleAdset] click', { id, alreadyOpen: expandedAdsets.has(id), currentAds: adData[id] });
+  console.log('[toggleAdset] click', { id, alreadyOpen: expandedAdsets.has(id), currentAds: adData[id] });
   if(expandedAdsets.has(id)) {
     expandedAdsets.delete(id);
     renderTree();
@@ -2163,7 +2163,7 @@ async function toggleAdset(e, id) {
   renderTree();
   // Always re-fetch if we don't already have a successful array result
   if(Array.isArray(adData[id]) && adData[id].length > 0) {
-    console.debug('[toggleAdset] using cached ads', { id, count: adData[id].length });
+    console.log('[toggleAdset] using cached ads', { id, count: adData[id].length });
     // Force scroll so user can see them
     requestAnimationFrame(() => _scrollToFirstAd(id));
     return;
@@ -2173,12 +2173,12 @@ async function toggleAdset(e, id) {
   renderTree();
   const dp = getDateParams();
   const url = `${API}/api/adsets/${id}/ads?${dp}`;
-  console.debug('[toggleAdset] fetching', url);
+  console.log('[toggleAdset] fetching', url);
   try {
     const r = await fetch(url);
     let res = null;
     try { res = await r.json(); } catch(jsonErr) { console.error('[toggleAdset] JSON parse failed', jsonErr); }
-    console.debug('[toggleAdset] response', { id, status: r.status, ok: r.ok, body: res });
+    console.log('[toggleAdset] response', { id, status: r.status, ok: r.ok, body: res });
     if(r.ok && res && Array.isArray(res.data)) {
       adData[id] = res.data;
     } else {
