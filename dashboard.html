@@ -2042,6 +2042,8 @@ function _renderTreeImpl() {
 
           if(adsetOpen) {
             const isErrObj = ads && typeof ads === 'object' && !Array.isArray(ads) && ads.__error;
+            const branch = (ads === null || isErrObj) ? 'error' : (ads === undefined ? 'loading' : (!ads.length ? 'empty' : 'ads(' + ads.length + ')'));
+            console.log('[renderTree] adset ' + adset.id + ' OPEN branch=' + branch);
             if(ads === null || isErrObj) {
               const errMsg = isErrObj ? `無法載入廣告：${ads.message || '未知錯誤'}（點擊廣告組合重試）` : '無法載入廣告（點擊廣告組合重試）';
               rows += `<tr class="ad-row"><td colspan="${cols.length}" style="background:#FFF5F0 !important"><div style="padding:14px 72px;color:var(--red,#c0392b);font-size:13px;font-weight:600">${errMsg}</div></td></tr>`;
@@ -2050,6 +2052,7 @@ function _renderTreeImpl() {
             } else if(!ads.length) {
               rows += `<tr class="ad-row"><td colspan="${cols.length}" style="background:#FFFCFA !important"><div style="padding:14px 72px;color:var(--gray-500);font-size:13px;font-weight:500">此廣告組合下沒有廣告</div></td></tr>`;
             } else {
+              const beforeLen = rows.length;
               try {
                 ads.forEach(ad => {
                   const adi = getIns(ad);
@@ -2077,9 +2080,10 @@ function _renderTreeImpl() {
                     </td>
                   </tr>`;
                 });
+                console.log('[renderTree] emitted ' + ads.length + ' ad-rows for adset ' + adset.id + ' (rows grew by ' + (rows.length - beforeLen) + ' chars)');
               } catch(renderErr) {
-                console.error('[renderTree] ad render error:', renderErr, adData);
-                rows += `<tr class="ad-row"><td colspan="${cols.length}"><div style="padding:10px 72px;color:var(--red);font-size:12px">廣告列表渲染錯誤（請聯絡技術支援）</div></td></tr>`;
+                console.error('[renderTree] ad render error for adset ' + adset.id + ':', renderErr);
+                rows += `<tr class="ad-row"><td colspan="${cols.length}" style="background:#FFEBEE !important"><div style="padding:14px 72px;color:var(--red);font-size:13px;font-weight:600">廣告列表渲染錯誤：${String(renderErr).replace(/</g,'&lt;')}</div></td></tr>`;
               }
             }
           }
@@ -2103,26 +2107,28 @@ function _renderTreeImpl() {
     <td class="num" style="font-weight:700;font-size:13px">${totalMsgs>0?'$'+fM(totalMsgSpend/totalMsgs):'—'}</td>
     <td colspan="2"></td>
   </tr>`;
-  container.innerHTML = `<table class="tree">${thead}<tbody>${rows}${totalRow}</tbody></table>`;
+  const finalHtml = `<table class="tree">${thead}<tbody>${rows}${totalRow}</tbody></table>`;
+  console.log('[renderTree] setting innerHTML, rows string length=' + rows.length + ', total html length=' + finalHtml.length);
+  container.innerHTML = finalHtml;
   container.scrollTop = savedScroll;
-  // Diagnostic: surface state of every expanded adset so users can debug missing 3rd level
+  // Synchronous DOM check right after innerHTML set
+  const adRowsInDom = container.querySelectorAll('tr.ad-row').length;
+  const adsetRowsInDom = container.querySelectorAll('tr.adset-row').length;
+  const campRowsInDom = container.querySelectorAll('tr.campaign-row').length;
+  console.log('[renderTree] DOM after innerHTML: campaign-row=' + campRowsInDom + ' adset-row=' + adsetRowsInDom + ' ad-row=' + adRowsInDom);
+  // Surface state of every expanded adset
   if(expandedAdsets.size > 0) {
     const summary = [...expandedAdsets].map(id => {
       const v = adData[id];
       let state;
       if(v === undefined) state = 'loading';
       else if(v === null) state = 'error(null)';
-      else if(Array.isArray(v)) state = `loaded(${v.length})`;
-      else if(v && v.__error) state = `error(${v.message})`;
-      else state = `unknown(${typeof v})`;
-      return { id, state };
-    });
-    console.log('[renderTree] expanded adsets', summary);
-    // Also verify that the DOM actually contains ad-row elements for any loaded adsets
-    requestAnimationFrame(() => {
-      const adRowsInDom = container.querySelectorAll('tr.ad-row').length;
-      console.log('[renderTree] ad-row count in DOM:', adRowsInDom);
-    });
+      else if(Array.isArray(v)) state = 'loaded(' + v.length + ')';
+      else if(v && v.__error) state = 'error(' + v.message + ')';
+      else state = 'unknown(' + typeof v + ')';
+      return id + '=' + state;
+    }).join(', ');
+    console.log('[renderTree] expanded adsets: ' + summary);
   }
 }
 
@@ -2153,17 +2159,21 @@ async function toggleCamp(e, id) {
 
 async function toggleAdset(e, id) {
   e.stopPropagation();
-  console.log('[toggleAdset] click', { id, alreadyOpen: expandedAdsets.has(id), currentAds: adData[id] });
-  if(expandedAdsets.has(id)) {
+  const wasOpen = expandedAdsets.has(id);
+  const cachedType = Array.isArray(adData[id]) ? ('array[' + adData[id].length + ']') : (adData[id] === null ? 'null' : adData[id] === undefined ? 'undefined' : 'obj');
+  console.log('[toggleAdset] click id=' + id + ' wasOpen=' + wasOpen + ' cached=' + cachedType);
+  if(wasOpen) {
     expandedAdsets.delete(id);
+    console.log('[toggleAdset] -> COLLAPSE ' + id);
     renderTree();
     return;
   }
   expandedAdsets.add(id);
+  console.log('[toggleAdset] -> EXPAND ' + id);
   renderTree();
   // Always re-fetch if we don't already have a successful array result
   if(Array.isArray(adData[id]) && adData[id].length > 0) {
-    console.log('[toggleAdset] using cached ads', { id, count: adData[id].length });
+    console.log('[toggleAdset] using cached ads id=' + id + ' count=' + adData[id].length);
     // Force scroll so user can see them
     requestAnimationFrame(() => _scrollToFirstAd(id));
     return;
@@ -2173,12 +2183,13 @@ async function toggleAdset(e, id) {
   renderTree();
   const dp = getDateParams();
   const url = `${API}/api/adsets/${id}/ads?${dp}`;
-  console.log('[toggleAdset] fetching', url);
+  console.log('[toggleAdset] fetching ' + url);
   try {
     const r = await fetch(url);
     let res = null;
     try { res = await r.json(); } catch(jsonErr) { console.error('[toggleAdset] JSON parse failed', jsonErr); }
-    console.log('[toggleAdset] response', { id, status: r.status, ok: r.ok, body: res });
+    const bodySummary = res && Array.isArray(res.data) ? ('data[' + res.data.length + ']') : (res && res.detail ? ('detail=' + res.detail) : JSON.stringify(res).slice(0,200));
+    console.log('[toggleAdset] response id=' + id + ' status=' + r.status + ' ok=' + r.ok + ' body=' + bodySummary);
     if(r.ok && res && Array.isArray(res.data)) {
       adData[id] = res.data;
     } else {
