@@ -82,26 +82,90 @@ if STATIC_DIR.exists():
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
-async def fb_get(path: str, params: Optional[dict] = None) -> dict:
+async def _fb_request(method: str, path: str, params: Optional[dict] = None, data_payload: Optional[dict] = None) -> dict:
+    """Send a request to FB Graph API and convert ALL failure modes to HTTPException
+    with a JSON body so the frontend can always parse and display the error.
+    """
     if params is None:
         params = {}
-    params = {"access_token": get_token(), **params}
-    r = await _http_client.get(f"{BASE_URL}/{path}", params=params)
-    data = r.json()
-    if "error" in data:
-        raise HTTPException(status_code=400, detail=data["error"].get("message", "FB API Error"))
-    return data
+    if data_payload is None:
+        data_payload = {}
+    token = get_token()
+    if not token:
+        raise HTTPException(status_code=401, detail="Facebook access token not set. Please log in.")
+    url = f"{BASE_URL}/{path}"
+    try:
+        if method == "GET":
+            params = {"access_token": token, **params}
+            r = await _http_client.get(url, params=params)
+        else:
+            data_payload = {"access_token": token, **data_payload}
+            r = await _http_client.post(url, data=data_payload)
+    except httpx.TimeoutException as e:
+        raise HTTPException(status_code=504, detail=f"Facebook API timeout: {e}")
+    except httpx.RequestError as e:
+        # Includes ConnectError, ProxyError, NetworkError, etc.
+        raise HTTPException(status_code=502, detail=f"Cannot reach Facebook API: {type(e).__name__}: {e}")
+    # Try to parse JSON response
+    try:
+        body = r.json()
+    except Exception:
+        # FB returned non-JSON (rare, usually HTML error page)
+        snippet = (r.text or "")[:300]
+        raise HTTPException(status_code=502, detail=f"Facebook API returned non-JSON (HTTP {r.status_code}): {snippet}")
+    if isinstance(body, dict) and "error" in body:
+        err = body["error"] if isinstance(body["error"], dict) else {}
+        msg = err.get("message", "Facebook API error")
+        # Re-surface FB error code so frontend can react (e.g. token expired = 190)
+        code = err.get("code")
+        sub = err.get("error_subcode")
+        detail = f"{msg} [code={code}{f' subcode={sub}' if sub else ''}]" if code else msg
+        raise HTTPException(status_code=400, detail=detail)
+    return body
+
+
+async def fb_get(path: str, params: Optional[dict] = None) -> dict:
+    return await _fb_request("GET", path, params=params)
 
 
 async def fb_post(path: str, payload: Optional[dict] = None) -> dict:
-    if payload is None:
-        payload = {}
-    payload = {"access_token": get_token(), **payload}
-    r = await _http_client.post(f"{BASE_URL}/{path}", data=payload)
-    data = r.json()
-    if "error" in data:
-        raise HTTPException(status_code=400, detail=data["error"].get("message", "FB API Error"))
-    return data
+    return await _fb_request("POST", path, data_payload=payload)
+
+
+async def fb_get_paginated(path: str, params: Optional[dict] = None) -> List[dict]:
+    """Paginate through a FB Graph API endpoint that returns {data:[], paging:{next}}.
+    Always raises HTTPException on failure (never lets httpx errors bubble up as 500).
+    """
+    if params is None:
+        params = {}
+    token = get_token()
+    if not token:
+        raise HTTPException(status_code=401, detail="Facebook access token not set. Please log in.")
+    items: List[dict] = []
+    next_url: Optional[str] = f"{BASE_URL}/{path}"
+    page_params = {"access_token": token, **params}
+    while next_url:
+        try:
+            r = await _http_client.get(next_url, params=page_params)
+        except httpx.TimeoutException as e:
+            raise HTTPException(status_code=504, detail=f"Facebook API timeout: {e}")
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=502, detail=f"Cannot reach Facebook API: {type(e).__name__}: {e}")
+        try:
+            data = r.json()
+        except Exception:
+            snippet = (r.text or "")[:300]
+            raise HTTPException(status_code=502, detail=f"Facebook API returned non-JSON (HTTP {r.status_code}): {snippet}")
+        if isinstance(data, dict) and "error" in data:
+            err = data["error"] if isinstance(data["error"], dict) else {}
+            msg = err.get("message", "Facebook API error")
+            code = err.get("code")
+            detail = f"{msg} [code={code}]" if code else msg
+            raise HTTPException(status_code=400, detail=detail)
+        items.extend(data.get("data", []))
+        next_url = data.get("paging", {}).get("next")
+        page_params = {}  # next_url already contains all params
+    return items
 
 
 def _insights_clause(fields: str, date_preset: str = "last_30d", time_range: Optional[str] = None) -> str:
@@ -191,21 +255,10 @@ async def quick_launch_campaign(payload: CampaignCreate):
 
 @app.get("/api/accounts")
 async def get_accounts():
-    accounts = []
-    next_url = f"{BASE_URL}/me/adaccounts"
-    params = {
+    accounts = await fb_get_paginated("me/adaccounts", {
         "fields": "id,name,account_status,currency,timezone_name,business",
-        "access_token": get_token(),
-        "limit": "100"
-    }
-    while next_url:
-        r = await _http_client.get(next_url, params=params)
-        data = r.json()
-        if "error" in data:
-            raise HTTPException(status_code=400, detail=data["error"].get("message", "FB API Error"))
-        accounts.extend(data.get("data", []))
-        next_url = data.get("paging", {}).get("next")
-        params = {}  # next_url already contains all params
+        "limit": "100",
+    })
     return {"data": accounts}
 
 
@@ -217,36 +270,26 @@ async def get_campaigns(account_id: str, date_preset: str = "last_30d", time_ran
     extra = {}
     if include_archived:
         extra["effective_status"] = '["ACTIVE","PAUSED","ARCHIVED","DELETED"]'
+    # Try with insights first
     try:
-        fields = f"id,name,status,objective,daily_budget,lifetime_budget,{ins}"
-        all_camps = []
-        next_url = f"{BASE_URL}/{account_id}/campaigns"
-        params = {"fields": fields, "limit": "100", "access_token": get_token(), **extra}
-        while next_url:
-            r = await _http_client.get(next_url, params=params)
-            data = r.json()
-            if "error" in data:
-                raise HTTPException(status_code=400, detail=data["error"].get("message", "FB API Error"))
-            all_camps.extend(data.get("data", []))
-            next_url = data.get("paging", {}).get("next")
-            params = {}
-        return {"data": all_camps}
+        camps = await fb_get_paginated(f"{account_id}/campaigns", {
+            "fields": f"id,name,status,objective,daily_budget,lifetime_budget,{ins}",
+            "limit": "100",
+            **extra,
+        })
+        return {"data": camps}
     except HTTPException:
-        raise
-    except Exception:
-        # Fallback: fetch without insights, still paginate
-        all_camps = []
-        next_url = f"{BASE_URL}/{account_id}/campaigns"
-        params = {"fields": "id,name,status,objective,daily_budget,lifetime_budget", "limit": "100", "access_token": get_token(), **extra}
-        while next_url:
-            r = await _http_client.get(next_url, params=params)
-            data = r.json()
-            if "error" in data:
-                break
-            all_camps.extend(data.get("data", []))
-            next_url = data.get("paging", {}).get("next")
-            params = {}
-        return {"data": all_camps}
+        # Fallback: fetch without insights so the user still sees campaign list
+        # even if FB rejects the insights query (e.g. invalid date for archived).
+        try:
+            camps = await fb_get_paginated(f"{account_id}/campaigns", {
+                "fields": "id,name,status,objective,daily_budget,lifetime_budget",
+                "limit": "100",
+                **extra,
+            })
+            return {"data": camps}
+        except HTTPException:
+            raise
 
 
 @app.post("/api/campaigns/{campaign_id}/status")
@@ -301,29 +344,25 @@ async def update_adset_budget(adset_id: str, daily_budget: int = Query(None)):
 @app.get("/api/adsets/{adset_id}/ads")
 async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None):
     ins = _insights_clause("spend,impressions,clicks,ctr,cpc,cpm,actions", date_preset, time_range)
-    try:
-        data = await fb_get(f"{adset_id}/ads", {
-            "fields": f"id,name,status,creative{{thumbnail_url,title,body}},{ins}",
-            "limit": "100"
-        })
-        return data
-    except Exception:
-        pass
-    try:
-        # Fallback 1: without creative
-        data = await fb_get(f"{adset_id}/ads", {
-            "fields": f"id,name,status,{ins}",
-            "limit": "100"
-        })
-        return data
-    except Exception:
-        pass
-    # Fallback 2: basic fields only, no insights
-    data = await fb_get(f"{adset_id}/ads", {
-        "fields": "id,name,status",
-        "limit": "100"
-    })
-    return data
+    last_error: Optional[HTTPException] = None
+    # Try 3 progressively simpler field sets so a partial failure (e.g. account
+    # lacks creative permission) still returns something usable.
+    attempts = [
+        f"id,name,status,creative{{thumbnail_url,title,body}},{ins}",
+        f"id,name,status,{ins}",
+        "id,name,status",
+    ]
+    for fields in attempts:
+        try:
+            return await fb_get(f"{adset_id}/ads", {"fields": fields, "limit": "100"})
+        except HTTPException as e:
+            last_error = e
+            continue
+    # All attempts failed — surface the most recent error so the frontend can
+    # display the actual reason instead of a silent 500.
+    if last_error is not None:
+        raise last_error
+    raise HTTPException(status_code=502, detail="Failed to load ads from Facebook API")
 
 
 @app.post("/api/ads/{ad_id}/status")
