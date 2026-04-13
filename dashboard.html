@@ -903,7 +903,7 @@ input:checked + .slider:before { transform: translateX(14px); }
             <button class="btn btn-ghost btn-sm" onclick="collapseAll()">收合全部</button>
           </div>
         </div>
-        <div id="treeContainer" style="overflow-y:auto;flex:1">
+        <div id="treeContainer" style="overflow-y:auto;flex:1;min-height:0">
           <div class="empty-state">從左側選擇廣告帳戶</div>
         </div>
       </div>
@@ -1932,10 +1932,6 @@ function renderTree() {
     }
   }
 
-  if(expandedAdsets.size > 0) {
-    console.log('[renderTree] allCamps:', allCamps.length, 'expandedAdsets:', [...expandedAdsets], 'adData keys:', Object.keys(adData).length);
-  }
-
   document.getElementById('treeCount').textContent = `${allCamps.length} 個活動`;
 
   if(!allCamps.length) {
@@ -2143,27 +2139,21 @@ async function toggleAdset(e, id) {
   expandedAdsets.add(id);
   renderTree();
   if(adData[id] !== undefined && adData[id] !== null) {
-    console.log('[toggleAdset] using cached ads for', id, ':', adData[id]?.length, 'ads');
-    renderTree(); // ensure ads are visible even if renderTree ran without expandedAdsets having this id
     return;
   }
   adData[id] = undefined;
   const dp = getDateParams();
-  console.log('[toggleAdset] fetching ads for', id, 'dp:', dp);
   try {
     const r = await fetch(`${API}/api/adsets/${id}/ads?${dp}`);
     const res = await r.json();
-    console.log('[toggleAdset] response status:', r.status, 'data:', Array.isArray(res.data) ? res.data.length + ' ads' : JSON.stringify(res).substring(0, 200));
     if(r.ok && Array.isArray(res.data)) {
       adData[id] = res.data;
     } else {
       adData[id] = null;
     }
   } catch(err) {
-    console.error('[toggleAdset] fetch error:', err);
     adData[id] = null;
   }
-  console.log('[toggleAdset] adData[id] after fetch:', adData[id] === null ? 'null(error)' : adData[id]?.length + ' ads');
   // Re-add to expandedAdsets in case something cleared it during the fetch (e.g. date change, refresh)
   expandedAdsets.add(id);
   renderTree();
