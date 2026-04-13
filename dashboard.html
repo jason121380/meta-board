@@ -1912,6 +1912,7 @@ const showCols = [
 function renderTree() {
   const search = document.getElementById('treeSearch').value.toLowerCase();
   const container = document.getElementById('treeContainer');
+  const savedScroll = container.scrollTop;
   const multiAcct = selectedAccounts.length > 1;
 
   // Flatten all campaigns from all selected accounts
@@ -2102,6 +2103,7 @@ function renderTree() {
     <td colspan="2"></td>
   </tr>`;
   container.innerHTML = `<table class="tree">${thead}<tbody>${rows}${totalRow}</tbody></table>`;
+  container.scrollTop = savedScroll;
 }
 
 async function toggleCamp(e, id) {
@@ -2157,6 +2159,11 @@ async function toggleAdset(e, id) {
   // Re-add to expandedAdsets in case something cleared it during the fetch (e.g. date change, refresh)
   expandedAdsets.add(id);
   renderTree();
+  // Scroll the adset row into view so the ads below it are visible
+  requestAnimationFrame(() => {
+    const row = document.querySelector(`tr[data-adset="${id}"]`);
+    if(row) row.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+  });
 }
 
 function expandAll() {
