@@ -2096,12 +2096,7 @@ function renderTree() {
     <td class="num" style="font-weight:700;font-size:13px">${totalMsgs>0?'$'+fM(totalMsgSpend/totalMsgs):'—'}</td>
     <td colspan="2"></td>
   </tr>`;
-  const wrap = document.createElement('div');
-  wrap.className = 'fade-in';
-  wrap.style.cssText = 'flex:1;display:flex;flex-direction:column;overflow:hidden';
-  wrap.innerHTML = `<table class="tree">${thead}<tbody>${rows}${totalRow}</tbody></table>`;
-  container.innerHTML = '';
-  container.appendChild(wrap);
+  container.innerHTML = `<div class="fade-in"><table class="tree">${thead}<tbody>${rows}${totalRow}</tbody></table></div>`;
 }
 
 async function toggleCamp(e, id) {
