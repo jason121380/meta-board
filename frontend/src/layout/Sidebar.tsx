@@ -1,5 +1,6 @@
 import { useFbAuth } from "@/auth/FbAuthProvider";
 import { cn } from "@/lib/cn";
+import { prefetchView } from "@/router";
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 
@@ -244,9 +245,17 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 }
 
 function SidebarLink({ item }: { item: NavItem }) {
+  // Start fetching the target view's JS chunk before the user
+  // commits to the navigation. On desktop this fires on hover; on
+  // touch devices it fires on touchstart so the chunk is in flight
+  // by the time the tap completes.
+  const prefetch = () => prefetchView(item.to);
   return (
     <NavLink
       to={item.to}
+      onMouseEnter={prefetch}
+      onFocus={prefetch}
+      onTouchStart={prefetch}
       className={({ isActive }) =>
         cn(
           "mb-1 flex min-h-[44px] select-none items-center gap-3 rounded-xl px-3.5 py-2.5",

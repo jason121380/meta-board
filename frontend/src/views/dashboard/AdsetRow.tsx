@@ -61,11 +61,19 @@ export function AdsetRow({ adset, multiAcct, colCount, date, onOpenBudget }: Ads
 
   return (
     <>
-      <tr className="adset-row cursor-pointer" data-adset={adset.id} onClick={onRowClick}>
+      <tr
+        className="adset-row cursor-pointer"
+        data-adset={adset.id}
+        onClick={onRowClick}
+        aria-expanded={expanded}
+      >
         <td />
         <td>
           <div className="flex max-w-[240px] items-center gap-1.5 pl-6">
-            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[10px] text-ink">
+            <span
+              aria-hidden="true"
+              className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[10px] text-ink"
+            >
               {expanded ? "▼" : "▶"}
             </span>
             <span className="truncate text-[13px] font-medium" title={adset.name}>

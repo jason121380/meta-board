@@ -161,9 +161,11 @@ export function AlertCard({
                             target="_blank"
                             rel="noopener noreferrer"
                             className="ml-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[13px] text-gray-300 no-underline active:bg-orange-bg active:text-orange md:ml-1.5 md:h-auto md:w-auto md:text-[11px]"
-                            title="開啟臉書後台"
+                            title="在 Facebook 廣告管理員開啟"
+                            aria-label={`在 Facebook 廣告管理員開啟 ${entry.campaign.name}`}
                           >
-                            ↗
+                            <span aria-hidden="true">↗</span>
+                            <span className="sr-only">在 Facebook 廣告管理員開啟</span>
                           </a>
                         )}
                       </div>

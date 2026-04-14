@@ -1,5 +1,6 @@
 import { FbAuthProvider, useFbAuth } from "@/auth/FbAuthProvider";
 import { ConfirmDialogHost } from "@/components/ConfirmDialog";
+import { PwaInstallHint } from "@/components/PwaInstallHint";
 import { router } from "@/router";
 import { hydrateAllStores, installStorageSync } from "@/stores";
 import { LoginView } from "@/views/login/LoginView";
@@ -40,7 +41,12 @@ export function App() {
 function AuthGate() {
   const { status } = useFbAuth();
   if (status === "auth") {
-    return <RouterProvider router={router} />;
+    return (
+      <>
+        <RouterProvider router={router} />
+        <PwaInstallHint />
+      </>
+    );
   }
   return <LoginView />;
 }

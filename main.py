@@ -144,11 +144,51 @@ def _cache_put(key: str, data: Any) -> None:
 
 
 def _cache_clear() -> None:
-    """Wipe the entire in-memory cache. Called after any mutation
-    (status toggle, budget edit, campaign create) so the next GET
-    returns fresh data instead of a stale cached page.
+    """Wipe the entire in-memory cache. Used as the safety-net
+    invalidation when a more granular hint isn't available.
     """
     _fb_cache.clear()
+
+
+def _cache_invalidate(*, account_id: Optional[str] = None, entity_id: Optional[str] = None) -> int:
+    """Drop cache entries that could be affected by a mutation.
+
+    The cache key format is ``token::kind::path::params`` (see
+    :func:`_cache_key`). We do a substring scan because the path
+    encodes the FB Graph node id (``act_X/campaigns``,
+    ``camp_id/adsets``, etc.).
+
+    Hints are merged with OR semantics:
+      - ``account_id="act_X"`` clears every entry whose path
+        references account X (campaigns, adsets, ads, insights).
+      - ``entity_id="123"`` clears every entry whose path is
+        exactly ``123``, plus any list whose parent is 123 (e.g.
+        ``123/adsets``).
+
+    Returns the number of entries dropped (useful for diagnostics).
+    Falls back to a full clear if neither hint is provided.
+    """
+    if account_id is None and entity_id is None:
+        before = len(_fb_cache)
+        _fb_cache.clear()
+        return before
+
+    needles: list[str] = []
+    if account_id:
+        # The account id can appear with or without `act_` prefix in
+        # the path. Match both to be safe.
+        needles.append(account_id)
+        if account_id.startswith("act_"):
+            needles.append(account_id[4:])
+        else:
+            needles.append(f"act_{account_id}")
+    if entity_id:
+        needles.append(entity_id)
+
+    to_drop = [k for k in _fb_cache if any(n in k for n in needles)]
+    for k in to_drop:
+        _fb_cache.pop(k, None)
+    return len(to_drop)
 
 
 async def _fb_request(method: str, path: str, params: Optional[dict] = None, data_payload: Optional[dict] = None) -> dict:
@@ -213,11 +253,26 @@ async def fb_get(path: str, params: Optional[dict] = None) -> dict:
     return await _fb_request("GET", path, params=params)
 
 
-async def fb_post(path: str, payload: Optional[dict] = None) -> dict:
+async def fb_post(
+    path: str,
+    payload: Optional[dict] = None,
+    *,
+    invalidate_account: Optional[str] = None,
+    invalidate_entity: Optional[str] = None,
+) -> dict:
+    """POST a Graph API mutation and selectively bust the read cache.
+
+    If ``invalidate_account`` or ``invalidate_entity`` is provided we
+    drop only entries that could be stale. Otherwise we wipe the
+    entire cache (safe but coarse). Status / budget toggles know
+    exactly which account they affect, so they pass the account id
+    and we keep cache hits for unrelated accounts.
+    """
     result = await _fb_request("POST", path, data_payload=payload)
-    # Any successful mutation invalidates the read cache so the next
-    # poll reflects reality (status change, budget edit, etc.).
-    _cache_clear()
+    if invalidate_account or invalidate_entity:
+        _cache_invalidate(account_id=invalidate_account, entity_id=invalidate_entity)
+    else:
+        _cache_clear()
     return result
 
 
@@ -388,13 +443,17 @@ class CampaignCreate(BaseModel):
 
 @app.post("/api/quick-launch/campaign")
 async def quick_launch_campaign(payload: CampaignCreate):
-    return await fb_post(f"{payload.account_id}/campaigns", {
-        "name": payload.name,
-        "objective": payload.objective,
-        "status": payload.status,
-        "special_ad_categories": "[]",
-        "daily_budget": str(payload.daily_budget),
-    })
+    return await fb_post(
+        f"{payload.account_id}/campaigns",
+        {
+            "name": payload.name,
+            "objective": payload.objective,
+            "status": payload.status,
+            "special_ad_categories": "[]",
+            "daily_budget": str(payload.daily_budget),
+        },
+        invalidate_account=payload.account_id,
+    )
 
 
 # ── 廣告帳戶 ─────────────────────────────────────────────────────────
@@ -440,7 +499,7 @@ async def get_campaigns(account_id: str, date_preset: str = "last_30d", time_ran
 
 @app.post("/api/campaigns/{campaign_id}/status")
 async def update_campaign_status(campaign_id: str, status: str = Query(...)):
-    return await fb_post(campaign_id, {"status": status})
+    return await fb_post(campaign_id, {"status": status}, invalidate_entity=campaign_id)
 
 
 @app.post("/api/campaigns/{campaign_id}/budget")
@@ -450,7 +509,7 @@ async def update_campaign_budget(campaign_id: str, daily_budget: int = Query(Non
         payload["daily_budget"] = str(daily_budget)
     if lifetime_budget:
         payload["lifetime_budget"] = str(lifetime_budget)
-    return await fb_post(campaign_id, payload)
+    return await fb_post(campaign_id, payload, invalidate_entity=campaign_id)
 
 
 # ── 廣告組合 ─────────────────────────────────────────────────────────
@@ -474,7 +533,7 @@ async def get_adsets(campaign_id: str, date_preset: str = "last_30d", time_range
 
 @app.post("/api/adsets/{adset_id}/status")
 async def update_adset_status(adset_id: str, status: str = Query(...)):
-    return await fb_post(adset_id, {"status": status})
+    return await fb_post(adset_id, {"status": status}, invalidate_entity=adset_id)
 
 
 @app.post("/api/adsets/{adset_id}/budget")
@@ -482,7 +541,7 @@ async def update_adset_budget(adset_id: str, daily_budget: int = Query(None)):
     payload = {}
     if daily_budget:
         payload["daily_budget"] = str(daily_budget)
-    return await fb_post(adset_id, payload)
+    return await fb_post(adset_id, payload, invalidate_entity=adset_id)
 
 
 # ── 廣告 ─────────────────────────────────────────────────────────────
@@ -513,7 +572,7 @@ async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Opti
 
 @app.post("/api/ads/{ad_id}/status")
 async def update_ad_status(ad_id: str, status: str = Query(...)):
-    return await fb_post(ad_id, {"status": status})
+    return await fb_post(ad_id, {"status": status}, invalidate_entity=ad_id)
 
 
 # ── 帳戶整體成效 ──────────────────────────────────────────────────────

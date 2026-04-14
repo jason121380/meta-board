@@ -148,13 +148,15 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
                   <button
                     type="button"
                     title={isPinned ? "取消置頂" : "置頂"}
+                    aria-label={isPinned ? `取消置頂 ${camp.name}` : `置頂 ${camp.name}`}
+                    aria-pressed={isPinned}
                     onClick={() => togglePin(camp.id)}
                     className={cn(
-                      "cursor-pointer border-none bg-transparent px-1.5 py-0.5 text-base",
+                      "h-9 w-9 cursor-pointer border-none bg-transparent text-base active:scale-90",
                       isPinned ? "opacity-100" : "opacity-25 hover:opacity-60",
                     )}
                   >
-                    📌
+                    <span aria-hidden="true">📌</span>
                   </button>
                 </td>
               </tr>

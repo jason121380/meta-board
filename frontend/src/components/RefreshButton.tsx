@@ -19,11 +19,13 @@ export function RefreshButton({ isFetching, onClick, title = "重新整理" }: R
       variant="ghost"
       size="sm"
       title={title}
+      aria-label={title}
       onClick={onClick}
-      className="px-2.5 text-base"
+      className="h-10 min-w-[40px] px-2.5 text-base md:h-[30px] md:min-w-0"
       aria-busy={isFetching}
     >
       <span
+        aria-hidden="true"
         className={cn(
           "inline-block",
           // Slow spin when fetching so the user sees activity clearly.

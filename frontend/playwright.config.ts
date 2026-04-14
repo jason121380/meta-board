@@ -32,6 +32,12 @@ export default defineConfig({
       name: "chromium-narrow",
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
     },
+    {
+      // iPhone-class viewport so the responsive overrides + mobile
+      // account picker get exercised in E2E.
+      name: "chromium-mobile",
+      use: { ...devices["Desktop Chrome"], viewport: { width: 375, height: 667 } },
+    },
   ],
   webServer: {
     command: "pnpm dev",
