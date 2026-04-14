@@ -34,10 +34,72 @@ export class ApiError extends Error {
   }
 }
 
+// ── 401 auto-refresh ──────────────────────────────────────────
+//
+// When the backend process restarts (e.g. Zeabur redeploy) its
+// in-memory `_runtime_token` is reset to None. Any in-flight React
+// Query on an open tab will then start returning
+// "Facebook access token not set. Please log in." 401s until the
+// user manually re-logs in or refreshes the page.
+//
+// Rather than leave the app in a broken state, the request helper
+// catches the first 401 per call, asks the already-loaded FB JS
+// SDK for a fresh access token (synchronous from the user's point
+// of view — the browser still has the FB cookie), re-pushes it to
+// the backend via `/api/auth/token`, and retries the original
+// request once. The user sees at most a ~1s blip.
+//
+// The retry is gated on `skipAuthRefresh` so the token-exchange
+// call itself never recurses. `isRefreshing` + the shared promise
+// de-dupe concurrent 401s so N parallel queries only kick off ONE
+// refresh, not N.
+
+let refreshPromise: Promise<void> | null = null;
+
+function refreshBackendToken(): Promise<void> {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = new Promise<void>((resolve, reject) => {
+    const FB = (window as unknown as { FB?: {
+      getLoginStatus: (
+        cb: (r: { status: string; authResponse?: { accessToken: string } }) => void,
+      ) => void;
+    } }).FB;
+    if (!FB) {
+      reject(new Error("FB SDK not loaded"));
+      return;
+    }
+    FB.getLoginStatus((resp) => {
+      const accessToken = resp.authResponse?.accessToken;
+      if (resp.status === "connected" && accessToken) {
+        request<{ ok: boolean }>("POST", "/api/auth/token", {
+          body: { token: accessToken },
+          skipAuthRefresh: true,
+        })
+          .then(() => resolve())
+          .catch(reject);
+      } else {
+        reject(new Error("FB session not connected"));
+      }
+    });
+  });
+  // Clear the shared promise after it settles so subsequent 401s
+  // can trigger another refresh if needed.
+  refreshPromise.finally(() => {
+    refreshPromise = null;
+  });
+  return refreshPromise;
+}
+
 async function request<T>(
   method: "GET" | "POST" | "DELETE",
   path: string,
-  options?: { body?: unknown; query?: Record<string, string | undefined> },
+  options?: {
+    body?: unknown;
+    query?: Record<string, string | undefined>;
+    /** Internal flag — set by the 401 retry path so the token
+     * refresh call itself doesn't loop back through this logic. */
+    skipAuthRefresh?: boolean;
+  },
 ): Promise<T> {
   let url = path;
   if (options?.query) {
@@ -71,6 +133,18 @@ async function request<T>(
   }
 
   if (!response.ok) {
+    // Self-healing auth: if the backend lost the runtime token (e.g.
+    // the process was just restarted), push the FB SDK's access
+    // token back up and retry once. skipAuthRefresh prevents the
+    // token-push call itself from re-entering this branch.
+    if (response.status === 401 && !options?.skipAuthRefresh) {
+      try {
+        await refreshBackendToken();
+        return request<T>(method, path, { ...options, skipAuthRefresh: true });
+      } catch {
+        /* fall through to throw the original 401 */
+      }
+    }
     const detail = extractDetail(body) || `HTTP ${response.status}`;
     throw new ApiError(response.status, detail);
   }

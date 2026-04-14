@@ -1,4 +1,5 @@
 import { ApiError, api } from "@/api/client";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   type ReactNode,
   createContext,
@@ -112,34 +113,45 @@ export function FbAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<FbAuthUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const didRunRef = useRef(false);
+  const queryClient = useQueryClient();
 
-  const exchangeToken = useCallback(async (token: string) => {
-    try {
-      const result = await api.auth.setToken(token);
-      const name = result.name ?? "User";
-      const id = result.id ?? "";
-      // Fetch picture via FB.api so we can show avatar
-      let pictureUrl: string | undefined;
+  const exchangeToken = useCallback(
+    async (token: string) => {
       try {
-        await new Promise<void>((resolve) => {
-          window.FB?.api("/me", { fields: "picture.width(80)" }, (resp) => {
-            const r = resp as { picture?: { data?: { url?: string } } };
-            pictureUrl = r?.picture?.data?.url;
-            resolve();
+        const result = await api.auth.setToken(token);
+        const name = result.name ?? "User";
+        const id = result.id ?? "";
+        // Fetch picture via FB.api so we can show avatar
+        let pictureUrl: string | undefined;
+        try {
+          await new Promise<void>((resolve) => {
+            window.FB?.api("/me", { fields: "picture.width(80)" }, (resp) => {
+              const r = resp as { picture?: { data?: { url?: string } } };
+              pictureUrl = r?.picture?.data?.url;
+              resolve();
+            });
           });
-        });
-      } catch {
-        /* ignore picture fetch failure */
+        } catch {
+          /* ignore picture fetch failure */
+        }
+        setUser({ id, name, pictureUrl });
+        setStatus("auth");
+        setError(null);
+        // Force every cached query to re-fetch with the new token.
+        // Without this, if the backend had just restarted and was
+        // returning 401 errors for existing queries, those stale
+        // error states would linger until the user manually hit
+        // the refresh button. `resetQueries` clears the error state
+        // too, not just the data (vs invalidateQueries).
+        queryClient.resetQueries();
+      } catch (err) {
+        const msg = err instanceof ApiError ? err.detail : (err as Error).message;
+        setError(msg);
+        setStatus("unauth");
       }
-      setUser({ id, name, pictureUrl });
-      setStatus("auth");
-      setError(null);
-    } catch (err) {
-      const msg = err instanceof ApiError ? err.detail : (err as Error).message;
-      setError(msg);
-      setStatus("unauth");
-    }
-  }, []);
+    },
+    [queryClient],
+  );
 
   useEffect(() => {
     // Guard against React 18 Strict Mode double-invoke so we don't
