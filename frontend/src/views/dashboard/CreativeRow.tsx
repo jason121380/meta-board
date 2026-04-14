@@ -1,9 +1,7 @@
 import { useEntityStatusMutation } from "@/api/hooks/useEntityMutations";
-import { useVideoSource } from "@/api/hooks/useVideoSource";
 import { Badge } from "@/components/Badge";
+import { CreativePreviewModal } from "@/components/CreativePreviewModal";
 import { confirm } from "@/components/ConfirmDialog";
-import { Modal } from "@/components/Modal";
-import { Spinner } from "@/components/Spinner";
 import { Toggle } from "@/components/Toggle";
 import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
@@ -32,19 +30,7 @@ export function CreativeRow({ creative, multiAcct }: CreativeRowProps) {
   const spend = Number(ins.spend) || 0;
   const mutation = useEntityStatusMutation();
   const thumb = creative.creative?.thumbnail_url;
-  // Prefer the full-resolution image_url for the preview modal so
-  // the enlarged view isn't blurry. Falls back to thumbnail_url for
-  // video / carousel / DPA creatives where image_url is absent.
-  const previewImage = creative.creative?.image_url ?? thumb;
-  const creativeTitle = creative.creative?.title;
-  const creativeBody = creative.creative?.body;
-  // Video asset id — lazy-resolved to a playable source URL only
-  // when the preview modal opens, so we don't pay a per-row FB
-  // round-trip for creatives that users never expand.
-  const videoId = creative.creative?.object_story_spec?.video_data?.video_id ?? null;
-  const videoPoster = creative.creative?.object_story_spec?.video_data?.image_url ?? previewImage;
   const [previewOpen, setPreviewOpen] = useState(false);
-  const videoQuery = useVideoSource(videoId, previewOpen);
 
   const onToggleStatus = async (nextChecked: boolean) => {
     const status = nextChecked ? "ACTIVE" : "PAUSED";
@@ -115,59 +101,10 @@ export function CreativeRow({ creative, multiAcct }: CreativeRowProps) {
           />
         </td>
       </tr>
-      {canPreview && (
-        <Modal
-          open={previewOpen}
-          onOpenChange={setPreviewOpen}
-          title={creative.name}
-          subtitle={creativeTitle}
-          width={520}
-        >
-          <div className="flex flex-col items-center gap-3">
-            {videoId ? (
-              videoQuery.isLoading || videoQuery.isPending ? (
-                <div className="flex min-h-[240px] w-full items-center justify-center rounded-lg border border-border bg-bg">
-                  <Spinner size={24} />
-                </div>
-              ) : videoQuery.data?.source ? (
-                // biome-ignore lint/a11y/useMediaCaption: FB ad
-                // videos have no caption track available via the
-                // Graph API; a missing caption is unavoidable.
-                <video
-                  controls
-                  autoPlay
-                  playsInline
-                  src={videoQuery.data.source}
-                  poster={videoQuery.data.picture ?? videoPoster}
-                  className="max-h-[70vh] w-full rounded-lg border border-border bg-black"
-                >
-                  您的瀏覽器不支援 HTML5 video。
-                </video>
-              ) : (
-                // Graph API didn't return a playable source — fall
-                // back to the still poster so the modal still shows
-                // something useful.
-                <img
-                  src={videoPoster}
-                  alt={creative.name}
-                  className="max-h-[70vh] w-full rounded-lg border border-border object-contain"
-                />
-              )
-            ) : (
-              <img
-                src={previewImage}
-                alt={creative.name}
-                className="max-h-[70vh] w-full rounded-lg border border-border object-contain"
-              />
-            )}
-            {creativeBody && (
-              <p className="w-full whitespace-pre-wrap text-[13px] leading-relaxed text-gray-500">
-                {creativeBody}
-              </p>
-            )}
-          </div>
-        </Modal>
-      )}
+      <CreativePreviewModal
+        creative={previewOpen ? creative : null}
+        onClose={() => setPreviewOpen(false)}
+      />
     </>
   );
 }

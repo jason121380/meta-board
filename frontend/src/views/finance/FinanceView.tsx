@@ -26,7 +26,7 @@ import {
 } from "./financeData";
 
 /**
- * Finance view (財務專區) — left account panel + toolbar + campaign
+ * Finance view (費用中心) — left account panel + toolbar + campaign
  * table with per-row markup calculator and pin-to-top.
  *
  * The "全部帳戶 / single account" mode switch is driven by
@@ -117,7 +117,7 @@ export function FinanceView() {
 
   return (
     <>
-      <Topbar title="財務專區" titleAction={<AcctSidebarToggle />}>
+      <Topbar title="費用中心" titleAction={<AcctSidebarToggle />}>
         <div className="flex items-center gap-3">
           <DatePicker value={date} onChange={(cfg) => setDate("finance", cfg)} />
           <TopbarSeparator />

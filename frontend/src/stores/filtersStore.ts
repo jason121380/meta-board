@@ -3,19 +3,18 @@ import { create } from "zustand";
 
 /**
  * Filters store — tracks the date-picker config and "show only with
- * spend" toggle for each view. Each of the 4 date pickers (dashboard,
- * analytics, alerts, finance) has its own config so switching views
- * doesn't stomp on the others' dates.
+ * spend" toggle for each view. Each view has its own config so
+ * switching views doesn't stomp on the others' dates.
  *
  * Persisted key:
  *   filterActiveOnly → `filter_active_only` (boolean, default true)
  *
  * Date configs are NOT persisted; they reset on page refresh. The
  * default preset is `this_month` so users land on the current month
- * when they open any view (dashboard / analytics / alerts / finance).
+ * when they open any view.
  */
 
-export type ViewKey = "dashboard" | "analytics" | "alerts" | "finance";
+export type ViewKey = "dashboard" | "analytics" | "alerts" | "finance" | "creatives";
 
 const defaultDate = (): DateConfig => ({ preset: "this_month", from: null, to: null });
 
@@ -36,6 +35,7 @@ export const useFiltersStore = create<FiltersState>((set) => ({
     analytics: defaultDate(),
     alerts: defaultDate(),
     finance: defaultDate(),
+    creatives: defaultDate(),
   },
   setActiveOnly: (v) => set({ activeOnly: v }),
   setDate: (view, config) => set((state) => ({ date: { ...state.date, [view]: config } })),

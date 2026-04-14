@@ -9,7 +9,8 @@ import { NavLink } from "react-router-dom";
  * dropdown at the bottom that opens upward.
  *
  * Layout and behavior ported from dashboard.html lines 801–843.
- * Six nav items: 儀表板 / 數據分析 / 警示列表 / 財務專區 / 快速上架 / 設定.
+ * Seven nav items: 儀表板 / 數據分析 / 警示列表 / 費用中心 / 素材中心 /
+ * 快速上架 / 設定.
  */
 
 interface NavItem {
@@ -83,7 +84,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     to: "/finance",
-    label: "財務專區",
+    label: "費用中心",
     icon: (
       <svg
         width="16"
@@ -98,6 +99,27 @@ const NAV_ITEMS: NavItem[] = [
       >
         <line x1="12" y1="1" x2="12" y2="23" />
         <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+      </svg>
+    ),
+  },
+  {
+    to: "/creatives",
+    label: "素材中心",
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <circle cx="9" cy="9" r="2" />
+        <path d="M21 15l-5-5L5 21" />
       </svg>
     ),
   },
