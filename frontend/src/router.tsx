@@ -1,10 +1,7 @@
+import { LoadingState } from "@/components/LoadingState";
 import { Shell } from "@/layout/Shell";
-import { AlertsView } from "@/views/alerts/AlertsView";
-import { AnalyticsView } from "@/views/analytics/AnalyticsView";
 import { DashboardView } from "@/views/dashboard/DashboardView";
-import { FinanceView } from "@/views/finance/FinanceView";
-import { QuickLaunchView } from "@/views/launch/QuickLaunchView";
-import { SettingsView } from "@/views/settings/SettingsView";
+import { type ReactNode, Suspense, lazy } from "react";
 import { Navigate, createBrowserRouter } from "react-router-dom";
 
 /**
@@ -13,18 +10,43 @@ import { Navigate, createBrowserRouter } from "react-router-dom";
  * <App/> conditionally renders <LoginView/> vs <RouterProvider/>
  * based on useFbAuth().status, so unauthenticated users never see
  * any protected route path.
+ *
+ * Code-splitting: only <DashboardView/> ships in the main bundle
+ * (it's the landing page). The remaining 5 views are lazy-loaded
+ * on demand via React.lazy(). This shrinks the initial JS payload
+ * substantially and cuts time-to-first-meaningful-paint.
  */
+const AnalyticsView = lazy(() =>
+  import("@/views/analytics/AnalyticsView").then((m) => ({ default: m.AnalyticsView })),
+);
+const AlertsView = lazy(() =>
+  import("@/views/alerts/AlertsView").then((m) => ({ default: m.AlertsView })),
+);
+const FinanceView = lazy(() =>
+  import("@/views/finance/FinanceView").then((m) => ({ default: m.FinanceView })),
+);
+const QuickLaunchView = lazy(() =>
+  import("@/views/launch/QuickLaunchView").then((m) => ({ default: m.QuickLaunchView })),
+);
+const SettingsView = lazy(() =>
+  import("@/views/settings/SettingsView").then((m) => ({ default: m.SettingsView })),
+);
+
+function lazyView(node: ReactNode) {
+  return <Suspense fallback={<LoadingState title="載入頁面中..." />}>{node}</Suspense>;
+}
+
 export const router = createBrowserRouter([
   {
     element: <Shell />,
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: "dashboard", element: <DashboardView /> },
-      { path: "analytics", element: <AnalyticsView /> },
-      { path: "alerts", element: <AlertsView /> },
-      { path: "finance", element: <FinanceView /> },
-      { path: "launch", element: <QuickLaunchView /> },
-      { path: "settings", element: <SettingsView /> },
+      { path: "analytics", element: lazyView(<AnalyticsView />) },
+      { path: "alerts", element: lazyView(<AlertsView />) },
+      { path: "finance", element: lazyView(<FinanceView />) },
+      { path: "launch", element: lazyView(<QuickLaunchView />) },
+      { path: "settings", element: lazyView(<SettingsView />) },
       { path: "*", element: <Navigate to="/dashboard" replace /> },
     ],
   },

@@ -19,6 +19,6 @@ export function useAdsets(campaignId: string | null, date: DateConfig, enabled: 
       return res.data ?? [];
     },
     enabled: status === "auth" && !!campaignId && enabled,
-    staleTime: 30_000,
+    staleTime: 5 * 60_000,
   });
 }

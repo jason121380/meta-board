@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from typing import Optional, List
+from typing import Any, Optional, List
 import httpx
 import asyncpg
 import json
@@ -92,9 +92,72 @@ if (DIST_DIR / "assets").exists():
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
+# In-memory response cache for FB Graph API GETs. The same user
+# typically hits the same (account_id, date_preset) combination across
+# multiple views (Dashboard → Analytics → Finance → Alerts), and FB API
+# calls take 1-3s each. A 60-second TTL turns those repeat hits into
+# instant local lookups while keeping data fresh enough to feel live.
+#
+# Cache scope is per-token: the key includes a hash of the access token
+# so different users (or token rotations) never see each other's data.
+import hashlib
+import time
+
+_CACHE_TTL_SECONDS = 60.0
+_fb_cache: dict[str, tuple[float, Any]] = {}
+
+
+def _cache_key(token: str, path: str, params: dict, *, kind: str = "single") -> str:
+    """Build a stable cache key from token + path + sorted params.
+    The token is hashed so it never appears in memory inspection or
+    log output in plaintext form. ``kind`` distinguishes single-page
+    GETs ("single") from paginated calls ("paged") so they never collide.
+    """
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()[:12] if token else "anon"
+    # Strip access_token from params before hashing — it's already
+    # represented by token_hash.
+    sanitized = {k: v for k, v in params.items() if k != "access_token"}
+    param_str = "&".join(f"{k}={v}" for k, v in sorted(sanitized.items()))
+    return f"{token_hash}::{kind}::{path}::{param_str}"
+
+
+def _cache_get(key: str) -> Any:
+    entry = _fb_cache.get(key)
+    if entry is None:
+        return None
+    inserted_at, data = entry
+    if (time.monotonic() - inserted_at) > _CACHE_TTL_SECONDS:
+        _fb_cache.pop(key, None)
+        return None
+    return data
+
+
+def _cache_put(key: str, data: Any) -> None:
+    # Best-effort eviction: cap cache at 500 entries to avoid runaway
+    # memory growth across long-running sessions.
+    if len(_fb_cache) > 500:
+        # Drop the oldest 100 entries to make room
+        oldest = sorted(_fb_cache.items(), key=lambda kv: kv[1][0])[:100]
+        for k, _ in oldest:
+            _fb_cache.pop(k, None)
+    _fb_cache[key] = (time.monotonic(), data)
+
+
+def _cache_clear() -> None:
+    """Wipe the entire in-memory cache. Called after any mutation
+    (status toggle, budget edit, campaign create) so the next GET
+    returns fresh data instead of a stale cached page.
+    """
+    _fb_cache.clear()
+
+
 async def _fb_request(method: str, path: str, params: Optional[dict] = None, data_payload: Optional[dict] = None) -> dict:
     """Send a request to FB Graph API and convert ALL failure modes to HTTPException
     with a JSON body so the frontend can always parse and display the error.
+
+    GET responses are cached in-memory for 60 seconds (per token + path +
+    params) so repeat calls within the TTL window return instantly. POSTs
+    are never cached (they are mutations).
     """
     if params is None:
         params = {}
@@ -103,6 +166,15 @@ async def _fb_request(method: str, path: str, params: Optional[dict] = None, dat
     token = get_token()
     if not token:
         raise HTTPException(status_code=401, detail="Facebook access token not set. Please log in.")
+
+    # Cache lookup for GET only (POSTs are mutations, never cached)
+    cache_key: Optional[str] = None
+    if method == "GET":
+        cache_key = _cache_key(token, path, params, kind="single")
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
+
     url = f"{BASE_URL}/{path}"
     try:
         if method == "GET":
@@ -131,6 +203,9 @@ async def _fb_request(method: str, path: str, params: Optional[dict] = None, dat
         sub = err.get("error_subcode")
         detail = f"{msg} [code={code}{f' subcode={sub}' if sub else ''}]" if code else msg
         raise HTTPException(status_code=400, detail=detail)
+    # Cache successful GET responses
+    if cache_key is not None:
+        _cache_put(cache_key, body)
     return body
 
 
@@ -139,18 +214,33 @@ async def fb_get(path: str, params: Optional[dict] = None) -> dict:
 
 
 async def fb_post(path: str, payload: Optional[dict] = None) -> dict:
-    return await _fb_request("POST", path, data_payload=payload)
+    result = await _fb_request("POST", path, data_payload=payload)
+    # Any successful mutation invalidates the read cache so the next
+    # poll reflects reality (status change, budget edit, etc.).
+    _cache_clear()
+    return result
 
 
 async def fb_get_paginated(path: str, params: Optional[dict] = None) -> List[dict]:
     """Paginate through a FB Graph API endpoint that returns {data:[], paging:{next}}.
     Always raises HTTPException on failure (never lets httpx errors bubble up as 500).
+
+    Final result lists are cached in-memory for 60 seconds (per token + path
+    + initial params). Subsequent calls within the TTL window return without
+    hitting Facebook at all — a major speedup for the heavy
+    /api/accounts and /api/accounts/{id}/campaigns endpoints.
     """
     if params is None:
         params = {}
     token = get_token()
     if not token:
         raise HTTPException(status_code=401, detail="Facebook access token not set. Please log in.")
+
+    cache_key = _cache_key(token, path, params, kind="paged")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached  # already a List[dict]
+
     items: List[dict] = []
     next_url: Optional[str] = f"{BASE_URL}/{path}"
     page_params = {"access_token": token, **params}
@@ -175,6 +265,7 @@ async def fb_get_paginated(path: str, params: Optional[dict] = None) -> List[dic
         items.extend(data.get("data", []))
         next_url = data.get("paging", {}).get("next")
         page_params = {}  # next_url already contains all params
+    _cache_put(cache_key, items)
     return items
 
 
