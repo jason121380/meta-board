@@ -1,5 +1,7 @@
+import { CollapseSidebarButton } from "@/components/CollapseSidebarButton";
 import { cn } from "@/lib/cn";
 import { fM } from "@/lib/format";
+import { useUiStore } from "@/stores/uiStore";
 import type { FinAccountRow } from "./financeData";
 
 /**
@@ -9,6 +11,9 @@ import type { FinAccountRow } from "./financeData";
  * The first row is a synthetic "全部帳戶" aggregate. Clicking it
  * clears the per-account selection (empty finSelectedAcctIds = all).
  * Clicking any other row drills down to single-account mode.
+ *
+ * Collapsed mode: when ``acctSidebarCollapsed`` is true the panel
+ * hides and an expand button takes its place.
  */
 
 export interface FinanceAccountPanelProps {
@@ -18,12 +23,30 @@ export interface FinanceAccountPanelProps {
 }
 
 export function FinanceAccountPanel({ rows, selectedId, onSelect }: FinanceAccountPanelProps) {
+  const collapsed = useUiStore((s) => s.acctSidebarCollapsed);
+  const toggle = useUiStore((s) => s.toggleAcctSidebar);
+
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={toggle}
+        title="展開廣告帳戶"
+        aria-label="展開廣告帳戶側欄"
+        className="flex h-12 w-6 shrink-0 items-center justify-center self-start border-b border-r border-border bg-white text-gray-300 hover:bg-orange-bg hover:text-orange"
+      >
+        <span aria-hidden="true">▶</span>
+      </button>
+    );
+  }
+
   return (
     <aside className="flex w-[480px] shrink-0 flex-col overflow-hidden border-r border-border bg-white">
-      <div className="flex shrink-0 border-b border-border bg-bg px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.5px] text-gray-500">
+      <div className="flex shrink-0 items-center border-b border-border bg-bg px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.5px] text-gray-500">
         <span className="flex-1">廣告帳號</span>
         <span className="w-[110px] text-right">花費</span>
         <span className="w-[120px] text-right">花費+%</span>
+        <CollapseSidebarButton onClick={toggle} className="ml-1.5" />
       </div>
       <div className="flex-1 overflow-y-auto">
         {rows.length === 0 ? (

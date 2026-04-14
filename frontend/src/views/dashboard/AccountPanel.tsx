@@ -1,8 +1,10 @@
+import { CollapseSidebarButton } from "@/components/CollapseSidebarButton";
 import { EmptyState } from "@/components/EmptyState";
 import { Loading } from "@/components/Loading";
 import { StatusDot } from "@/components/StatusDot";
 import { accountDotState } from "@/lib/accountStatus";
 import { cn } from "@/lib/cn";
+import { useUiStore } from "@/stores/uiStore";
 import type { FbAccount } from "@/types/fb";
 
 /**
@@ -14,6 +16,12 @@ import type { FbAccount } from "@/types/fb";
  * Empty states:
  *  - accounts still loading        → <Loading/>
  *  - 0 accounts enabled in Settings → inline hint
+ *
+ * Collapsed mode: when ``acctSidebarCollapsed`` is true, the panel
+ * disappears completely and a small ``ExpandSidebarButton`` is
+ * rendered at the very edge of the content area so the user can
+ * bring it back. The collapsed flag lives in uiStore and persists
+ * to localStorage so it survives page reloads.
  */
 
 export interface AccountPanelProps {
@@ -29,12 +37,18 @@ export function AccountPanel({
   isLoading,
   onSelect,
 }: AccountPanelProps) {
+  const collapsed = useUiStore((s) => s.acctSidebarCollapsed);
+  const toggle = useUiStore((s) => s.toggleAcctSidebar);
+
+  if (collapsed) {
+    return <ExpandSidebarButton onClick={toggle} />;
+  }
+
   return (
     <aside className="flex w-[240px] shrink-0 flex-col border-r border-border bg-bg">
-      <div className="border-b border-border bg-white px-3 pb-2 pt-2.5">
-        <h4 className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.6px] text-gray-300">
-          廣告帳戶
-        </h4>
+      <div className="flex items-center justify-between border-b border-border bg-white px-3 pb-2 pt-2.5">
+        <h4 className="text-[11px] font-bold uppercase tracking-[0.6px] text-gray-300">廣告帳戶</h4>
+        <CollapseSidebarButton onClick={toggle} />
       </div>
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
@@ -70,5 +84,19 @@ export function AccountPanel({
         )}
       </div>
     </aside>
+  );
+}
+
+function ExpandSidebarButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="展開廣告帳戶"
+      aria-label="展開廣告帳戶側欄"
+      className="flex h-12 w-6 shrink-0 items-center justify-center self-start border-r border-b border-border bg-white text-gray-300 hover:bg-orange-bg hover:text-orange"
+    >
+      <span aria-hidden="true">▶</span>
+    </button>
   );
 }

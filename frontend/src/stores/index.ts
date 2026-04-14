@@ -20,7 +20,7 @@ import {
   installFinanceStorageSync,
   useFinanceStore,
 } from "./financeStore";
-import { useUiStore } from "./uiStore";
+import { hydrateUiFromStorage, installUiStorageSync, useUiStore } from "./uiStore";
 
 export { useAccountsStore, useFiltersStore, useFinanceStore, useUiStore };
 
@@ -29,6 +29,7 @@ export function hydrateAllStores(): void {
   hydrateAccountsFromStorage();
   hydrateFiltersFromStorage();
   hydrateFinanceFromStorage();
+  hydrateUiFromStorage();
 }
 
 /** Wire store → legacy-localStorage-keys. Returns a combined unsubscribe.
@@ -37,9 +38,11 @@ export function installStorageSync(): () => void {
   const offAccounts = installAccountsStorageSync();
   const offFilters = installFiltersStorageSync();
   const offFinance = installFinanceStorageSync();
+  const offUi = installUiStorageSync();
   return () => {
     offAccounts();
     offFilters();
     offFinance();
+    offUi();
   };
 }
