@@ -631,7 +631,13 @@ async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Opti
     # dynamic creatives ``image_url`` may be absent — the frontend
     # falls back to ``thumbnail_url`` in that case.
     attempts = [
+        # Tier 1: everything — image_url for sharp still preview,
+        # object_story_spec.video_data.video_id so the frontend can
+        # lazy-fetch the playable video source when the modal opens.
+        f"id,name,status,creative{{thumbnail_url,image_url,object_story_spec{{video_data}},title,body}},{ins}",
+        # Tier 2: drop object_story_spec (some accounts reject it).
         f"id,name,status,creative{{thumbnail_url,image_url,title,body}},{ins}",
+        # Tier 3: drop image_url.
         f"id,name,status,creative{{thumbnail_url,title,body}},{ins}",
         f"id,name,status,{ins}",
         "id,name,status",
@@ -651,6 +657,27 @@ async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Opti
     if last_error is not None:
         raise last_error
     raise HTTPException(status_code=502, detail="Failed to load ads from Facebook API")
+
+
+@app.get("/api/videos/{video_id}/source")
+async def get_video_source(video_id: str):
+    """Fetch the playable source URL + poster for a FB video asset.
+
+    Used by the 3rd-level creative preview modal so video ads play
+    inline instead of showing a tiny thumbnail. The Graph API
+    ``/{video_id}`` edge returns a signed ``source`` URL that the
+    browser can use directly in a ``<video>`` element, plus a
+    ``picture`` poster frame.
+
+    This call is intentionally LAZY from the frontend (the React
+    Query hook enables only when the preview modal opens) so we
+    don't pay per-row latency to fetch a URL most users never view.
+    """
+    data = await fb_get(video_id, {"fields": "source,picture"})
+    return {
+        "source": data.get("source"),
+        "picture": data.get("picture"),
+    }
 
 
 @app.post("/api/ads/{ad_id}/status")
