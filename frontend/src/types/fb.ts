@@ -66,6 +66,12 @@ export interface FbVideoData {
 
 export interface FbObjectStorySpec {
   video_data?: FbVideoData;
+  /** Present when the creative was authored inline as an image ad in
+   * Ads Manager. Opaque shape — we only check presence to tell
+   * inline-authored dark posts apart from front-stage boosted posts. */
+  link_data?: Record<string, unknown>;
+  photo_data?: Record<string, unknown>;
+  template_data?: Record<string, unknown>;
 }
 
 export interface FbCreative {

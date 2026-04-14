@@ -649,12 +649,21 @@ async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Opti
     # preview modal show a "open original FB/IG post" link. They're
     # cheap string fields so we include them from tier 1 down until
     # FB forces us to drop creative entirely.
+    # ``object_story_spec`` sub-fields are requested in an expanded
+    # form so the frontend can tell an inline-authored dark post
+    # (``link_data`` / ``photo_data`` / ``video_data`` / ``template_data``
+    # populated) apart from an ad that reuses an existing organic
+    # post (``object_story_spec`` absent or empty). Without these
+    # fields the "前台貼文" badge misfires on every ad because FB
+    # returns ``effective_object_story_id`` for everything.
+    oss_expanded = (
+        "object_story_spec{video_data,link_data,photo_data,template_data}"
+    )
     attempts = [
         # Tier 1: everything — image_url for sharp still preview,
-        # object_story_spec.video_data.video_id so the frontend can
-        # lazy-fetch the playable video source when the modal opens,
-        # plus the two permalink fields.
-        f"id,name,status,creative{{thumbnail_url,image_url,object_story_spec{{video_data}},effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
+        # expanded object_story_spec so we can classify inline vs
+        # front-stage, plus the two permalink fields.
+        f"id,name,status,creative{{thumbnail_url,image_url,{oss_expanded},effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
         # Tier 2: drop object_story_spec (some accounts reject it).
         f"id,name,status,creative{{thumbnail_url,image_url,effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
         # Tier 3: drop image_url.
@@ -703,6 +712,76 @@ async def get_video_source(video_id: str):
         "source": data.get("source"),
         "picture": data.get("picture"),
     }
+
+
+@app.get("/api/posts/{post_id}/media")
+async def get_post_media(post_id: str):
+    """Fetch the full-resolution image / video source from a FB page post.
+
+    Used by the 3rd-level creative preview modal when the ad is a
+    "front-stage post" — i.e. it reuses an existing organic FB post
+    instead of being authored inline via ``object_story_spec``.
+
+    In the front-stage case the creative endpoint returns no
+    ``image_url`` and no ``object_story_spec.video_data.video_id``;
+    only a compressed ~120px ``thumbnail_url`` is available. Rendering
+    that in the 520px modal looks blurry, and video ads can't play
+    at all because we lack the video handle.
+
+    Fetching ``/{post_id}?fields=full_picture,attachments{...}``
+    directly returns the actual asset URLs from the underlying post:
+      - ``full_picture`` — the post's hero image (highest res)
+      - ``attachments[0].media.image.src`` — image asset CDN URL
+      - ``attachments[0].media.source`` — playable video source
+        (same kind of URL the /{video_id} edge would return)
+
+    Errors are swallowed into a ``{image_url: null, video_source: null}``
+    shape so a single unreachable post never blocks the modal from
+    rendering whatever it can (name, body, thumbnail fallback).
+    """
+    try:
+        data = await fb_get(
+            post_id,
+            {
+                "fields": (
+                    "full_picture,"
+                    "attachments{media_type,media{image{src},source}}"
+                )
+            },
+        )
+    except HTTPException:
+        return {"image_url": None, "video_source": None}
+
+    image_url: Optional[str] = None
+    video_source: Optional[str] = None
+
+    attachments = data.get("attachments") if isinstance(data, dict) else None
+    if isinstance(attachments, dict):
+        items = attachments.get("data") or []
+        if items and isinstance(items, list):
+            first = items[0]
+            if isinstance(first, dict):
+                media = first.get("media")
+                if isinstance(media, dict):
+                    # Video attachment — media.source is the playable URL
+                    src = media.get("source")
+                    if isinstance(src, str) and src:
+                        video_source = src
+                    # Image attachment — media.image.src is the full-res CDN URL
+                    img = media.get("image")
+                    if isinstance(img, dict):
+                        img_src = img.get("src")
+                        if isinstance(img_src, str) and img_src:
+                            image_url = img_src
+
+    # full_picture is the safest image fallback — always present on
+    # image-style posts, unaffected by attachment structure variants.
+    if not image_url:
+        fp = data.get("full_picture") if isinstance(data, dict) else None
+        if isinstance(fp, str) and fp:
+            image_url = fp
+
+    return {"image_url": image_url, "video_source": video_source}
 
 
 @app.get("/api/pages/{page_id}/info")
