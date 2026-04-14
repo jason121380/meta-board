@@ -86,8 +86,21 @@ if STATIC_DIR.exists():
 # Serve built React assets (JS / CSS chunks emitted by Vite). Vite's build
 # places hashed files under dist/assets/. Mounted before any catch-all so
 # they resolve before the SPA fallback route.
-if (DIST_DIR / "assets").exists():
+_REACT_BUILD_PRESENT = (DIST_DIR / "index.html").exists()
+_REACT_ASSETS_PRESENT = (DIST_DIR / "assets").exists()
+
+if _REACT_ASSETS_PRESENT:
     app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")
+
+# Loud startup banner so Zeabur logs show at-a-glance whether the
+# React build was found. If you see "[startup] React build: MISSING"
+# in the logs, the user will be served dashboard.html (legacy) at "/"
+# until you fix the build step.
+print(
+    f"[startup] React build: {'OK' if _REACT_BUILD_PRESENT else 'MISSING'} "
+    f"(dist/index.html), assets mount: {'OK' if _REACT_ASSETS_PRESENT else 'MISSING'}",
+    flush=True,
+)
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
@@ -350,6 +363,24 @@ def _legacy_index() -> str:
 async def root():
     react = _react_index()
     return react if react is not None else _legacy_index()
+
+
+@app.get("/api/_status")
+async def app_status():
+    """Diagnostic endpoint: which build is the server actually serving?
+
+    Useful when something at "/" looks wrong and you can't tell
+    whether you're hitting React or the legacy dashboard.html. Hit
+    this URL directly and the response tells you exactly what the
+    server can see on disk.
+    """
+    return {
+        "serving": "react" if _REACT_BUILD_PRESENT else "legacy",
+        "react_index_present": _REACT_BUILD_PRESENT,
+        "react_assets_present": _REACT_ASSETS_PRESENT,
+        "dist_dir": str(DIST_DIR),
+        "legacy_url": "/legacy",
+    }
 
 
 @app.get("/legacy", response_class=HTMLResponse)
