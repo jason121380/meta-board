@@ -1,10 +1,12 @@
 import { useEntityStatusMutation } from "@/api/hooks/useEntityMutations";
 import { Badge } from "@/components/Badge";
 import { confirm } from "@/components/ConfirmDialog";
+import { Modal } from "@/components/Modal";
 import { Toggle } from "@/components/Toggle";
 import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
 import type { FbCreativeEntity } from "@/types/fb";
+import { useState } from "react";
 
 /**
  * Third-level row — a single FB Ad / creative.
@@ -27,6 +29,10 @@ export function CreativeRow({ creative, multiAcct }: CreativeRowProps) {
   const msgs = getMsgCount(creative);
   const spend = Number(ins.spend) || 0;
   const mutation = useEntityStatusMutation();
+  const thumb = creative.creative?.thumbnail_url;
+  const creativeTitle = creative.creative?.title;
+  const creativeBody = creative.creative?.body;
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const onToggleStatus = async (nextChecked: boolean) => {
     const status = nextChecked ? "ACTIVE" : "PAUSED";
@@ -40,53 +46,85 @@ export function CreativeRow({ creative, multiAcct }: CreativeRowProps) {
     }
   };
 
+  const canPreview = Boolean(thumb);
+  const openPreview = () => {
+    if (canPreview) setPreviewOpen(true);
+  };
+
   return (
-    <tr className="creative-row cursor-pointer">
-      <td />
-      <td>
-        <div className="flex max-w-[240px] items-center gap-1.5 pl-[72px]">
-          {creative.creative?.thumbnail_url ? (
-            // NOTE: do NOT wrap the URL in escHtml(). The legacy
-            // dashboard.html did so because it injected the <img> via
-            // innerHTML, where the browser re-parses `&amp;` back to
-            // `&`. In React JSX, `src={...}` is an attribute binding,
-            // so escHtml would leave `&amp;` literally in the URL and
-            // break Facebook's signed CDN URLs (signature mismatch →
-            // 403 → broken thumbnail). See the 3rd-level ad thumbnail
-            // regression investigated 2026-04-14.
+    <>
+      <tr
+        className={canPreview ? "creative-row cursor-zoom-in" : "creative-row"}
+        onClick={openPreview}
+      >
+        <td />
+        <td>
+          <div className="flex max-w-[240px] items-center gap-1.5 pl-[72px]">
+            {thumb ? (
+              // NOTE: do NOT wrap the URL in escHtml(). The legacy
+              // dashboard.html did so because it injected the <img> via
+              // innerHTML, where the browser re-parses `&amp;` back to
+              // `&`. In React JSX, `src={...}` is an attribute binding,
+              // so escHtml would leave `&amp;` literally in the URL and
+              // break Facebook's signed CDN URLs (signature mismatch →
+              // 403 → broken thumbnail). See the 3rd-level ad thumbnail
+              // regression investigated 2026-04-14.
+              <img
+                src={thumb}
+                alt=""
+                className="h-[30px] w-[30px] shrink-0 rounded-sm border border-border object-cover"
+              />
+            ) : (
+              <div className="h-[30px] w-[30px] shrink-0 rounded-sm bg-bg" />
+            )}
+            <span className="truncate text-[13px] font-normal text-gray-500" title={creative.name}>
+              {creative.name}
+            </span>
+          </div>
+        </td>
+        {multiAcct && <td />}
+        <td>
+          <Badge status={creative.status} />
+        </td>
+        <td className="num">{fM(ins.spend)}</td>
+        <td className="num">{fN(ins.impressions)}</td>
+        <td className="num">{fN(ins.clicks)}</td>
+        <td className="num">{fP(ins.ctr)}</td>
+        <td className="num">{fM(ins.cpc)}</td>
+        <td className="num">{msgs > 0 ? fN(msgs) : "—"}</td>
+        <td className="num">{msgs > 0 ? `$${fM(spend / msgs)}` : "—"}</td>
+        <td className="muted">—</td>
+        <td onClick={(e) => e.stopPropagation()}>
+          <Toggle
+            checked={creative.status === "ACTIVE"}
+            onChange={(e) => {
+              void onToggleStatus(e.currentTarget.checked);
+            }}
+          />
+        </td>
+      </tr>
+      {canPreview && (
+        <Modal
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          title={creative.name}
+          subtitle={creativeTitle}
+          width={520}
+        >
+          <div className="flex flex-col items-center gap-3">
             <img
-              src={creative.creative.thumbnail_url}
-              alt=""
-              className="h-[30px] w-[30px] shrink-0 rounded-sm border border-border object-cover"
+              src={thumb}
+              alt={creative.name}
+              className="max-h-[70vh] w-full rounded-lg border border-border object-contain"
             />
-          ) : (
-            <div className="h-[30px] w-[30px] shrink-0 rounded-sm bg-bg" />
-          )}
-          <span className="truncate text-[13px] font-normal text-gray-500" title={creative.name}>
-            {creative.name}
-          </span>
-        </div>
-      </td>
-      {multiAcct && <td />}
-      <td>
-        <Badge status={creative.status} />
-      </td>
-      <td className="num">{fM(ins.spend)}</td>
-      <td className="num">{fN(ins.impressions)}</td>
-      <td className="num">{fN(ins.clicks)}</td>
-      <td className="num">{fP(ins.ctr)}</td>
-      <td className="num">{fM(ins.cpc)}</td>
-      <td className="num">{msgs > 0 ? fN(msgs) : "—"}</td>
-      <td className="num">{msgs > 0 ? `$${fM(spend / msgs)}` : "—"}</td>
-      <td className="muted">—</td>
-      <td onClick={(e) => e.stopPropagation()}>
-        <Toggle
-          checked={creative.status === "ACTIVE"}
-          onChange={(e) => {
-            void onToggleStatus(e.currentTarget.checked);
-          }}
-        />
-      </td>
-    </tr>
+            {creativeBody && (
+              <p className="w-full whitespace-pre-wrap text-[13px] leading-relaxed text-gray-500">
+                {creativeBody}
+              </p>
+            )}
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
