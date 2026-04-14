@@ -694,42 +694,59 @@ async def get_account_ads(
     time_range: Optional[str] = None,
 ):
     """Flat list of every ad in an ad account, with creative +
-    insights + parent campaign/adset metadata.
+    insights + parent campaign metadata.
 
     Used by the Creative Center (素材中心) which aggregates 3rd-level
     ads across every enabled account into a single sortable table.
-    Returning the parent names via FB field expansion avoids an N+1
-    round-trip to look them up client-side.
 
-    Progressive fallback mirrors the per-adset ``get_ads`` endpoint:
-    drop ``object_story_spec`` first (some accounts reject it), then
-    ``image_url``, then ``creative`` entirely, then insights.
+    Progressive fallback — FB's ``/{account_id}/ads`` edge appears
+    to reject deeply nested field expansion on some accounts (tested
+    with user-reported "no thumbnails" symptom). The tiers strip the
+    deepest nesting first so thumbnails and parent campaign names
+    survive even on restrictive accounts:
+
+        1. creative (thumb + image + title/body) + campaign{name}
+        2. creative (thumb only) + campaign{name}
+        3. creative (thumb only)      (drop campaign expansion)
+        4. insights only               (no creative — thumbnails gone)
+        5. id/name/status only         (last resort)
+
+    Note: ``object_story_spec{video_data}`` was intentionally removed
+    from tier 1 — it pushes the field depth past FB's limit on this
+    edge. Video playback in Creative Center preview is sacrificed so
+    thumbnails always work; videos still play on the Dashboard tree
+    via the per-adset /ads endpoint which accepts deeper nesting.
     """
-    ins = _insights_clause("spend,impressions,clicks,ctr,cpc,actions", date_preset, time_range)
-    creative_full = (
-        "creative{thumbnail_url,image_url,"
-        "object_story_spec{video_data},title,body}"
-    )
-    creative_no_spec = "creative{thumbnail_url,image_url,title,body}"
-    creative_thumb_only = "creative{thumbnail_url,title,body}"
-    parent_fields = "campaign_id,adset_id,campaign{name},adset{name}"
+    ins = _insights_clause("spend,clicks,ctr,cpc,actions", date_preset, time_range)
     attempts = [
-        f"id,name,status,{parent_fields},{creative_full},{ins}",
-        f"id,name,status,{parent_fields},{creative_no_spec},{ins}",
-        f"id,name,status,{parent_fields},{creative_thumb_only},{ins}",
-        f"id,name,status,{parent_fields},{ins}",
-        "id,name,status,campaign_id,adset_id",
+        f"id,name,status,campaign{{name}},creative{{thumbnail_url,image_url,title,body}},{ins}",
+        f"id,name,status,campaign{{name}},creative{{thumbnail_url,title,body}},{ins}",
+        f"id,name,status,creative{{thumbnail_url,title,body}},{ins}",
+        f"id,name,status,{ins}",
+        "id,name,status",
     ]
     last_error: Optional[HTTPException] = None
-    for fields in attempts:
+    for tier_idx, fields in enumerate(attempts, start=1):
         try:
             params = {"fields": fields, "limit": "200"}
             if "thumbnail_url" in fields:
                 params["thumbnail_width"] = "600"
                 params["thumbnail_height"] = "600"
             ads = await fb_get_paginated(f"{account_id}/ads", params)
+            # Loud success log so we can see in Zeabur which tier
+            # actually works for each account. Helps diagnose
+            # "no thumbnails" reports without another round-trip.
+            print(
+                f"[account_ads] {account_id} tier={tier_idx} ok, {len(ads)} ads",
+                flush=True,
+            )
             return {"data": ads}
         except HTTPException as e:
+            print(
+                f"[account_ads] {account_id} tier={tier_idx} fail: "
+                f"{e.status_code} {e.detail}",
+                flush=True,
+            )
             last_error = e
             continue
     if last_error is not None:
