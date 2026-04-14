@@ -40,6 +40,11 @@ export interface UiState {
    * one view applies everywhere — keeps the layout consistent. */
   acctSidebarCollapsed: boolean;
 
+  /** Whether the dashboard's KPI stats grid is collapsed. When true
+   * the 12 stat cards above the campaign table hide so the table
+   * itself gets the full vertical space. */
+  statsCollapsed: boolean;
+
   toggleCamp: (id: string) => void;
   toggleAdset: (id: string) => void;
   setExpandedCamps: (ids: string[]) => void;
@@ -54,6 +59,9 @@ export interface UiState {
   toggleAcctSidebar: () => void;
   setAcctSidebarCollapsed: (v: boolean) => void;
 
+  toggleStatsCollapsed: () => void;
+  setStatsCollapsed: (v: boolean) => void;
+
   /** Reset all ephemeral state — used on logout. */
   reset: () => void;
 }
@@ -66,6 +74,7 @@ const initial = {
   finSelectedAcctIds: [] as string[],
   finSort: { key: null, dir: "desc" as SortDir },
   acctSidebarCollapsed: false,
+  statsCollapsed: false,
 };
 
 export const useUiStore = create<UiState>((set) => ({
@@ -114,29 +123,43 @@ export const useUiStore = create<UiState>((set) => ({
   toggleAcctSidebar: () => set((state) => ({ acctSidebarCollapsed: !state.acctSidebarCollapsed })),
   setAcctSidebarCollapsed: (v) => set({ acctSidebarCollapsed: v }),
 
+  toggleStatsCollapsed: () => set((state) => ({ statsCollapsed: !state.statsCollapsed })),
+  setStatsCollapsed: (v) => set({ statsCollapsed: v }),
+
   reset: () => set(initial),
 }));
 
 const K_SIDEBAR_COLLAPSED = "ui_acct_sidebar_collapsed";
+const K_STATS_COLLAPSED = "ui_stats_collapsed";
 
-/** Hydrate the persisted UI bits (sidebar collapse) from localStorage. */
+/** Hydrate the persisted UI bits (sidebar / stats collapse) from
+ * localStorage so the user's preferred layout survives reloads. */
 export function hydrateUiFromStorage(): void {
   try {
-    const raw = localStorage.getItem(K_SIDEBAR_COLLAPSED);
-    if (raw === "true") {
+    if (localStorage.getItem(K_SIDEBAR_COLLAPSED) === "true") {
       useUiStore.setState({ acctSidebarCollapsed: true });
+    }
+    if (localStorage.getItem(K_STATS_COLLAPSED) === "true") {
+      useUiStore.setState({ statsCollapsed: true });
     }
   } catch {
     /* keep default */
   }
 }
 
-/** Subscribe to acctSidebarCollapsed and mirror to localStorage. */
+/** Subscribe to collapse flags and mirror to localStorage. */
 export function installUiStorageSync(): () => void {
   return useUiStore.subscribe((state, prev) => {
     if (state.acctSidebarCollapsed !== prev.acctSidebarCollapsed) {
       try {
         localStorage.setItem(K_SIDEBAR_COLLAPSED, String(state.acctSidebarCollapsed));
+      } catch {
+        /* quota */
+      }
+    }
+    if (state.statsCollapsed !== prev.statsCollapsed) {
+      try {
+        localStorage.setItem(K_STATS_COLLAPSED, String(state.statsCollapsed));
       } catch {
         /* quota */
       }

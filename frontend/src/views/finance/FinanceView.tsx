@@ -1,6 +1,7 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useMultiAccountCampaigns } from "@/api/hooks/useMultiAccountCampaigns";
 import { useMultiAccountInsights } from "@/api/hooks/useMultiAccountInsights";
+import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { Button } from "@/components/Button";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
@@ -116,7 +117,7 @@ export function FinanceView() {
 
   return (
     <>
-      <Topbar title="財務專區">
+      <Topbar title="財務專區" titleAction={<AcctSidebarToggle />}>
         <div className="flex items-center gap-3">
           <DatePicker value={date} onChange={(cfg) => setDate("finance", cfg)} />
           <TopbarSeparator />

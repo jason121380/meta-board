@@ -1,3 +1,4 @@
+import { fbCampaignLink as sharedFbCampaignLink } from "@/lib/fbLinks";
 import { getIns, getMsgCount } from "@/lib/insights";
 import type { FbCampaign } from "@/types/fb";
 
@@ -180,13 +181,10 @@ export function filterAlertEntries(
 }
 
 /**
- * Build a Facebook Ads Manager link for a campaign. Optional
- * business_id is appended when available (required to deep-link
- * into the right workspace).
+ * Backward-compat wrapper around the shared FB link helper. Callers
+ * that have an AlertEntry can keep using this; new call sites should
+ * prefer ``fbCampaignLink`` from "@/lib/fbLinks" directly.
  */
 export function fbCampaignLink(entry: AlertEntry, businessId?: string): string {
-  const act = (entry.campaign._accountId ?? "").replace("act_", "");
-  if (!act) return "";
-  const bizParam = businessId ? `&business_id=${businessId}` : "";
-  return `https://adsmanager.facebook.com/adsmanager/manage/campaigns/edit/standalone?act=${act}${bizParam}&selected_campaign_ids=${entry.campaign.id}&current_step=0`;
+  return sharedFbCampaignLink(entry.campaign.id, entry.campaign._accountId, businessId);
 }

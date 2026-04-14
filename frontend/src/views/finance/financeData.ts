@@ -162,6 +162,9 @@ export function buildFinanceCsv(input: CsvExportInput): string {
 /**
  * Account-panel row data: one row per visible account with spend
  * and spend+markup, plus a synthetic "全部帳戶" row at the top.
+ *
+ * `dotState` mirrors the dashboard sidebar status indicator so the
+ * Finance panel can render the same `<StatusDot/>` pattern.
  */
 export interface FinAccountRow {
   id: string; // "__all__" for the header row
@@ -170,6 +173,7 @@ export interface FinAccountRow {
   plus: number;
   loaded: boolean;
   isTotal: boolean;
+  dotState: "on" | "off";
 }
 
 export function buildAccountRows(
@@ -191,6 +195,7 @@ export function buildAccountRows(
       plus,
       loaded,
       isTotal: false,
+      dotState: (acc.account_status === 1 ? "on" : "off") as "on" | "off",
     };
   });
 
@@ -206,6 +211,7 @@ export function buildAccountRows(
       plus: totalPlus,
       loaded: allLoaded,
       isTotal: true,
+      dotState: "on",
     },
     ...perAccount,
   ];

@@ -1,15 +1,18 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useMultiAccountCampaigns } from "@/api/hooks/useMultiAccountCampaigns";
 import { useMultiAccountInsights } from "@/api/hooks/useMultiAccountInsights";
+import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
+import { cn } from "@/lib/cn";
 import { getIns } from "@/lib/insights";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
+import { useUiStore } from "@/stores/uiStore";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { AccountPanel } from "./AccountPanel";
@@ -89,11 +92,49 @@ export function DashboardView() {
 
   const multiAcct = activeAccounts.length > 1;
 
+  const statsCollapsed = useUiStore((s) => s.statsCollapsed);
+  const toggleStatsCollapsed = useUiStore((s) => s.toggleStatsCollapsed);
+
   return (
     <>
-      <Topbar title="儀表板">
+      <Topbar title="儀表板" titleAction={<AcctSidebarToggle />}>
         <div className="flex items-center gap-2 md:gap-3">
           <DatePicker value={date} onChange={(cfg) => setDate("dashboard", cfg)} />
+          <button
+            type="button"
+            onClick={toggleStatsCollapsed}
+            title={statsCollapsed ? "展開上方數據區" : "收合上方數據區，給下方表格更多空間"}
+            aria-label={statsCollapsed ? "展開數據區" : "收合數據區"}
+            aria-pressed={statsCollapsed}
+            className={cn(
+              "hidden h-9 w-9 items-center justify-center rounded-xl border-[1.5px] text-ink active:scale-95 md:flex",
+              statsCollapsed
+                ? "border-orange bg-orange-bg text-orange"
+                : "border-border bg-white hover:border-orange-border hover:bg-orange-bg hover:text-orange",
+            )}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              {statsCollapsed ? (
+                <>
+                  <polyline points="6 9 12 15 18 9" />
+                </>
+              ) : (
+                <>
+                  <polyline points="18 15 12 9 6 15" />
+                </>
+              )}
+            </svg>
+          </button>
           <span className="hidden md:inline">
             <TopbarSeparator />
           </span>
@@ -142,11 +183,13 @@ export function DashboardView() {
         </div>
 
         <div className="flex flex-1 flex-col overflow-hidden">
-          <StatsGrid
-            accounts={activeAccounts}
-            insights={insights.data}
-            isLoading={insights.isLoading}
-          />
+          {!statsCollapsed && (
+            <StatsGrid
+              accounts={activeAccounts}
+              insights={insights.data}
+              isLoading={insights.isLoading}
+            />
+          )}
 
           <div className="m-3 flex flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-white md:m-4">
             <div className="flex shrink-0 flex-wrap items-center gap-2.5 rounded-t-2xl border-b border-border px-3 py-2.5 md:px-4 md:py-3">

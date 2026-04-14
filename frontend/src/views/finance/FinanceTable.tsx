@@ -1,3 +1,5 @@
+import { useAccounts } from "@/api/hooks/useAccounts";
+import { FbCampaignLink } from "@/components/FbCampaignLink";
 import { cn } from "@/lib/cn";
 import { fM } from "@/lib/format";
 import { spendOf } from "@/lib/insights";
@@ -46,6 +48,10 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
 
   const finSort = useUiStore((s) => s.finSort);
   const setFinSort = useUiStore((s) => s.setFinSort);
+
+  const accountsQuery = useAccounts();
+  const businessIdFor = (acctId: string | undefined) =>
+    acctId ? accountsQuery.data?.find((a) => a.id === acctId)?.business?.id : undefined;
 
   const visible = useMemo(() => {
     const sortState: FinSortState = {
@@ -121,8 +127,21 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
                   </td>
                 )}
                 <td className="px-3 py-2 font-medium" title={camp.name}>
-                  <div className={cn("truncate", multiAcct ? "max-w-[280px]" : "max-w-[320px]")}>
-                    {camp.name}
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={cn(
+                        "min-w-0 flex-1 truncate",
+                        multiAcct ? "max-w-[260px]" : "max-w-[300px]",
+                      )}
+                    >
+                      {camp.name}
+                    </span>
+                    <FbCampaignLink
+                      campaignId={camp.id}
+                      accountId={camp._accountId}
+                      campaignName={camp.name}
+                      businessId={businessIdFor(camp._accountId)}
+                    />
                   </div>
                 </td>
                 <td className="px-3 py-2 tabular-nums">${fM(sp)}</td>

@@ -1,5 +1,6 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useMultiAccountCampaigns } from "@/api/hooks/useMultiAccountCampaigns";
+import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
@@ -59,7 +60,7 @@ export function AlertsView() {
 
   return (
     <>
-      <Topbar title="警示列表">
+      <Topbar title="警示列表" titleAction={<AcctSidebarToggle />}>
         <div className="flex items-center gap-3">
           <DatePicker value={date} onChange={(cfg) => setDate("alerts", cfg)} />
           <TopbarSeparator />
