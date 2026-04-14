@@ -502,30 +502,64 @@ async def get_accounts():
 
 @app.get("/api/accounts/{account_id}/campaigns")
 async def get_campaigns(account_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None, include_archived: bool = False):
-    ins = _insights_clause("spend,impressions,clicks,ctr,cpc,cpm,frequency,reach,actions", date_preset, time_range)
-    extra = {}
+    """List campaigns for an account, with progressive fallback so a
+    single FB-side restriction (e.g. effective_status not allowed on
+    a particular ad account) doesn't make the whole call return 400.
+
+    Attempts, in order — each tier strips one source of FB rejection:
+      1. fields + insights + effective_status (full data, all states)
+      2. fields + insights                   (drops archived filter)
+      3. fields only                          (drops insights too)
+      4. minimal id/name/status               (last-resort smoke test)
+
+    Returns the FIRST attempt that succeeds. If every attempt fails
+    we re-raise the last error so the frontend gets the actual FB
+    message instead of a silent empty list.
+    """
+    ins = _insights_clause(
+        "spend,impressions,clicks,ctr,cpc,cpm,frequency,reach,actions",
+        date_preset,
+        time_range,
+    )
+    full_fields = f"id,name,status,objective,daily_budget,lifetime_budget,{ins}"
+    no_ins_fields = "id,name,status,objective,daily_budget,lifetime_budget"
+    archived_filter = {"effective_status": '["ACTIVE","PAUSED","ARCHIVED","DELETED"]'}
+
+    attempts: list[tuple[str, dict]] = []
     if include_archived:
-        extra["effective_status"] = '["ACTIVE","PAUSED","ARCHIVED","DELETED"]'
-    # Try with insights first
-    try:
-        camps = await fb_get_paginated(f"{account_id}/campaigns", {
-            "fields": f"id,name,status,objective,daily_budget,lifetime_budget,{ins}",
-            "limit": "100",
-            **extra,
-        })
-        return {"data": camps}
-    except HTTPException:
-        # Fallback: fetch without insights so the user still sees campaign list
-        # even if FB rejects the insights query (e.g. invalid date for archived).
+        attempts.append(("insights+archived", {"fields": full_fields, "limit": "100", **archived_filter}))
+    attempts.append(("insights", {"fields": full_fields, "limit": "100"}))
+    if include_archived:
+        attempts.append(("no-insights+archived", {"fields": no_ins_fields, "limit": "100", **archived_filter}))
+    attempts.append(("no-insights", {"fields": no_ins_fields, "limit": "100"}))
+    attempts.append(("minimal", {"fields": "id,name,status", "limit": "100"}))
+
+    last_error: Optional[HTTPException] = None
+    for tier, params in attempts:
         try:
-            camps = await fb_get_paginated(f"{account_id}/campaigns", {
-                "fields": "id,name,status,objective,daily_budget,lifetime_budget",
-                "limit": "100",
-                **extra,
-            })
+            camps = await fb_get_paginated(f"{account_id}/campaigns", params)
+            if last_error is not None:
+                # Log the recovery so we can spot consistently bad accounts
+                print(
+                    f"[campaigns] {account_id} recovered at tier={tier} "
+                    f"after earlier failure: {last_error.detail}",
+                    flush=True,
+                )
             return {"data": camps}
-        except HTTPException:
-            raise
+        except HTTPException as e:
+            print(
+                f"[campaigns] {account_id} tier={tier} failed: "
+                f"{e.status_code} {e.detail}",
+                flush=True,
+            )
+            last_error = e
+            continue
+
+    # All attempts failed — re-raise the last so the frontend sees
+    # the real FB message, not a generic 400.
+    if last_error is not None:
+        raise last_error
+    raise HTTPException(status_code=502, detail="Failed to load campaigns from Facebook API")
 
 
 @app.post("/api/campaigns/{campaign_id}/status")
