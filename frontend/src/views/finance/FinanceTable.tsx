@@ -114,19 +114,19 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
                   isPinned && "border-l-[3px] border-l-orange bg-orange-bg",
                 )}
               >
-                <td className="w-10 px-3 py-2 text-gray-500">{i + 1}</td>
-                <td className="w-20 px-3 py-2">
+                <td className="w-10 px-3 text-gray-500">{i + 1}</td>
+                <td className="w-20 px-3">
                   <FinanceStatusBadge status={camp.status} />
                 </td>
                 {multiAcct && (
                   <td
-                    className="max-w-[120px] truncate px-3 py-2 text-[11px] text-gray-500"
+                    className="max-w-[120px] truncate px-3 text-[11px] text-gray-500"
                     title={camp._accountName ?? ""}
                   >
                     {camp._accountName ?? ""}
                   </td>
                 )}
-                <td className="px-3 py-2 font-medium" title={camp.name}>
+                <td className="px-3 font-medium" title={camp.name}>
                   <div className="flex items-center gap-1.5">
                     <span
                       className={cn(
@@ -144,8 +144,8 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
                     />
                   </div>
                 </td>
-                <td className="px-3 py-2 tabular-nums">${fM(sp)}</td>
-                <td className="px-3 py-2 text-right">
+                <td className="px-3 tabular-nums">${fM(sp)}</td>
+                <td className="px-3 text-right">
                   <input
                     type="number"
                     value={m}
@@ -160,10 +160,10 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
                   />
                   %
                 </td>
-                <td className="px-3 py-2 text-right font-semibold tabular-nums text-orange">
+                <td className="px-3 text-right font-semibold tabular-nums text-orange">
                   ${fM(plus)}
                 </td>
-                <td className="px-3 py-2 text-center">
+                <td className="px-3 text-center">
                   <button
                     type="button"
                     title={isPinned ? "取消置頂" : "置頂"}
@@ -171,7 +171,7 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
                     aria-pressed={isPinned}
                     onClick={() => togglePin(camp.id)}
                     className={cn(
-                      "h-9 w-9 cursor-pointer border-none bg-transparent text-base active:scale-90",
+                      "h-[30px] w-[30px] cursor-pointer border-none bg-transparent text-sm leading-none active:scale-90",
                       isPinned ? "opacity-100" : "opacity-25 hover:opacity-60",
                     )}
                   >
@@ -184,12 +184,12 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
         )}
         {visible.length > 0 && (
           <tr className="border-t-2 border-border-strong bg-bg">
-            <td colSpan={multiAcct ? 4 : 3} className="px-3 py-2.5 text-[13px] font-bold text-ink">
+            <td colSpan={multiAcct ? 4 : 3} className="px-3 py-1 text-[13px] font-bold text-ink">
               合計
             </td>
-            <td className="px-3 py-2.5 text-[13px] font-bold tabular-nums">${fM(spendSum)}</td>
+            <td className="px-3 py-1 text-[13px] font-bold tabular-nums">${fM(spendSum)}</td>
             <td />
-            <td className="px-3 py-2.5 text-right text-[13px] font-bold tabular-nums text-orange">
+            <td className="px-3 py-1 text-right text-[13px] font-bold tabular-nums text-orange">
               ${fM(plusSum)}
             </td>
             <td />
