@@ -55,7 +55,13 @@ export interface FbAdset extends FbBaseEntity {
 }
 
 export interface FbCreative {
+  /** Small (~64-600px) thumbnail URL — used for the 30x30 row icon. */
   thumbnail_url?: string;
+  /** Full-resolution source asset URL (typically 1080px+) — used by
+   * the preview modal so enlarging it doesn't produce a blurry image.
+   * Absent on non-image creatives (video, carousel, DPA) — fall back
+   * to thumbnail_url in that case. */
+  image_url?: string;
   title?: string;
   body?: string;
 }

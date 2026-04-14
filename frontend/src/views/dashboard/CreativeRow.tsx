@@ -30,6 +30,10 @@ export function CreativeRow({ creative, multiAcct }: CreativeRowProps) {
   const spend = Number(ins.spend) || 0;
   const mutation = useEntityStatusMutation();
   const thumb = creative.creative?.thumbnail_url;
+  // Prefer the full-resolution image_url for the preview modal so
+  // the enlarged view isn't blurry. Falls back to thumbnail_url for
+  // video / carousel / DPA creatives where image_url is absent.
+  const previewImage = creative.creative?.image_url ?? thumb;
   const creativeTitle = creative.creative?.title;
   const creativeBody = creative.creative?.body;
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -113,7 +117,7 @@ export function CreativeRow({ creative, multiAcct }: CreativeRowProps) {
         >
           <div className="flex flex-col items-center gap-3">
             <img
-              src={thumb}
+              src={previewImage}
               alt={creative.name}
               className="max-h-[70vh] w-full rounded-lg border border-border object-contain"
             />

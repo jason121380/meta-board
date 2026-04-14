@@ -615,9 +615,23 @@ async def update_adset_budget(adset_id: str, daily_budget: int = Query(None)):
 async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None):
     ins = _insights_clause("spend,impressions,clicks,ctr,cpc,cpm,actions", date_preset, time_range)
     last_error: Optional[HTTPException] = None
-    # Try 3 progressively simpler field sets so a partial failure (e.g. account
-    # lacks creative permission) still returns something usable.
+    # Progressive fallback so a partial failure (e.g. account lacks
+    # creative permission) still returns something usable.
+    #
+    # We request BOTH ``thumbnail_url`` (small, for the 30x30 row
+    # icon) and ``image_url`` (full-resolution source asset, used by
+    # the preview modal). FB's default ``thumbnail_url`` is ~64x64,
+    # which looks blurry when scaled up to the 520px modal; the
+    # ``thumbnail_width``/``thumbnail_height`` query params only
+    # apply when you hit /{creative_id} directly and are ignored
+    # when the thumbnail is requested through field expansion on
+    # the Ad edge. ``image_url`` returns the original CDN asset
+    # (typically 1080px+) for image-based creatives, which is sharp
+    # at any reasonable preview scale. For video / carousel /
+    # dynamic creatives ``image_url`` may be absent — the frontend
+    # falls back to ``thumbnail_url`` in that case.
     attempts = [
+        f"id,name,status,creative{{thumbnail_url,image_url,title,body}},{ins}",
         f"id,name,status,creative{{thumbnail_url,title,body}},{ins}",
         f"id,name,status,{ins}",
         "id,name,status",
@@ -625,13 +639,6 @@ async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Opti
     for fields in attempts:
         try:
             params = {"fields": fields, "limit": "100"}
-            # Request a larger thumbnail when the creative field is in
-            # play. FB's default thumbnail_url is ~64x64, which looks
-            # blurry when scaled up inside the 520px preview modal.
-            # These two query params are honored by the AdCreative edge
-            # and FB returns the nearest CDN size (typically 400-600).
-            # If FB ignores them on a given account, we still get the
-            # old default behavior — no regression.
             if "thumbnail_url" in fields:
                 params["thumbnail_width"] = "600"
                 params["thumbnail_height"] = "600"
