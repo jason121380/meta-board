@@ -190,6 +190,19 @@ export function FinanceView() {
             </div>
           </div>
 
+          {Object.keys(campaignsQuery.errors).length > 0 && (
+            <div className="border-b border-red-bg bg-red-bg/40 px-4 py-2.5 text-[12px] text-red">
+              <div className="font-semibold">部分帳戶載入失敗：</div>
+              {Object.entries(campaignsQuery.errors).map(([acctId, msg]) => {
+                const name = visible.find((a) => a.id === acctId)?.name ?? acctId;
+                return (
+                  <div key={acctId} className="mt-0.5 break-all">
+                    <span className="font-medium">{name}</span>: {msg}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div className="min-h-0 flex-1 overflow-auto">
             {visible.length === 0 ? (
               <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
