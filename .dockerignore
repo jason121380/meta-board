@@ -1,0 +1,47 @@
+# Keep the build context small + reproducible. Everything in here is
+# ignored by `docker build` regardless of which COPY line references
+# it.
+
+# Version control
+.git
+.github
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Node / frontend artefacts (re-built fresh inside stage 1)
+node_modules
+frontend/node_modules
+frontend/dist
+frontend/coverage
+frontend/playwright-report
+frontend/test-results
+frontend/blob-report
+frontend/playwright/.cache
+
+# Editor / OS noise
+.DS_Store
+.idea
+.vscode
+*.swp
+
+# Local secrets — NEVER bake into image
+.env
+.env.local
+.env.*.local
+
+# Docs that don't affect runtime
+*.md
+!README.md
+
+# The pre-built dist/ should come from stage 1, not from the host
+dist
