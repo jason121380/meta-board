@@ -624,7 +624,18 @@ async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Opti
     ]
     for fields in attempts:
         try:
-            return await fb_get(f"{adset_id}/ads", {"fields": fields, "limit": "100"})
+            params = {"fields": fields, "limit": "100"}
+            # Request a larger thumbnail when the creative field is in
+            # play. FB's default thumbnail_url is ~64x64, which looks
+            # blurry when scaled up inside the 520px preview modal.
+            # These two query params are honored by the AdCreative edge
+            # and FB returns the nearest CDN size (typically 400-600).
+            # If FB ignores them on a given account, we still get the
+            # old default behavior — no regression.
+            if "thumbnail_url" in fields:
+                params["thumbnail_width"] = "600"
+                params["thumbnail_height"] = "600"
+            return await fb_get(f"{adset_id}/ads", params)
         except HTTPException as e:
             last_error = e
             continue
