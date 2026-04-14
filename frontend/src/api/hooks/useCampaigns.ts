@@ -29,6 +29,6 @@ export function useCampaigns(
       }));
     },
     enabled: status === "auth" && !!accountId,
-    staleTime: 30_000,
+    staleTime: 5 * 60_000,
   });
 }

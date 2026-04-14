@@ -22,6 +22,6 @@ export function useAccountInsights(accountId: string | undefined, date: DateConf
       return res.data?.[0] ?? null;
     },
     enabled: status === "auth" && !!accountId,
-    staleTime: 30_000,
+    staleTime: 5 * 60_000,
   });
 }

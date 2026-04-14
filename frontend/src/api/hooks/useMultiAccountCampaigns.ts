@@ -48,7 +48,7 @@ export function useMultiAccountCampaigns(
         }));
       },
       enabled: status === "auth",
-      staleTime: 30_000,
+      staleTime: 5 * 60_000,
     })),
   });
 

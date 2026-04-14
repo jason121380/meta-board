@@ -22,6 +22,6 @@ export function useCreatives(adsetId: string | null, date: DateConfig, enabled: 
       return res.data ?? [];
     },
     enabled: status === "auth" && !!adsetId && enabled,
-    staleTime: 30_000,
+    staleTime: 5 * 60_000,
   });
 }

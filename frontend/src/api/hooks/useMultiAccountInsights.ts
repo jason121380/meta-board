@@ -37,7 +37,7 @@ export function useMultiAccountInsights(
         return res.data?.[0] ?? null;
       },
       enabled: status === "auth",
-      staleTime: 30_000,
+      staleTime: 5 * 60_000,
     })),
   });
 
