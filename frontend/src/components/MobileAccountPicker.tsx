@@ -99,8 +99,7 @@ export function MobileAccountPicker({
       <Modal open={open} onOpenChange={setOpen} title="選擇廣告帳戶" width={360}>
         <input
           type="search"
-          // biome-ignore lint/a11y/noAutofocus: mobile pickers benefit
-          // from an immediate keyboard to filter 80+ accounts.
+          // biome-ignore lint/a11y/noAutofocus: mobile pickers benefit from an immediate keyboard to filter 80+ accounts.
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}

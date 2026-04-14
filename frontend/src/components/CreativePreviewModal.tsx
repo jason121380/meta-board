@@ -1,8 +1,9 @@
 import { usePageInfo } from "@/api/hooks/usePageInfo";
+import { usePostMedia } from "@/api/hooks/usePostMedia";
 import { useVideoSource } from "@/api/hooks/useVideoSource";
 import { Modal } from "@/components/Modal";
 import { Spinner } from "@/components/Spinner";
-import { fbPostLinkFromStoryId } from "@/lib/fbLinks";
+import { fbPostLinkFromStoryId, isFrontPostCreative } from "@/lib/fbLinks";
 import type { FbCreativeEntity } from "@/types/fb";
 
 /**
@@ -60,10 +61,26 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
   const pageId = extractPageId(storyId);
   const pageQuery = usePageInfo(pageId, isOpen);
 
+  // Front-stage posts (ads built from an existing organic FB post)
+  // don't expose image_url or video_data on the creative object, so
+  // the only thing the ad edge gives us is a blurry ~120px thumbnail
+  // and no playable video handle. For those ads we fetch the
+  // underlying post directly via /api/posts/{post_id}/media, which
+  // returns the full-resolution image CDN URL and (for video posts)
+  // a playable source URL. Only fires while the modal is open AND
+  // the creative actually looks like a front-stage post, so inline
+  // ads never pay the extra round-trip.
+  const isFrontPost = creative?.creative ? isFrontPostCreative(creative.creative) : false;
+  const postMediaQuery = usePostMedia(storyId, isOpen && isFrontPost);
+
   const thumb = creative?.creative?.thumbnail_url;
-  const previewImage = creative?.creative?.image_url ?? thumb;
-  const videoPoster =
-    creative?.creative?.object_story_spec?.video_data?.image_url ?? previewImage;
+  const postImage = postMediaQuery.data?.image_url ?? null;
+  const postVideoSource = postMediaQuery.data?.video_source ?? null;
+  // Prefer the full-res underlying-post image when available, then
+  // fall back to the inline-authored image_url, then the small
+  // thumbnail as a last resort.
+  const previewImage = postImage ?? creative?.creative?.image_url ?? thumb;
+  const videoPoster = creative?.creative?.object_story_spec?.video_data?.image_url ?? previewImage;
   const creativeBody = creative?.creative?.body;
 
   // IG permalink takes priority since it's explicit and direct;
@@ -80,7 +97,7 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
   // Header display fields — prefer the real page name/avatar for FB
   // posts. For IG posts we can't pull the account name from the
   // Marketing API, so we show a generic "Instagram" label.
-  const headerName = pageQuery.data?.name ?? (igPostUrl ? "Instagram" : creative?.name ?? "");
+  const headerName = pageQuery.data?.name ?? (igPostUrl ? "Instagram" : (creative?.name ?? ""));
   const headerAvatar = pageQuery.data?.picture_url ?? null;
 
   return (
@@ -135,46 +152,20 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
     >
       {creative && (
         <div className="flex flex-col gap-3">
-          {videoId ? (
-            videoQuery.isLoading || videoQuery.isPending ? (
-              <div className="flex min-h-[240px] w-full items-center justify-center rounded-lg border border-border bg-bg">
-                <Spinner size={24} />
-              </div>
-            ) : videoQuery.data?.source ? (
-              // biome-ignore lint/a11y/useMediaCaption: FB ad videos
-              // have no caption track available via the Graph API.
-              <video
-                controls
-                autoPlay
-                playsInline
-                src={videoQuery.data.source}
-                poster={videoQuery.data.picture ?? videoPoster ?? undefined}
-                className="max-h-[70vh] w-full rounded-lg border border-border bg-black"
-              >
-                您的瀏覽器不支援 HTML5 video。
-              </video>
-            ) : (
-              <img
-                src={videoPoster ?? ""}
-                alt={creative.name}
-                loading="lazy"
-                decoding="async"
-                className="max-h-[70vh] w-full rounded-lg border border-border object-contain"
-              />
-            )
-          ) : previewImage ? (
-            <img
-              src={previewImage}
-              alt={creative.name}
-              loading="lazy"
-              decoding="async"
-              className="max-h-[70vh] w-full rounded-lg border border-border object-contain"
-            />
-          ) : (
-            <div className="flex min-h-[200px] w-full items-center justify-center rounded-lg border border-border bg-bg text-xs text-gray-300">
-              無預覽素材
-            </div>
-          )}
+          <MediaBlock
+            creativeName={creative.name}
+            videoId={videoId}
+            videoQueryLoading={videoQuery.isLoading || videoQuery.isPending}
+            videoSource={videoQuery.data?.source ?? null}
+            videoPicture={videoQuery.data?.picture ?? null}
+            videoPoster={videoPoster ?? null}
+            isFrontPost={isFrontPost}
+            postMediaLoading={postMediaQuery.isLoading || postMediaQuery.isPending}
+            postVideoSource={postVideoSource}
+            postImage={postImage}
+            previewImage={previewImage ?? null}
+          />
+
           {creativeBody && (
             <p className="w-full whitespace-pre-wrap text-[13px] leading-relaxed text-ink">
               {creativeBody}
@@ -208,5 +199,125 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
         </div>
       )}
     </Modal>
+  );
+}
+
+/**
+ * Internal helper that renders just the image / video block of the
+ * preview modal. Kept as a named function (not an IIFE) so biome's
+ * useMediaCaption suppression comment can sit directly adjacent to
+ * the `<video>` JSX element — biome doesn't attach suppressions that
+ * cross a `return (` boundary inside an IIFE.
+ *
+ * Decision order:
+ *   1. Inline-authored video (we have a video_id + resolved source)
+ *   2. Front-stage post whose media query is still loading
+ *   3. Front-stage video post (underlying post exposed a source)
+ *   4. Any still image — post-image > inline image_url > thumbnail
+ *   5. Fallback "無預覽素材" placeholder
+ */
+interface MediaBlockProps {
+  creativeName: string;
+  videoId: string | null;
+  videoQueryLoading: boolean;
+  videoSource: string | null;
+  videoPicture: string | null;
+  videoPoster: string | null;
+  isFrontPost: boolean;
+  postMediaLoading: boolean;
+  postVideoSource: string | null;
+  postImage: string | null;
+  previewImage: string | null;
+}
+
+function MediaBlock(props: MediaBlockProps) {
+  const {
+    creativeName,
+    videoId,
+    videoQueryLoading,
+    videoSource,
+    videoPicture,
+    videoPoster,
+    isFrontPost,
+    postMediaLoading,
+    postVideoSource,
+    postImage,
+    previewImage,
+  } = props;
+
+  if (videoId) {
+    if (videoQueryLoading) {
+      return (
+        <div className="flex min-h-[240px] w-full items-center justify-center rounded-lg border border-border bg-bg">
+          <Spinner size={24} />
+        </div>
+      );
+    }
+    if (videoSource) {
+      return (
+        // biome-ignore lint/a11y/useMediaCaption: FB ad videos have no caption track available via the Graph API.
+        <video
+          controls
+          autoPlay
+          playsInline
+          src={videoSource}
+          poster={videoPicture ?? videoPoster ?? undefined}
+          className="max-h-[70vh] w-full rounded-lg border border-border bg-black"
+        >
+          您的瀏覽器不支援 HTML5 video。
+        </video>
+      );
+    }
+    return (
+      <img
+        src={videoPoster ?? ""}
+        alt={creativeName}
+        loading="lazy"
+        decoding="async"
+        className="max-h-[70vh] w-full rounded-lg border border-border object-contain"
+      />
+    );
+  }
+
+  if (isFrontPost && postMediaLoading) {
+    return (
+      <div className="flex min-h-[240px] w-full items-center justify-center rounded-lg border border-border bg-bg">
+        <Spinner size={24} />
+      </div>
+    );
+  }
+
+  if (postVideoSource) {
+    return (
+      // biome-ignore lint/a11y/useMediaCaption: FB ad videos have no caption track available via the Graph API.
+      <video
+        controls
+        autoPlay
+        playsInline
+        src={postVideoSource}
+        poster={postImage ?? videoPoster ?? undefined}
+        className="max-h-[70vh] w-full rounded-lg border border-border bg-black"
+      >
+        您的瀏覽器不支援 HTML5 video。
+      </video>
+    );
+  }
+
+  if (previewImage) {
+    return (
+      <img
+        src={previewImage}
+        alt={creativeName}
+        loading="lazy"
+        decoding="async"
+        className="max-h-[70vh] w-full rounded-lg border border-border object-contain"
+      />
+    );
+  }
+
+  return (
+    <div className="flex min-h-[200px] w-full items-center justify-center rounded-lg border border-border bg-bg text-xs text-gray-300">
+      無預覽素材
+    </div>
   );
 }

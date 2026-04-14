@@ -83,9 +83,7 @@ export function Modal({
                   {subtitle}
                 </Dialog.Description>
               ) : (
-                <Dialog.Description className="sr-only">
-                  {title ?? "對話視窗"}
-                </Dialog.Description>
+                <Dialog.Description className="sr-only">{title ?? "對話視窗"}</Dialog.Description>
               )}
             </div>
             <Dialog.Close

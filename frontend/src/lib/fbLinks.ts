@@ -56,22 +56,46 @@ export function fbPostLinkFromStoryId(storyId: string | undefined): string | nul
  * Is this creative built from an existing organic FB/IG post (as
  * opposed to assets authored inside Ads Manager)?
  *
- * We detect it by the presence of `effective_object_story_id` (FB
- * post handle) or `instagram_permalink_url` (IG post direct link)
- * on the creative object. Both fields are requested from tier 1 of
- * the backend `creative{...}` field expansion in `get_ads`, so
- * they're populated for anything the API lets us read.
+ * IMPORTANT — why this is NOT just
+ * `!!creative.effective_object_story_id`: Facebook returns
+ * `effective_object_story_id` for EVERY ad, even ones authored
+ * inline in Ads Manager. When you build an image/video ad via
+ * `object_story_spec`, FB internally creates a "dark post" for it
+ * and exposes that dark post id through `effective_object_story_id`.
+ * So using that field alone flags 100% of creatives as front-stage
+ * posts (the bug the user reported on 2026-04-14).
+ *
+ * Correct detection: a creative is a **front-stage post** (reuses an
+ * existing organic FB/IG post) only when it does NOT have inline
+ * creative content in `object_story_spec`. If `object_story_spec`
+ * is populated with `link_data` / `video_data` / `photo_data` /
+ * `template_data`, the ad was authored inline (dark post created
+ * by Ads Manager) — so it's NOT a front-stage post, regardless of
+ * what `effective_object_story_id` says.
+ *
+ * For IG-sourced ads, `instagram_permalink_url` is a strong signal
+ * that the creative reuses an organic IG post — Ads-Manager-inline
+ * ads don't get an IG permalink.
  *
  * Used by the Dashboard tree to show a "前台貼文" badge on rows
- * that re-use an existing post, so users can tell at a glance
- * which creatives are boosted posts vs. Ads-Manager-authored
- * assets.
+ * that re-use an existing post.
  */
 export function isFrontPostCreative(creative: {
+  object_story_spec?: {
+    link_data?: unknown;
+    video_data?: unknown;
+    photo_data?: unknown;
+    template_data?: unknown;
+  };
   effective_object_story_id?: string;
   instagram_permalink_url?: string;
 }): boolean {
-  return Boolean(
-    creative.effective_object_story_id || creative.instagram_permalink_url,
+  const spec = creative.object_story_spec;
+  const hasInlineContent = Boolean(
+    spec && (spec.link_data || spec.video_data || spec.photo_data || spec.template_data),
   );
+  if (hasInlineContent) return false;
+  // IG permalink OR a bare effective_object_story_id (with no
+  // inline spec content) ⇒ the ad reuses an existing organic post.
+  return Boolean(creative.effective_object_story_id || creative.instagram_permalink_url);
 }

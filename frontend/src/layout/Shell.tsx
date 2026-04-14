@@ -7,9 +7,11 @@ import { Sidebar } from "./Sidebar";
  * content on the right. The <Outlet/> renders whichever view the
  * current route matched.
  *
- * Layout ported from dashboard.html lines 56–62:
- *   .layout   { display: flex; height: 100vh; overflow: hidden; }
- *   .main     { margin-left: 220px; flex: 1; height: 100vh;
+ * Layout ported from dashboard.html lines 56–62, with 100vh replaced
+ * by 100dvh so mobile Safari's address bar doesn't push the bottom of
+ * the view off-screen:
+ *   .layout   { display: flex; height: 100dvh; overflow: hidden; }
+ *   .main     { margin-left: 220px; flex: 1; height: 100dvh;
  *                overflow: hidden; flex-direction: column; }
  *
  * Mobile (<= 768px): the sidebar slides off-screen and the main
@@ -33,8 +35,15 @@ export function Shell() {
 
   const closeOnBackdrop = useCallback(() => setMobileOpen(false), []);
 
+  // `h-[100dvh]` (dynamic viewport height) NOT `h-screen` (100vh).
+  // On iOS Safari, 100vh is the viewport height WITHOUT the browser
+  // toolbar, so the app ends up taller than the visible area and
+  // the bottom of the dashboard / finance tables scrolls off-screen
+  // (the "頁面過長" bug). dvh adjusts to the actual visible viewport,
+  // which keeps both views fitting inside the window on every
+  // device. Supported in iOS 15.4+ / Chrome 108+.
   return (
-    <div className="shell-root flex h-screen overflow-hidden">
+    <div className="shell-root flex h-[100dvh] overflow-hidden">
       <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
       {mobileOpen && (
         <button
@@ -44,7 +53,7 @@ export function Shell() {
           onClick={closeOnBackdrop}
         />
       )}
-      <main className="shell-main ml-[220px] flex h-screen flex-1 flex-col overflow-hidden bg-bg">
+      <main className="shell-main ml-[220px] flex h-[100dvh] flex-1 flex-col overflow-hidden bg-bg">
         {/* Mobile hamburger lives at the top of main so it renders
             inside every view's topbar area; actual button is rendered
             by Topbar via the MobileToggleContext below. */}

@@ -72,11 +72,7 @@ export function AnalyticsView() {
         <div className="flex items-center gap-3">
           <DatePicker value={date} onChange={(cfg) => setDate("analytics", cfg)} />
           <TopbarSeparator />
-          <RefreshButton
-            isFetching={overview.isFetching}
-            onClick={onRefresh}
-            title="重新分析"
-          />
+          <RefreshButton isFetching={overview.isFetching} onClick={onRefresh} title="重新分析" />
         </div>
       </Topbar>
 

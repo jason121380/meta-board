@@ -59,11 +59,15 @@ let refreshPromise: Promise<void> | null = null;
 function refreshBackendToken(): Promise<void> {
   if (refreshPromise) return refreshPromise;
   refreshPromise = new Promise<void>((resolve, reject) => {
-    const FB = (window as unknown as { FB?: {
-      getLoginStatus: (
-        cb: (r: { status: string; authResponse?: { accessToken: string } }) => void,
-      ) => void;
-    } }).FB;
+    const FB = (
+      window as unknown as {
+        FB?: {
+          getLoginStatus: (
+            cb: (r: { status: string; authResponse?: { accessToken: string } }) => void,
+          ) => void;
+        };
+      }
+    ).FB;
     if (!FB) {
       reject(new Error("FB SDK not loaded"));
       return;
@@ -242,10 +246,7 @@ export const api = {
     /** Resolve a FB video asset id to its playable source URL and
      * poster frame. Only called lazily when a preview modal opens. */
     source: (videoId: string) =>
-      request<{ source?: string; picture?: string }>(
-        "GET",
-        `/api/videos/${videoId}/source`,
-      ),
+      request<{ source?: string; picture?: string }>("GET", `/api/videos/${videoId}/source`),
   },
 
   pages: {
@@ -259,16 +260,24 @@ export const api = {
       ),
   },
 
+  posts: {
+    /** Fetch the full-resolution image / video source from a FB page
+     * post. Used by the creative preview modal for "front-stage" ads
+     * that reuse an existing organic post — in that case the creative
+     * endpoint only returns a blurry thumbnail and no video handle. */
+    media: (postId: string) =>
+      request<{ image_url: string | null; video_source: string | null }>(
+        "GET",
+        `/api/posts/${postId}/media`,
+      ),
+  },
+
   overview: {
     /** Batch fetch campaigns + insights for N accounts in a single
      * backend request. Bypasses the browser's 6-connection-per-origin
      * HTTP/1.1 limit that was the real bottleneck on Analytics /
      * Alerts / Finance first-load. */
-    batch: (
-      accountIds: string[],
-      date: DateConfig,
-      opts?: { includeArchived?: boolean },
-    ) =>
+    batch: (accountIds: string[], date: DateConfig, opts?: { includeArchived?: boolean }) =>
       request<{
         data: Record<
           string,

@@ -47,10 +47,7 @@ export function AlertsView() {
   // Finance so all three views benefit from one trip to the backend.
   const overview = useMultiAccountOverview(scopedAccounts, date);
 
-  const buckets = useMemo(
-    () => computeAlertBuckets(overview.campaigns),
-    [overview.campaigns],
-  );
+  const buckets = useMemo(() => computeAlertBuckets(overview.campaigns), [overview.campaigns]);
 
   const businessIdForCampaign = (accountId: string | undefined) => {
     if (!accountId) return undefined;
@@ -67,11 +64,7 @@ export function AlertsView() {
         <div className="flex items-center gap-3">
           <DatePicker value={date} onChange={(cfg) => setDate("alerts", cfg)} />
           <TopbarSeparator />
-          <RefreshButton
-            isFetching={overview.isFetching}
-            onClick={onRefresh}
-            title="重新分析"
-          />
+          <RefreshButton isFetching={overview.isFetching} onClick={onRefresh} title="重新分析" />
         </div>
       </Topbar>
 

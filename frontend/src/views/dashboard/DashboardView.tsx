@@ -17,6 +17,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { AccountPanel } from "./AccountPanel";
 import { BudgetModal, type BudgetModalTarget } from "./BudgetModal";
+import { ComparisonTable } from "./ComparisonTable";
 import { StatsGrid } from "./StatsGrid";
 import { TreeTable } from "./TreeTable";
 
@@ -74,6 +75,7 @@ export function DashboardView() {
 
   // Local UI state
   const [searchTerm, setSearchTerm] = useState("");
+  const [compareMode, setCompareMode] = useState(false);
   const [budgetTarget, setBudgetTarget] = useState<BudgetModalTarget | null>(null);
 
   // Refresh → invalidate the cached queries for the selected accounts
@@ -202,9 +204,21 @@ export function DashboardView() {
               <input
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.currentTarget.value)}
-                placeholder="搜尋行銷活動..."
+                placeholder={compareMode ? "搜尋素材..." : "搜尋行銷活動..."}
                 className="h-10 max-w-[260px] flex-1 rounded-pill border-[1.5px] border-border bg-bg px-4 text-[13px] outline-none focus:border-orange focus:bg-white md:h-[34px] md:px-3"
               />
+              <label
+                className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[12px] text-gray-500 md:text-[13px]"
+                title="只顯示已展開的第三層素材,方便並排比較"
+              >
+                <input
+                  type="checkbox"
+                  className="custom-cb"
+                  checked={compareMode}
+                  onChange={(e) => setCompareMode(e.currentTarget.checked)}
+                />
+                素材比較
+              </label>
               <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[12px] text-gray-500 md:hidden">
                 <input
                   type="checkbox"
@@ -240,6 +254,8 @@ export function DashboardView() {
                   loaded={campaignsQuery.loadedCount}
                   total={campaignsQuery.totalCount}
                 />
+              ) : compareMode ? (
+                <ComparisonTable multiAcct={multiAcct} date={date} searchTerm={searchTerm} />
               ) : (
                 <TreeTable
                   campaigns={filteredCampaigns}
