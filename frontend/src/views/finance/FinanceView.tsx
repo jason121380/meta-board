@@ -130,9 +130,24 @@ export function FinanceView() {
             title="下載 CSV"
             aria-label="下載 CSV"
             onClick={onDownloadCsv}
-            className="h-10 min-w-[40px] px-2.5 text-base md:h-[30px] md:min-w-0"
+            className="h-10 w-10 justify-center px-0 md:h-[30px] md:w-[30px]"
           >
-            <span aria-hidden="true">⬇</span>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              className="block"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
           </Button>
         </div>
       </Topbar>
@@ -190,6 +205,19 @@ export function FinanceView() {
             </div>
           </div>
 
+          {Object.keys(campaignsQuery.errors).length > 0 && (
+            <div className="border-b border-red-bg bg-red-bg/40 px-4 py-2.5 text-[12px] text-red">
+              <div className="font-semibold">部分帳戶載入失敗：</div>
+              {Object.entries(campaignsQuery.errors).map(([acctId, msg]) => {
+                const name = visible.find((a) => a.id === acctId)?.name ?? acctId;
+                return (
+                  <div key={acctId} className="mt-0.5 break-all">
+                    <span className="font-medium">{name}</span>: {msg}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div className="min-h-0 flex-1 overflow-auto">
             {visible.length === 0 ? (
               <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
