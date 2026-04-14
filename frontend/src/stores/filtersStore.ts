@@ -10,14 +10,14 @@ import { create } from "zustand";
  * Persisted key:
  *   filterActiveOnly → `filter_active_only` (boolean, default true)
  *
- * Date configs are NOT persisted in the legacy build; they live on
- * the DatePicker class instances and reset to `last_month` per view
- * on page refresh. We match that behavior.
+ * Date configs are NOT persisted; they reset on page refresh. The
+ * default preset is `this_month` so users land on the current month
+ * when they open any view (dashboard / analytics / alerts / finance).
  */
 
 export type ViewKey = "dashboard" | "analytics" | "alerts" | "finance";
 
-const defaultDate = (): DateConfig => ({ preset: "last_month", from: null, to: null });
+const defaultDate = (): DateConfig => ({ preset: "this_month", from: null, to: null });
 
 export interface FiltersState {
   /** Dashboard "只顯示有花費" toggle. */

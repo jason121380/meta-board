@@ -1,4 +1,3 @@
-import { cn } from "@/lib/cn";
 import { fF, fM, fN, fP } from "@/lib/format";
 import type { FbAccount, FbInsights } from "@/types/fb";
 import { useMemo } from "react";
@@ -91,9 +90,9 @@ function computeTotals(accounts: FbAccount[], insights: Record<string, FbInsight
 
 const SHIMMER_STYLE: React.CSSProperties = {
   display: "inline-block",
-  width: 60,
-  height: 18,
-  borderRadius: 4,
+  width: 50,
+  height: 14,
+  borderRadius: 3,
   background: "linear-gradient(90deg, var(--border) 25%, var(--warm-white) 50%, var(--border) 75%)",
   backgroundSize: "200% 100%",
   animation: "shimmer 1.2s infinite",
@@ -107,16 +106,11 @@ interface StatProps {
 
 function Stat({ label, value, loading }: StatProps) {
   return (
-    <div className="rounded-xl border border-border bg-white px-3 py-3 transition-[transform,box-shadow] duration-150 hover:-translate-y-px hover:shadow-sm md:rounded-2xl md:px-5 md:py-4">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.5px] text-gray-300 md:text-[11px]">
+    <div className="rounded-lg border border-border bg-white px-2.5 py-1.5 md:px-3 md:py-2">
+      <div className="text-[9px] font-semibold uppercase tracking-[0.4px] text-gray-300 md:text-[10px]">
         {label}
       </div>
-      <div
-        className={cn(
-          "mt-1 flex min-h-7 items-center text-[17px] font-bold leading-none tracking-[-0.3px] text-ink md:text-[22px] md:tracking-[-0.5px]",
-          "tabular-nums",
-        )}
-      >
+      <div className="mt-0.5 flex min-h-[18px] items-center text-[14px] font-bold leading-none tracking-[-0.3px] text-ink tabular-nums md:text-[16px]">
         {loading ? <span style={SHIMMER_STYLE} /> : value}
       </div>
     </div>
@@ -128,8 +122,13 @@ export function StatsGrid({ accounts, insights, isLoading }: StatsGridProps) {
   const cpmMsg = totals.msg > 0 ? totals.spend / totals.msg : null;
   const empty = accounts.length === 0;
 
+  // Compact strip: ≤768 → 4 cols × 3 rows, ≥768 → auto-fit so all
+  // 12 KPIs typically land on a single row on a 1280+ desktop.
+  // The min size of 92px is small enough that 12 cards fit in
+  // 1280 - 220 sidebar = 1060px (12 × 88 = 1056), leaving the table
+  // below 80%+ of the vertical space.
   return (
-    <div className="grid shrink-0 grid-cols-3 gap-2 bg-bg p-3 pb-0 md:grid-cols-[repeat(auto-fit,minmax(120px,1fr))] md:gap-3 md:p-4 md:pb-0">
+    <div className="grid shrink-0 grid-cols-4 gap-1.5 bg-bg p-2 pb-0 md:grid-cols-[repeat(auto-fit,minmax(92px,1fr))] md:gap-2 md:p-3 md:pb-0">
       <Stat label="花費" value={empty ? "—" : fM(totals.spend)} loading={isLoading && !empty} />
       <Stat
         label="曝光"

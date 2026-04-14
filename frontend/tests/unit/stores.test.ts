@@ -21,10 +21,10 @@ const resetStores = () => {
   useFiltersStore.setState({
     activeOnly: true,
     date: {
-      dashboard: { preset: "last_month", from: null, to: null },
-      analytics: { preset: "last_month", from: null, to: null },
-      alerts: { preset: "last_month", from: null, to: null },
-      finance: { preset: "last_month", from: null, to: null },
+      dashboard: { preset: "this_month", from: null, to: null },
+      analytics: { preset: "this_month", from: null, to: null },
+      alerts: { preset: "this_month", from: null, to: null },
+      finance: { preset: "this_month", from: null, to: null },
     },
   });
   useFinanceStore.setState({ rowMarkups: {}, pinnedIds: [], defaultMarkup: 5 });
