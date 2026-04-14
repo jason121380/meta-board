@@ -49,54 +49,69 @@ export function Modal({
           // dialog is perfectly centered regardless of any transformed
           // ancestors that would have broken `left-1/2 -translate-x-1/2`.
           // h-fit prevents the dialog from stretching to viewport height.
+          //
+          // Padding is applied to inner sections instead of the Content
+          // root so the sticky close header can bleed to the edges and
+          // still sit on top of scrolled body content.
           className={cn(
             "fixed inset-0 z-[901] m-auto h-fit",
-            "overflow-y-auto rounded-2xl bg-white p-5 shadow-md md:p-6",
+            "overflow-y-auto rounded-2xl bg-white p-0 shadow-md",
             "focus:outline-none animate-fade-in",
             className,
           )}
         >
-          {/* Always-present close affordance. Mobile users expect a
-              tappable X in the top-right (Esc is hidden on touch).
-              Positioned absolute + z-10 so it floats above the title
-              and any children that bleed to the corner. */}
-          <Dialog.Close
-            aria-label="關閉"
-            className="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-bg hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange/40 md:right-3 md:top-3"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+          {/* Sticky header — title on the left, always-visible close X
+              on the right. Stays pinned to the top of the scrollable
+              area when body content is taller than the viewport, so
+              the X never scrolls away. Without this, tall preview
+              modals (e.g. 3rd-level ad creative with long body text)
+              trapped mobile users because the backdrop-tap gesture
+              isn't obvious and there was no reachable close. */}
+          <div className="sticky top-0 z-10 flex items-start gap-2 bg-white px-5 pt-5 md:px-6 md:pt-6">
+            <div className="min-w-0 flex-1">
+              {title && (
+                <Dialog.Title className="mb-1 text-[15px] font-bold text-ink md:text-base">
+                  {title}
+                </Dialog.Title>
+              )}
+              {/* Always render a Description so Radix's a11y warning
+                  stays quiet. When no subtitle is supplied, the
+                  description is sr-only and just echoes the title
+                  for screen readers. */}
+              {subtitle ? (
+                <Dialog.Description className="text-xs text-gray-500">
+                  {subtitle}
+                </Dialog.Description>
+              ) : (
+                <Dialog.Description className="sr-only">
+                  {title ?? "對話視窗"}
+                </Dialog.Description>
+              )}
+            </div>
+            <Dialog.Close
+              aria-label="關閉"
+              className="-mr-2 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-bg hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange/40 md:-mr-3"
             >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </Dialog.Close>
-          {title && (
-            <Dialog.Title className="mb-1 pr-10 text-[15px] font-bold text-ink md:text-base">
-              {title}
-            </Dialog.Title>
-          )}
-          {/* Always render a Description so Radix's a11y warning
-              stays quiet. When no subtitle is supplied, the
-              description is sr-only and just echoes the title for
-              screen readers. */}
-          {subtitle ? (
-            <Dialog.Description className="mb-4 pr-10 text-xs text-gray-500">
-              {subtitle}
-            </Dialog.Description>
-          ) : (
-            <Dialog.Description className="sr-only">{title ?? "對話視窗"}</Dialog.Description>
-          )}
-          {children}
-          {footer && <div className="mt-4 flex justify-end gap-2">{footer}</div>}
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </Dialog.Close>
+          </div>
+          <div className="px-5 pb-5 pt-4 md:px-6 md:pb-6">
+            {children}
+            {footer && <div className="mt-4 flex justify-end gap-2">{footer}</div>}
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
