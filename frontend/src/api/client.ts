@@ -248,6 +248,17 @@ export const api = {
       ),
   },
 
+  pages: {
+    /** Fetch a FB Page's display name + profile picture URL. Used
+     * by the creative preview modal to render a FB-post-style header
+     * row. Only called lazily when a preview modal opens. */
+    info: (pageId: string) =>
+      request<{ name: string | null; picture_url: string | null }>(
+        "GET",
+        `/api/pages/${pageId}/info`,
+      ),
+  },
+
   overview: {
     /** Batch fetch campaigns + insights for N accounts in a single
      * backend request. Bypasses the browser's 6-connection-per-origin

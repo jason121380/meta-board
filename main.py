@@ -705,6 +705,34 @@ async def get_video_source(video_id: str):
     }
 
 
+@app.get("/api/pages/{page_id}/info")
+async def get_page_info(page_id: str):
+    """Fetch the Facebook Page's display name + profile picture URL.
+
+    Used by the 3rd-level creative preview modal so the dialog can
+    render a "real FB post" header row (avatar + page name) instead
+    of just the raw ad name. Called lazily from the frontend — only
+    when the modal opens and the creative has an
+    ``effective_object_story_id`` to extract the page id from.
+
+    Returns ``{"name": str | None, "picture_url": str | None}``.
+    Errors are swallowed into null values so a single unreachable
+    page never blocks the preview from rendering the image and body
+    text that we DO have.
+    """
+    try:
+        data = await fb_get(page_id, {"fields": "name,picture.width(80).height(80)"})
+    except HTTPException:
+        return {"name": None, "picture_url": None}
+    picture = data.get("picture")
+    picture_url = None
+    if isinstance(picture, dict):
+        inner = picture.get("data")
+        if isinstance(inner, dict):
+            picture_url = inner.get("url")
+    return {"name": data.get("name"), "picture_url": picture_url}
+
+
 @app.post("/api/ads/{ad_id}/status")
 async def update_ad_status(ad_id: str, status: str = Query(...)):
     return await fb_post(ad_id, {"status": status}, invalidate_entity=ad_id)
