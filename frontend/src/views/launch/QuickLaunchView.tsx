@@ -102,13 +102,16 @@ export function QuickLaunchView() {
     setStep(1);
   };
 
+  const inputCls =
+    "h-11 w-full rounded-lg border border-border bg-white px-3 text-[14px] outline-none focus:border-orange md:h-[38px]";
+
   return (
     <>
       <Topbar title="快速上架" />
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6">
         <div className="max-w-[560px]">
           <h2 className="mb-1 text-xl font-bold tracking-[-0.3px]">快速建立廣告</h2>
-          <p className="mb-6 text-[13px] text-gray-500">三步驟完成廣告上架</p>
+          <p className="mb-5 text-[13px] text-gray-500 md:mb-6">三步驟完成廣告上架</p>
 
           <Steps step={step} />
 
@@ -124,7 +127,7 @@ export function QuickLaunchView() {
                   </label>
                   <select
                     id="launch-account"
-                    className="h-[38px] w-full rounded-lg border border-border bg-white px-2.5 text-sm outline-none focus:border-orange"
+                    className={inputCls}
                     {...register("accountId", { required: true })}
                   >
                     <option value="">— 選擇廣告帳戶 —</option>
@@ -147,6 +150,7 @@ export function QuickLaunchView() {
                     type="button"
                     disabled={!accountId}
                     onClick={() => setStep(2)}
+                    className="w-full md:w-auto"
                   >
                     下一步 →
                   </Button>
@@ -160,14 +164,11 @@ export function QuickLaunchView() {
                   <input
                     {...register("name")}
                     placeholder="例：2026 春季活動"
-                    className="h-[38px] w-full rounded-lg border border-border bg-white px-3 text-sm outline-none focus:border-orange"
+                    className={inputCls}
                   />
                 </Field>
                 <Field label="廣告目標">
-                  <select
-                    {...register("objective")}
-                    className="h-[38px] w-full rounded-lg border border-border bg-white px-2.5 text-sm outline-none focus:border-orange"
-                  >
+                  <select {...register("objective")} className={inputCls}>
                     {FB_OBJECTIVES.map((o) => (
                       <option key={o.value} value={o.value}>
                         {o.label}
@@ -180,15 +181,12 @@ export function QuickLaunchView() {
                     type="number"
                     {...register("dailyBudget", { valueAsNumber: true })}
                     placeholder="500"
-                    className="h-[38px] w-full rounded-lg border border-border bg-white px-3 text-sm outline-none focus:border-orange"
+                    className={inputCls}
                   />
                   <div className="mt-1 text-[11px] text-gray-300">最低 NT$1，建議 NT$300 以上</div>
                 </Field>
                 <Field label="初始狀態">
-                  <select
-                    {...register("status")}
-                    className="h-[38px] w-full rounded-lg border border-border bg-white px-2.5 text-sm outline-none focus:border-orange"
-                  >
+                  <select {...register("status")} className={inputCls}>
                     <option value="PAUSED">暫停（建議先暫停，確認後再開啟）</option>
                     <option value="ACTIVE">立即執行</option>
                   </select>
@@ -198,11 +196,21 @@ export function QuickLaunchView() {
                     {submitError}
                   </div>
                 )}
-                <div className="mt-5 flex gap-2.5">
-                  <Button variant="ghost" type="button" onClick={() => setStep(1)}>
+                <div className="mt-5 flex flex-col gap-2.5 md:flex-row">
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="w-full md:w-auto"
+                  >
                     ← 返回
                   </Button>
-                  <Button variant="primary" type="submit" disabled={mutation.isPending}>
+                  <Button
+                    variant="primary"
+                    type="submit"
+                    disabled={mutation.isPending}
+                    className="w-full md:w-auto"
+                  >
                     {mutation.isPending ? "上架中..." : "立即上架"}
                   </Button>
                 </div>

@@ -83,7 +83,7 @@ export function AnalyticsView() {
         </div>
       </Topbar>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-3 md:p-6">
         {visible.length === 0 ? (
           <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
         ) : isLoading ? (
@@ -126,8 +126,8 @@ function AnalyticsBody({ data, visible, periodLabel }: AnalyticsBodyProps) {
       <AnalyticsKpisRow kpis={data.kpis} accountCount={visible.length} periodLabel={periodLabel} />
 
       <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}
+        className="ai-chart-grid grid gap-3 md:gap-4"
+        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}
       >
         {/* 1. Spend by account */}
         <ChartCard

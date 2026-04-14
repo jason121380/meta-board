@@ -15,6 +15,9 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+    /* Kill the default mobile blue tap-flash; we provide our own
+       :active / :hover feedback on real interactive elements. */
+    -webkit-tap-highlight-color: transparent;
   }
 
   html,
@@ -29,6 +32,21 @@
     font-size: 14px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    /* Disable iOS auto-text-resize after orientation change so our
+       responsive font sizes stay honest. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  /* Skip the 300ms tap delay on every interactive element. */
+  button,
+  a,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  label {
+    touch-action: manipulation;
   }
 
   a {
@@ -261,11 +279,15 @@
  *     widths. We add explicit fallbacks for the most visible cases.
  */
 @media (max-width: 768px) {
+  /* ── Layout ────────────────────────────────────────────── */
   .shell-sidebar {
     transform: translateX(-100%);
     transition: transform 0.2s ease-out;
-    width: 260px;
+    width: 280px;
     box-shadow: var(--shadow-md);
+    /* Respect the iOS home-indicator safe area so the user dropdown
+       is never hidden under it. */
+    padding-bottom: env(safe-area-inset-bottom);
   }
   .shell-sidebar[data-mobile-open="true"] {
     transform: translateX(0);
@@ -278,5 +300,69 @@
   }
   .shell-backdrop {
     display: block !important;
+  }
+
+  /* ── Touch target minimums ─────────────────────────────── */
+  /* Inputs: 16px font prevents iOS Safari from auto-zooming on focus,
+     and 40px height matches Material Design's mobile target spec. */
+  input[type="text"],
+  input[type="search"],
+  input[type="number"],
+  input[type="email"],
+  input[type="password"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="date"],
+  select,
+  textarea {
+    font-size: 16px !important;
+    min-height: 40px;
+  }
+
+  /* Bigger checkbox on mobile — 18px is still compact but easier
+     to hit accurately with a thumb. */
+  .custom-cb {
+    width: 20px !important;
+    height: 20px !important;
+  }
+
+  /* ── Tables ───────────────────────────────────────────── */
+  /* Wide tables (dashboard tree, finance) become horizontally
+     scrollable rather than crushing columns. The min-width keeps
+     numeric cells legible. */
+  table.tree {
+    min-width: 760px;
+  }
+  table.tree th,
+  table.tree td {
+    padding: 10px 8px !important;
+    font-size: 12px;
+  }
+  table.tree th {
+    font-size: 10px !important;
+    letter-spacing: 0.3px;
+  }
+
+  /* ── Analytics cards ─────────────────────────────────── */
+  .ai-kpi-card {
+    padding: 12px 14px;
+    border-radius: 12px;
+  }
+  .ai-kpi-value {
+    font-size: 20px;
+  }
+  .ai-chart-card {
+    padding: 14px 12px 12px;
+    border-radius: 12px;
+  }
+}
+
+/* ── Extra-small phones (≤480px) ─────────────────────────── */
+@media (max-width: 480px) {
+  /* Push back into single column for any auto-fit grid that
+     specified minmax(N, 1fr) where N > 280px, so cards don't get
+     awkwardly cropped. */
+  .ai-chart-grid {
+    grid-template-columns: 1fr !important;
   }
 }

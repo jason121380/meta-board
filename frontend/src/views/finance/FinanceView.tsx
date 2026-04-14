@@ -156,36 +156,37 @@ export function FinanceView() {
         </div>
 
         <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 items-center gap-2.5 border-b border-border bg-white px-5 py-2.5">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-white px-3 py-2.5 md:gap-2.5 md:px-5">
             <input
               value={search}
               onChange={(e) => setSearch(e.currentTarget.value)}
               placeholder="搜尋活動名稱..."
-              className="h-8 flex-1 rounded-lg border-[1.5px] border-border px-2.5 text-[13px] outline-none focus:border-orange"
+              className="h-10 min-w-[140px] flex-1 rounded-lg border-[1.5px] border-border px-3 text-[13px] outline-none focus:border-orange md:h-8 md:px-2.5"
             />
-            <label className="flex cursor-pointer items-center gap-1 whitespace-nowrap text-xs text-gray-500">
+            <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-gray-500">
               <input
                 type="checkbox"
                 className="custom-cb"
                 checked={hideZero}
                 onChange={(e) => setHideZero(e.currentTarget.checked)}
               />
-              只顯示有花費
+              有花費
             </label>
-            <span className="whitespace-nowrap text-xs text-gray-500">預設月%:</span>
-            <input
-              type="number"
-              value={defaultMarkup}
-              min={0}
-              max={100}
-              step={0.5}
-              onChange={(e) => {
-                const v = Number.parseFloat(e.currentTarget.value);
-                if (!Number.isNaN(v)) setDefaultMarkup(v);
-              }}
-              className="h-8 w-[54px] rounded-lg border-[1.5px] border-border px-1 text-center text-[13px]"
-            />
-            <span className="text-xs text-gray-500">%</span>
+            <div className="flex items-center gap-1">
+              <span className="whitespace-nowrap text-xs text-gray-500">月%</span>
+              <input
+                type="number"
+                value={defaultMarkup}
+                min={0}
+                max={100}
+                step={0.5}
+                onChange={(e) => {
+                  const v = Number.parseFloat(e.currentTarget.value);
+                  if (!Number.isNaN(v)) setDefaultMarkup(v);
+                }}
+                className="h-10 w-[58px] rounded-lg border-[1.5px] border-border px-1 text-center text-[13px] md:h-8 md:w-[54px]"
+              />
+            </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto">

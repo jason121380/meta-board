@@ -57,23 +57,23 @@ export function MobileAccountPicker({
   };
 
   return (
-    <div className={cn("flex shrink-0 items-center gap-2 bg-white px-3 py-2", className)}>
+    <div className={cn("flex shrink-0 items-center gap-2.5 bg-white px-4 py-2.5", className)}>
       <span className="text-[10px] font-bold uppercase tracking-[0.5px] text-gray-300">
         {label}
       </span>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex h-8 min-w-0 flex-1 items-center justify-between gap-2 rounded-pill border-[1.5px] border-border bg-white px-3 text-left text-[13px] font-medium text-ink"
+        className="flex h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-pill border-[1.5px] border-border bg-white px-4 text-left text-[14px] font-medium text-ink active:scale-[0.98] active:bg-orange-bg"
       >
         <span className="min-w-0 truncate">{currentName}</span>
-        <span aria-hidden="true" className="text-[10px] text-gray-300">
+        <span aria-hidden="true" className="text-[11px] text-gray-300">
           ▼
         </span>
       </button>
 
-      <Modal open={open} onOpenChange={setOpen} title="選擇廣告帳戶" width={320} className="!p-0">
-        <div className="max-h-[60vh] overflow-y-auto py-1">
+      <Modal open={open} onOpenChange={setOpen} title="選擇廣告帳戶" width={360} className="!p-0">
+        <div className="max-h-[65vh] overflow-y-auto py-1">
           {includeAllOption && (
             <PickerRow
               active={selectedId === null}
@@ -116,14 +116,14 @@ function PickerRow({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full cursor-pointer select-none items-center gap-2 border-b border-border px-4 py-2.5 text-left",
-        active ? "bg-orange-bg" : "hover:bg-orange-bg",
+        "flex min-h-[48px] w-full cursor-pointer select-none items-center gap-2.5 border-b border-border px-4 py-3 text-left",
+        active ? "bg-orange-bg" : "active:bg-orange-bg hover:bg-orange-bg",
       )}
     >
       <StatusDot state={dotState} />
       <span
         className={cn(
-          "flex-1 truncate text-[13px] font-medium",
+          "flex-1 truncate text-[14px] font-medium",
           active ? "font-semibold text-orange" : "text-ink",
         )}
         title={label}
@@ -131,7 +131,7 @@ function PickerRow({
         {label}
       </span>
       {active && (
-        <span aria-hidden="true" className="text-orange">
+        <span aria-hidden="true" className="text-base text-orange">
           ✓
         </span>
       )}
