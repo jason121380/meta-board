@@ -687,6 +687,56 @@ async def update_ad_status(ad_id: str, status: str = Query(...)):
 
 # ── 帳戶整體成效 ──────────────────────────────────────────────────────
 
+@app.get("/api/accounts/{account_id}/ads")
+async def get_account_ads(
+    account_id: str,
+    date_preset: str = "last_30d",
+    time_range: Optional[str] = None,
+):
+    """Flat list of every ad in an ad account, with creative +
+    insights + parent campaign/adset metadata.
+
+    Used by the Creative Center (素材中心) which aggregates 3rd-level
+    ads across every enabled account into a single sortable table.
+    Returning the parent names via FB field expansion avoids an N+1
+    round-trip to look them up client-side.
+
+    Progressive fallback mirrors the per-adset ``get_ads`` endpoint:
+    drop ``object_story_spec`` first (some accounts reject it), then
+    ``image_url``, then ``creative`` entirely, then insights.
+    """
+    ins = _insights_clause("spend,impressions,clicks,ctr,cpc,actions", date_preset, time_range)
+    creative_full = (
+        "creative{thumbnail_url,image_url,"
+        "object_story_spec{video_data},title,body}"
+    )
+    creative_no_spec = "creative{thumbnail_url,image_url,title,body}"
+    creative_thumb_only = "creative{thumbnail_url,title,body}"
+    parent_fields = "campaign_id,adset_id,campaign{name},adset{name}"
+    attempts = [
+        f"id,name,status,{parent_fields},{creative_full},{ins}",
+        f"id,name,status,{parent_fields},{creative_no_spec},{ins}",
+        f"id,name,status,{parent_fields},{creative_thumb_only},{ins}",
+        f"id,name,status,{parent_fields},{ins}",
+        "id,name,status,campaign_id,adset_id",
+    ]
+    last_error: Optional[HTTPException] = None
+    for fields in attempts:
+        try:
+            params = {"fields": fields, "limit": "200"}
+            if "thumbnail_url" in fields:
+                params["thumbnail_width"] = "600"
+                params["thumbnail_height"] = "600"
+            ads = await fb_get_paginated(f"{account_id}/ads", params)
+            return {"data": ads}
+        except HTTPException as e:
+            last_error = e
+            continue
+    if last_error is not None:
+        raise last_error
+    raise HTTPException(status_code=502, detail="Failed to load account ads")
+
+
 @app.get("/api/accounts/{account_id}/insights")
 async def get_account_insights(account_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None):
     params = {

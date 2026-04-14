@@ -28,3 +28,18 @@ export function fbCampaignLink(
   const bizParam = businessId ? `&business_id=${businessId}` : "";
   return `https://adsmanager.facebook.com/adsmanager/manage/campaigns/edit/standalone?act=${act}${bizParam}&selected_campaign_ids=${campaignId}&current_step=0`;
 }
+
+/**
+ * Deep link to a single ad (3rd level) in Ads Manager. Lands the
+ * user directly on the ad preview pane with the ad selected.
+ */
+export function fbAdLink(
+  adId: string,
+  accountId: string | undefined,
+  businessId?: string,
+): string {
+  const act = stripActPrefix(accountId);
+  if (!act) return "";
+  const bizParam = businessId ? `&business_id=${businessId}` : "";
+  return `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${act}${bizParam}&selected_ad_ids=${adId}`;
+}
