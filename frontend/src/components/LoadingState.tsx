@@ -7,7 +7,7 @@ import { Spinner } from "./Spinner";
  * <Loading/> primitive. Designed for the "user opens a view and
  * waits for multi-account data" case. Shows:
  *
- *   - A centered 28px spinner
+ *   - A centered 32px spinner
  *   - A bold title line ("載入資料中...")
  *   - An optional subtitle (e.g. "3 / 5 個帳戶")
  *   - An optional progress bar showing loaded / total
@@ -15,6 +15,12 @@ import { Spinner } from "./Spinner";
  * Designed to look OBVIOUSLY different from an empty state — no
  * gray-300 text, no ambiguous "—" placeholder, no risk the user
  * thinks the screen is broken.
+ *
+ * Progress display rules:
+ *   - total > 1 AND loaded > 0 → determinate bar at loaded/total %
+ *   - total > 1 AND loaded = 0 → indeterminate shimmer bar
+ *   - total ≤ 1               → no counter, no bar (single fetch
+ *                                is binary, a 0/1 counter is noise)
  */
 
 export interface LoadingStateProps {
@@ -33,10 +39,17 @@ export function LoadingState({
   total,
   className,
 }: LoadingStateProps) {
-  const showProgress = typeof loaded === "number" && typeof total === "number" && total > 0;
-  const pct = showProgress ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+  const loadedSafe = typeof loaded === "number" ? loaded : 0;
+  // Only show the progress counter / bar when there are at least
+  // two concurrent fetches. A single fetch can only be 0/1, which
+  // is noise — a plain spinner reads better.
+  const showProgress = typeof total === "number" && total > 1;
+  const pct = showProgress ? Math.min(100, Math.round((loadedSafe / total) * 100)) : 0;
+  // When the user hasn't seen anything load yet, animate the bar
+  // with an indeterminate shimmer instead of freezing at 0%.
+  const indeterminate = showProgress && loadedSafe === 0;
   const effectiveSubtitle =
-    subtitle ?? (showProgress ? `${loaded} / ${total} 個帳戶已載入` : undefined);
+    subtitle ?? (showProgress ? `${loadedSafe} / ${total} 個帳戶已載入` : undefined);
 
   return (
     <div
@@ -45,15 +58,22 @@ export function LoadingState({
         className,
       )}
     >
-      <Spinner size={28} />
+      <Spinner size={32} />
       <div className="text-[14px] font-semibold text-ink">{title}</div>
       {effectiveSubtitle && <div className="text-[12px] text-gray-500">{effectiveSubtitle}</div>}
       {showProgress && (
         <div className="mt-1 h-1 w-[200px] overflow-hidden rounded-full bg-border">
-          <div
-            className="h-full bg-orange transition-[width] duration-300 ease-out"
-            style={{ width: `${pct}%` }}
-          />
+          {indeterminate ? (
+            <div
+              className="h-full w-full rounded-full bg-gradient-to-r from-orange-bg via-orange to-orange-bg bg-[length:200%_100%] animate-shimmer"
+              aria-hidden="true"
+            />
+          ) : (
+            <div
+              className="h-full bg-orange transition-[width] duration-300 ease-out"
+              style={{ width: `${pct}%` }}
+            />
+          )}
         </div>
       )}
     </div>
