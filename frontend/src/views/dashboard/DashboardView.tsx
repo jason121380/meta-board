@@ -191,8 +191,14 @@ export function DashboardView() {
             />
           )}
 
-          <div className="m-3 flex flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-white md:m-4">
-            <div className="flex shrink-0 flex-wrap items-center gap-2.5 rounded-t-2xl border-b border-border px-3 py-2.5 md:px-4 md:py-3">
+          {/* Tree card: transparent bg so the area below the last
+              row (when the table is shorter than the card) shows the
+              page background instead of a stark white block. Header
+              row carries its own bg-white so the top band still
+              reads as a card header. Table rows already paint their
+              own backgrounds from globals.css. */}
+          <div className="m-3 flex flex-1 flex-col overflow-hidden rounded-2xl border border-border md:m-4">
+            <div className="flex shrink-0 flex-wrap items-center gap-2.5 rounded-t-2xl border-b border-border bg-white px-3 py-2.5 md:px-4 md:py-3">
               <input
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.currentTarget.value)}
