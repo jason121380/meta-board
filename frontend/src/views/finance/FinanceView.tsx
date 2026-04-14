@@ -1,6 +1,5 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
-import { useMultiAccountCampaigns } from "@/api/hooks/useMultiAccountCampaigns";
-import { useMultiAccountInsights } from "@/api/hooks/useMultiAccountInsights";
+import { useMultiAccountOverview } from "@/api/hooks/useMultiAccountOverview";
 import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { Button } from "@/components/Button";
 import { DatePicker } from "@/components/DatePicker";
@@ -56,35 +55,28 @@ export function FinanceView() {
   const [search, setSearch] = useState("");
   const [hideZero, setHideZero] = useState(true);
 
-  // Fetch per-account insights (authoritative spend) and campaigns
-  // for every visible account, even in single-account drilldown mode
-  // so the left panel can still render totals.
-  const insights = useMultiAccountInsights(
-    visible.map((a) => a.id),
-    date,
-  );
-  const campaignsQuery = useMultiAccountCampaigns(visible, date, {
-    includeArchived: true,
-  });
+  // Single batch request replaces useMultiAccountCampaigns +
+  // useMultiAccountInsights. include_archived: true because the
+  // Finance table wants every status (matches legacy behavior).
+  const overview = useMultiAccountOverview(visible, date, { includeArchived: true });
 
   const selectedId = finSelectedAcctIds.length === 1 ? (finSelectedAcctIds[0] ?? null) : null;
 
   // Slice campaigns for the right-side table based on selection
   const tableCampaigns = useMemo(() => {
-    if (selectedId === null) return campaignsQuery.campaigns;
-    return campaignsQuery.campaigns.filter((c) => c._accountId === selectedId);
-  }, [campaignsQuery.campaigns, selectedId]);
+    if (selectedId === null) return overview.campaigns;
+    return overview.campaigns.filter((c) => c._accountId === selectedId);
+  }, [overview.campaigns, selectedId]);
 
   // Build left-panel rows (always across ALL visible accounts)
   const accountRows = useMemo(
     () =>
-      buildAccountRows(visible, insights.data, campaignsQuery.campaigns, rowMarkups, defaultMarkup),
-    [visible, insights.data, campaignsQuery.campaigns, rowMarkups, defaultMarkup],
+      buildAccountRows(visible, overview.insights, overview.campaigns, rowMarkups, defaultMarkup),
+    [visible, overview.insights, overview.campaigns, rowMarkups, defaultMarkup],
   );
 
   const onRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["campaigns"] });
-    queryClient.invalidateQueries({ queryKey: ["insights"] });
+    queryClient.invalidateQueries({ queryKey: ["overview"] });
   };
 
   const onDownloadCsv = () => {
@@ -121,10 +113,7 @@ export function FinanceView() {
         <div className="flex items-center gap-3">
           <DatePicker value={date} onChange={(cfg) => setDate("finance", cfg)} />
           <TopbarSeparator />
-          <RefreshButton
-            isFetching={campaignsQuery.isFetching || insights.isFetching}
-            onClick={onRefresh}
-          />
+          <RefreshButton isFetching={overview.isFetching} onClick={onRefresh} />
           <Button
             variant="ghost"
             size="sm"
@@ -206,10 +195,10 @@ export function FinanceView() {
             </div>
           </div>
 
-          {Object.keys(campaignsQuery.errors).length > 0 && (
+          {Object.keys(overview.errors).length > 0 && (
             <div className="border-b border-red-bg bg-red-bg/40 px-4 py-2.5 text-[12px] text-red">
               <div className="font-semibold">部分帳戶載入失敗：</div>
-              {Object.entries(campaignsQuery.errors).map(([acctId, msg]) => {
+              {Object.entries(overview.errors).map(([acctId, msg]) => {
                 const name = visible.find((a) => a.id === acctId)?.name ?? acctId;
                 return (
                   <div key={acctId} className="mt-0.5 break-all">
@@ -222,11 +211,11 @@ export function FinanceView() {
           <div className="min-h-0 flex-1 overflow-auto">
             {visible.length === 0 ? (
               <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
-            ) : campaignsQuery.isLoading ? (
+            ) : overview.isLoading ? (
               <LoadingState
                 title="載入財務資料中..."
-                loaded={campaignsQuery.loadedCount}
-                total={campaignsQuery.totalCount}
+                loaded={overview.loadedCount}
+                total={overview.totalCount}
               />
             ) : (
               <FinanceTable

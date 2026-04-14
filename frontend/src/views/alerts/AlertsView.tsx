@@ -1,5 +1,5 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
-import { useMultiAccountCampaigns } from "@/api/hooks/useMultiAccountCampaigns";
+import { useMultiAccountOverview } from "@/api/hooks/useMultiAccountOverview";
 import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
@@ -42,11 +42,14 @@ export function AlertsView() {
   const date = useFiltersStore((s) => s.date.alerts);
   const setDate = useFiltersStore((s) => s.setDate);
 
-  const campaignsQuery = useMultiAccountCampaigns(scopedAccounts, date);
+  // Batch endpoint — alerts only consumes campaigns from the bundle,
+  // but we share the same `/api/overview` pipeline with Analytics /
+  // Finance so all three views benefit from one trip to the backend.
+  const overview = useMultiAccountOverview(scopedAccounts, date);
 
   const buckets = useMemo(
-    () => computeAlertBuckets(campaignsQuery.campaigns),
-    [campaignsQuery.campaigns],
+    () => computeAlertBuckets(overview.campaigns),
+    [overview.campaigns],
   );
 
   const businessIdForCampaign = (accountId: string | undefined) => {
@@ -55,7 +58,7 @@ export function AlertsView() {
   };
 
   const onRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+    queryClient.invalidateQueries({ queryKey: ["overview"] });
   };
 
   return (
@@ -65,7 +68,7 @@ export function AlertsView() {
           <DatePicker value={date} onChange={(cfg) => setDate("alerts", cfg)} />
           <TopbarSeparator />
           <RefreshButton
-            isFetching={campaignsQuery.isFetching}
+            isFetching={overview.isFetching}
             onClick={onRefresh}
             title="重新分析"
           />
@@ -94,13 +97,13 @@ export function AlertsView() {
         <div className="flex-1 overflow-y-auto p-3 md:p-5">
           {visibleAll.length === 0 ? (
             <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
-          ) : campaignsQuery.isLoading ? (
+          ) : overview.isLoading ? (
             <LoadingState
               title="分析廣告資料中..."
-              loaded={campaignsQuery.loadedCount}
-              total={campaignsQuery.totalCount}
+              loaded={overview.loadedCount}
+              total={overview.totalCount}
             />
-          ) : campaignsQuery.campaigns.length === 0 ? (
+          ) : overview.campaigns.length === 0 ? (
             <EmptyState>無廣告資料可分析</EmptyState>
           ) : (
             <div className="grid items-start gap-3 md:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] md:gap-3.5">

@@ -1,6 +1,5 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
-import { useMultiAccountCampaigns } from "@/api/hooks/useMultiAccountCampaigns";
-import { useMultiAccountInsights } from "@/api/hooks/useMultiAccountInsights";
+import { useMultiAccountOverview } from "@/api/hooks/useMultiAccountOverview";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
@@ -51,23 +50,21 @@ export function AnalyticsView() {
   const date = useFiltersStore((s) => s.date.analytics);
   const setDate = useFiltersStore((s) => s.setDate);
 
-  const campaignsQuery = useMultiAccountCampaigns(visible, date);
-  const insightsQuery = useMultiAccountInsights(
-    visible.map((a) => a.id),
-    date,
-  );
+  // Single batch request for campaigns + per-account insights —
+  // replaces the old `useMultiAccountCampaigns` + `useMultiAccountInsights`
+  // pair so we only hit the backend once instead of 2 × N times.
+  const overview = useMultiAccountOverview(visible, date);
 
   const data = useMemo(
-    () => computeAnalyticsData(campaignsQuery.campaigns, insightsQuery.data, visible),
-    [campaignsQuery.campaigns, insightsQuery.data, visible],
+    () => computeAnalyticsData(overview.campaigns, overview.insights, visible),
+    [overview.campaigns, overview.insights, visible],
   );
 
   const onRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["campaigns"] });
-    queryClient.invalidateQueries({ queryKey: ["insights"] });
+    queryClient.invalidateQueries({ queryKey: ["overview"] });
   };
 
-  const isLoading = campaignsQuery.isLoading || insightsQuery.isLoading;
+  const isLoading = overview.isLoading;
 
   return (
     <>
@@ -76,7 +73,7 @@ export function AnalyticsView() {
           <DatePicker value={date} onChange={(cfg) => setDate("analytics", cfg)} />
           <TopbarSeparator />
           <RefreshButton
-            isFetching={campaignsQuery.isFetching || insightsQuery.isFetching}
+            isFetching={overview.isFetching}
             onClick={onRefresh}
             title="重新分析"
           />
@@ -89,8 +86,8 @@ export function AnalyticsView() {
         ) : isLoading ? (
           <LoadingState
             title="分析資料中..."
-            loaded={Math.min(campaignsQuery.loadedCount, insightsQuery.loadedCount)}
-            total={campaignsQuery.totalCount}
+            loaded={overview.loadedCount}
+            total={overview.totalCount}
           />
         ) : (
           <AnalyticsBody data={data} visible={visible} periodLabel={toLabel(date)} />
