@@ -53,10 +53,16 @@ export function Modal({
               {title}
             </Dialog.Title>
           )}
-          {subtitle && (
+          {/* Always render a Description so Radix's a11y warning
+              stays quiet. When no subtitle is supplied, the
+              description is sr-only and just echoes the title for
+              screen readers. */}
+          {subtitle ? (
             <Dialog.Description className="mb-4 text-xs text-gray-500">
               {subtitle}
             </Dialog.Description>
+          ) : (
+            <Dialog.Description className="sr-only">{title ?? "對話視窗"}</Dialog.Description>
           )}
           {children}
           {footer && <div className="mt-4 flex justify-end gap-2">{footer}</div>}

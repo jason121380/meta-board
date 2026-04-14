@@ -69,11 +69,19 @@ export function CampaignRow({
 
   return (
     <>
-      <tr className="campaign-row cursor-pointer" data-camp={campaign.id} onClick={onRowClick}>
+      <tr
+        className="campaign-row cursor-pointer"
+        data-camp={campaign.id}
+        onClick={onRowClick}
+        aria-expanded={expanded}
+      >
         <td className="w-10 text-center text-xs text-gray-300">{index + 1}</td>
         <td>
           <div className="flex max-w-[240px] items-center gap-1.5">
-            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[10px] text-ink">
+            <span
+              aria-hidden="true"
+              className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[10px] text-ink"
+            >
               {expanded ? "▼" : "▶"}
             </span>
             <span className="truncate text-[13px] font-semibold" title={campaign.name}>

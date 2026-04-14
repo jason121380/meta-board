@@ -127,11 +127,12 @@ export function FinanceView() {
           <Button
             variant="ghost"
             size="sm"
-            title="下載資料"
+            title="下載 CSV"
+            aria-label="下載 CSV"
             onClick={onDownloadCsv}
-            className="px-2.5 text-base"
+            className="h-10 min-w-[40px] px-2.5 text-base md:h-[30px] md:min-w-0"
           >
-            ⬇
+            <span aria-hidden="true">⬇</span>
           </Button>
         </div>
       </Topbar>

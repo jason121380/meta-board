@@ -1,15 +1,10 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * Mobile shell smoke test — sets localStorage to pretend we're already
- * authenticated, blocks FB SDK, then verifies the mobile sidebar
- * collapses behind a hamburger and expands when tapped.
- *
- * NOTE: this test currently runs against the 6-second login fallback
- * path since we don't have a way to mock the /api/auth/me endpoint
- * deterministically without running the FastAPI server. It still
- * asserts the responsive CSS rules are in place by checking computed
- * styles on the sidebar at narrow viewports.
+ * Mobile shell smoke test — verifies the mobile responsive layer is
+ * actually applied at narrow viewports. Runs against the unauth
+ * login screen because we don't have a way to mock the FastAPI auth
+ * endpoint deterministically in CI.
  */
 
 test.describe("Mobile shell responsiveness", () => {
@@ -20,16 +15,11 @@ test.describe("Mobile shell responsiveness", () => {
   test("login view still renders split layout at 375×667", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto("/");
-    // Brand wordmark should remain visible at mobile width
     const metadash = page.getByText(/METADASH/);
     await expect(metadash.first()).toBeVisible();
   });
 
   test("authenticated-shell mobile class on sidebar exists", async ({ page }) => {
-    // When we wire shell-sidebar classes behind an auth gate, this
-    // test verifies the CSS file actually contains the mobile
-    // overrides. Even without an authed session we can smoke-test
-    // the stylesheet presence.
     await page.goto("/");
     const stylesheetHasMobileRules = await page.evaluate(() => {
       for (const sheet of Array.from(document.styleSheets)) {
@@ -50,5 +40,40 @@ test.describe("Mobile shell responsiveness", () => {
       return false;
     });
     expect(stylesheetHasMobileRules).toBe(true);
+  });
+
+  test("mobile CSS includes touch-target & no-zoom rules", async ({ page }) => {
+    // Verifies the new mobile UX overrides shipped (input min-height,
+    // 16px font, custom-cb 20×20). If any of these regress the
+    // assertion fails immediately.
+    await page.goto("/");
+    const found = await page.evaluate(() => {
+      const checks = {
+        inputMinHeight: false,
+        input16px: false,
+        biggerCheckbox: false,
+        tapHighlight: false,
+      };
+      for (const sheet of Array.from(document.styleSheets)) {
+        try {
+          for (const rule of Array.from(sheet.cssRules)) {
+            const text = rule.cssText;
+            if (rule instanceof CSSMediaRule && rule.conditionText.includes("max-width")) {
+              if (/input.*min-height:\s*40px/i.test(text)) checks.inputMinHeight = true;
+              if (/font-size:\s*16px/i.test(text)) checks.input16px = true;
+              if (/\.custom-cb[\s\S]*20px/.test(text)) checks.biggerCheckbox = true;
+            }
+            if (text.includes("-webkit-tap-highlight-color")) checks.tapHighlight = true;
+          }
+        } catch {
+          /* skip cross-origin sheets */
+        }
+      }
+      return checks;
+    });
+    expect(found.inputMinHeight, "mobile input min-height: 40px should be set").toBe(true);
+    expect(found.input16px, "mobile input font-size: 16px should be set").toBe(true);
+    expect(found.biggerCheckbox, "mobile .custom-cb should grow to 20px").toBe(true);
+    expect(found.tapHighlight, "tap-highlight-color: transparent should be set").toBe(true);
   });
 });

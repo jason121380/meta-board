@@ -64,6 +64,8 @@ export function MobileAccountPicker({
       <button
         type="button"
         onClick={() => setOpen(true)}
+        aria-label={`選擇廣告帳戶，目前：${currentName}`}
+        aria-haspopup="dialog"
         className="flex h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-pill border-[1.5px] border-border bg-white px-4 text-left text-[14px] font-medium text-ink active:scale-[0.98] active:bg-orange-bg"
       >
         <span className="min-w-0 truncate">{currentName}</span>

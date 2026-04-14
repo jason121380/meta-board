@@ -15,22 +15,45 @@ import { Navigate, createBrowserRouter } from "react-router-dom";
  * (it's the landing page). The remaining 5 views are lazy-loaded
  * on demand via React.lazy(). This shrinks the initial JS payload
  * substantially and cuts time-to-first-meaningful-paint.
+ *
+ * Each lazy import is also exposed as a ``prefetch*`` function so
+ * the sidebar can start the network request on hover/touchstart and
+ * the view appears instantly when the user actually navigates.
  */
-const AnalyticsView = lazy(() =>
-  import("@/views/analytics/AnalyticsView").then((m) => ({ default: m.AnalyticsView })),
-);
-const AlertsView = lazy(() =>
-  import("@/views/alerts/AlertsView").then((m) => ({ default: m.AlertsView })),
-);
-const FinanceView = lazy(() =>
-  import("@/views/finance/FinanceView").then((m) => ({ default: m.FinanceView })),
-);
-const QuickLaunchView = lazy(() =>
-  import("@/views/launch/QuickLaunchView").then((m) => ({ default: m.QuickLaunchView })),
-);
-const SettingsView = lazy(() =>
-  import("@/views/settings/SettingsView").then((m) => ({ default: m.SettingsView })),
-);
+
+// Memoised import promises so prefetch + lazy resolve to the same chunk.
+const importAnalytics = () => import("@/views/analytics/AnalyticsView");
+const importAlerts = () => import("@/views/alerts/AlertsView");
+const importFinance = () => import("@/views/finance/FinanceView");
+const importLaunch = () => import("@/views/launch/QuickLaunchView");
+const importSettings = () => import("@/views/settings/SettingsView");
+
+const AnalyticsView = lazy(() => importAnalytics().then((m) => ({ default: m.AnalyticsView })));
+const AlertsView = lazy(() => importAlerts().then((m) => ({ default: m.AlertsView })));
+const FinanceView = lazy(() => importFinance().then((m) => ({ default: m.FinanceView })));
+const QuickLaunchView = lazy(() => importLaunch().then((m) => ({ default: m.QuickLaunchView })));
+const SettingsView = lazy(() => importSettings().then((m) => ({ default: m.SettingsView })));
+
+/** Trigger an early download of a view's JS chunk before navigation. */
+export const prefetchView = (path: string): void => {
+  switch (path) {
+    case "/analytics":
+      void importAnalytics();
+      return;
+    case "/alerts":
+      void importAlerts();
+      return;
+    case "/finance":
+      void importFinance();
+      return;
+    case "/launch":
+      void importLaunch();
+      return;
+    case "/settings":
+      void importSettings();
+      return;
+  }
+};
 
 function lazyView(node: ReactNode) {
   return <Suspense fallback={<LoadingState title="載入頁面中..." />}>{node}</Suspense>;
