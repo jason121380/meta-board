@@ -4,6 +4,7 @@ import { useMultiAccountInsights } from "@/api/hooks/useMultiAccountInsights";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
+import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { getIns } from "@/lib/insights";
@@ -111,13 +112,30 @@ export function DashboardView() {
         </div>
       </Topbar>
 
-      <div className="flex flex-1 overflow-hidden">
-        <AccountPanel
-          accounts={visibleAccounts}
-          activeAccountId={activeAccountId}
-          isLoading={accountsQuery.isLoading}
-          onSelect={(account) => setActiveIds([account.id])}
-        />
+      <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
+        {/* Desktop sidebar (≥768px) */}
+        <div className="hidden md:flex">
+          <AccountPanel
+            accounts={visibleAccounts}
+            activeAccountId={activeAccountId}
+            isLoading={accountsQuery.isLoading}
+            onSelect={(account) => setActiveIds([account.id])}
+          />
+        </div>
+
+        {/* Mobile picker (<768px) — opens a modal */}
+        <div className="border-b border-border md:hidden">
+          <MobileAccountPicker
+            accounts={visibleAccounts}
+            selectedId={activeAccountId}
+            onSelect={(id) => {
+              if (id === null) return;
+              const acc = visibleAccounts.find((a) => a.id === id);
+              if (acc) setActiveIds([acc.id]);
+            }}
+            includeAllOption={false}
+          />
+        </div>
 
         <div className="flex flex-1 flex-col overflow-hidden">
           <StatsGrid

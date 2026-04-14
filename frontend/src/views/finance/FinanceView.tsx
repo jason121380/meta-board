@@ -5,6 +5,7 @@ import { Button } from "@/components/Button";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
+import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { toLabel } from "@/lib/datePicker";
@@ -135,12 +136,24 @@ export function FinanceView() {
         </div>
       </Topbar>
 
-      <div className="flex flex-1 overflow-hidden">
-        <FinanceAccountPanel
-          rows={accountRows}
-          selectedId={selectedId}
-          onSelect={(id) => setFinSelectedAcctIds(id ? [id] : [])}
-        />
+      <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
+        {/* Desktop sidebar (≥768px) */}
+        <div className="hidden md:flex">
+          <FinanceAccountPanel
+            rows={accountRows}
+            selectedId={selectedId}
+            onSelect={(id) => setFinSelectedAcctIds(id ? [id] : [])}
+          />
+        </div>
+
+        {/* Mobile picker (<768px) — opens a modal */}
+        <div className="border-b border-border md:hidden">
+          <MobileAccountPicker
+            accounts={visible}
+            selectedId={selectedId}
+            onSelect={(id) => setFinSelectedAcctIds(id ? [id] : [])}
+          />
+        </div>
 
         <div className="flex flex-1 flex-col overflow-hidden">
           <div className="flex shrink-0 items-center gap-2.5 border-b border-border bg-white px-5 py-2.5">

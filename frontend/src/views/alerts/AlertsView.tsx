@@ -3,6 +3,7 @@ import { useMultiAccountCampaigns } from "@/api/hooks/useMultiAccountCampaigns";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
+import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { useAccountsStore } from "@/stores/accountsStore";
@@ -70,12 +71,24 @@ export function AlertsView() {
         </div>
       </Topbar>
 
-      <div className="flex flex-1 overflow-hidden">
-        <AlertAccountPanel
-          accounts={visibleAll}
-          selectedAccountId={selectedAcctId}
-          onSelect={setSelectedAcctId}
-        />
+      <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
+        {/* Desktop sidebar (≥768px) */}
+        <div className="hidden md:flex">
+          <AlertAccountPanel
+            accounts={visibleAll}
+            selectedAccountId={selectedAcctId}
+            onSelect={setSelectedAcctId}
+          />
+        </div>
+
+        {/* Mobile picker (<768px) — single tap target opens a modal */}
+        <div className="border-b border-border md:hidden">
+          <MobileAccountPicker
+            accounts={visibleAll}
+            selectedId={selectedAcctId}
+            onSelect={setSelectedAcctId}
+          />
+        </div>
 
         <div className="flex-1 overflow-y-auto p-5">
           {visibleAll.length === 0 ? (
