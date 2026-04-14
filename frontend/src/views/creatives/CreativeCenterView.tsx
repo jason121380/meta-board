@@ -4,10 +4,10 @@ import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { CreativePreviewModal } from "@/components/CreativePreviewModal";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
-import { LoadingState } from "@/components/LoadingState";
 import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
+import { getIns } from "@/lib/insights";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
 import type { FbCreativeEntity } from "@/types/fb";
@@ -61,6 +61,10 @@ export function CreativeCenterView() {
 
   const date = useFiltersStore((s) => s.date.creatives);
   const setDate = useFiltersStore((s) => s.setDate);
+  // Shared with Dashboard: unchecking "有花費" in one view unchecks
+  // it in the other, persisted as `filter_active_only` in localStorage.
+  const activeOnly = useFiltersStore((s) => s.activeOnly);
+  const setActiveOnly = useFiltersStore((s) => s.setActiveOnly);
 
   const adsQuery = useMultiAccountAds(activeAccounts, date);
 
@@ -70,14 +74,22 @@ export function CreativeCenterView() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return adsQuery.ads;
-    return adsQuery.ads.filter(
+    let rows = adsQuery.ads;
+    // Default on — hides all the zero-spend / never-ran ads so the
+    // table shows only creatives with real performance data. Massive
+    // reduction in row count (and therefore image requests) for most
+    // accounts.
+    if (activeOnly) {
+      rows = rows.filter((a) => Number(getIns(a).spend) > 0);
+    }
+    if (!q) return rows;
+    return rows.filter(
       (a) =>
         a.name.toLowerCase().includes(q) ||
         (a.campaign?.name?.toLowerCase().includes(q) ?? false) ||
         (a._accountName?.toLowerCase().includes(q) ?? false),
     );
-  }, [adsQuery.ads, search]);
+  }, [adsQuery.ads, search, activeOnly]);
 
   const onSort = (key: CreativeSortKey) => {
     setSort((prev) => {
@@ -143,10 +155,17 @@ export function CreativeCenterView() {
                 placeholder="搜尋素材 / 行銷活動..."
                 className="h-10 max-w-[320px] flex-1 rounded-pill border-[1.5px] border-border bg-bg px-4 text-[13px] outline-none focus:border-orange focus:bg-white md:h-[34px] md:px-3"
               />
+              <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[12px] text-gray-500 md:text-[13px]">
+                <input
+                  type="checkbox"
+                  className="custom-cb"
+                  checked={activeOnly}
+                  onChange={(e) => setActiveOnly(e.currentTarget.checked)}
+                />
+                有花費
+              </label>
               <span className="whitespace-nowrap text-xs text-gray-500">
-                {adsQuery.isLoading
-                  ? "載入中..."
-                  : `${filtered.length} 個素材`}
+                {adsQuery.isLoading ? "載入中..." : `${filtered.length} 個素材`}
               </span>
             </div>
 

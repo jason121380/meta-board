@@ -227,7 +227,13 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
           >
             <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-orange-bg text-[12px] font-bold text-orange">
               {user?.pictureUrl ? (
-                <img src={user.pictureUrl} alt="" className="h-full w-full object-cover" />
+                <img
+                  src={user.pictureUrl}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover"
+                />
               ) : (
                 (user?.name?.[0] ?? "?").toUpperCase()
               )}

@@ -70,6 +70,8 @@ export function CreativeRow({ creative, multiAcct }: CreativeRowProps) {
               <img
                 src={thumb}
                 alt=""
+                loading="lazy"
+                decoding="async"
                 className="h-[30px] w-[30px] shrink-0 rounded-sm border border-border object-cover"
               />
             ) : (

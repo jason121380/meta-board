@@ -630,15 +630,20 @@ async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Opti
     # at any reasonable preview scale. For video / carousel /
     # dynamic creatives ``image_url`` may be absent — the frontend
     # falls back to ``thumbnail_url`` in that case.
+    # `effective_object_story_id` + `instagram_permalink_url` let the
+    # preview modal show a "open original FB/IG post" link. They're
+    # cheap string fields so we include them from tier 1 down until
+    # FB forces us to drop creative entirely.
     attempts = [
         # Tier 1: everything — image_url for sharp still preview,
         # object_story_spec.video_data.video_id so the frontend can
-        # lazy-fetch the playable video source when the modal opens.
-        f"id,name,status,creative{{thumbnail_url,image_url,object_story_spec{{video_data}},title,body}},{ins}",
+        # lazy-fetch the playable video source when the modal opens,
+        # plus the two permalink fields.
+        f"id,name,status,creative{{thumbnail_url,image_url,object_story_spec{{video_data}},effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
         # Tier 2: drop object_story_spec (some accounts reject it).
-        f"id,name,status,creative{{thumbnail_url,image_url,title,body}},{ins}",
+        f"id,name,status,creative{{thumbnail_url,image_url,effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
         # Tier 3: drop image_url.
-        f"id,name,status,creative{{thumbnail_url,title,body}},{ins}",
+        f"id,name,status,creative{{thumbnail_url,effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
         f"id,name,status,{ins}",
         "id,name,status",
     ]
@@ -718,10 +723,13 @@ async def get_account_ads(
     via the per-adset /ads endpoint which accepts deeper nesting.
     """
     ins = _insights_clause("spend,clicks,ctr,cpc,actions", date_preset, time_range)
+    # `effective_object_story_id` + `instagram_permalink_url` let the
+    # preview modal deep-link to the original FB/IG post. Cheap string
+    # fields — include from the earliest tier that already has creative.
     attempts = [
-        f"id,name,status,campaign{{name}},creative{{thumbnail_url,image_url,title,body}},{ins}",
-        f"id,name,status,campaign{{name}},creative{{thumbnail_url,title,body}},{ins}",
-        f"id,name,status,creative{{thumbnail_url,title,body}},{ins}",
+        f"id,name,status,campaign{{name}},creative{{thumbnail_url,image_url,effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
+        f"id,name,status,campaign{{name}},creative{{thumbnail_url,effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
+        f"id,name,status,creative{{thumbnail_url,effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
         f"id,name,status,{ins}",
         "id,name,status",
     ]
@@ -730,8 +738,13 @@ async def get_account_ads(
         try:
             params = {"fields": fields, "limit": "200"}
             if "thumbnail_url" in fields:
-                params["thumbnail_width"] = "600"
-                params["thumbnail_height"] = "600"
+                # 120px is 4× DPR for the 30×30 row icon — sharp on
+                # retina, ~20× fewer bytes than the 600×600 we used
+                # to ship. The preview modal prefers creative.image_url
+                # (full resolution) so it's unaffected; thumbnail_url
+                # only feeds the tiny list icons here.
+                params["thumbnail_width"] = "120"
+                params["thumbnail_height"] = "120"
             ads = await fb_get_paginated(f"{account_id}/ads", params)
             # Loud success log so we can see in Zeabur which tier
             # actually works for each account. Helps diagnose

@@ -79,6 +79,15 @@ export interface FbCreative {
   /** Nested story spec — when the ad is a video, `video_data.video_id`
    * is the handle used to fetch the playable source. */
   object_story_spec?: FbObjectStorySpec;
+  /** FB post id in the form `{pageId}_{postId}`. When the creative
+   * is built from an existing FB post, resolving this via
+   * `fbPostLinkFromStoryId` gives us a direct permalink so users can
+   * view the full-resolution original on Facebook (the Marketing API
+   * thumbnails are already compressed). */
+  effective_object_story_id?: string;
+  /** IG permalink — present when the creative is built from an IG
+   * post. Directly openable; no resolving needed. */
+  instagram_permalink_url?: string;
   title?: string;
   body?: string;
 }

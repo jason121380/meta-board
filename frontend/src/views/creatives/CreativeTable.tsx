@@ -178,6 +178,8 @@ export function CreativeTable({ ads, sort, onSort, accounts, onRowClick }: Creat
                     <img
                       src={thumb}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="h-[30px] w-[30px] shrink-0 rounded-sm border border-border object-cover"
                     />
                   ) : (

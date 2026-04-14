@@ -43,3 +43,26 @@ export function fbAdLink(
   const bizParam = businessId ? `&business_id=${businessId}` : "";
   return `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${act}${bizParam}&selected_ad_ids=${adId}`;
 }
+
+/**
+ * Construct a public Facebook post permalink from the creative's
+ * `effective_object_story_id`, which FB returns as `{pageId}_{postId}`.
+ *
+ * Used by the creative preview modal so users can jump to the
+ * original FB post to see the full-resolution image / video — the
+ * Marketing API thumbnails are compressed front-facing previews and
+ * there's no API to get the underlying asset at higher quality.
+ *
+ * Returns null if the input is undefined, empty, or doesn't match
+ * the expected `pageId_postId` shape. Callers should use this null
+ * return to decide whether to render the "在 Facebook 開啟原始貼文"
+ * link at all.
+ */
+export function fbPostLinkFromStoryId(storyId: string | undefined): string | null {
+  if (!storyId) return null;
+  const underscoreAt = storyId.indexOf("_");
+  if (underscoreAt <= 0 || underscoreAt === storyId.length - 1) return null;
+  const pageId = storyId.slice(0, underscoreAt);
+  const postId = storyId.slice(underscoreAt + 1);
+  return `https://www.facebook.com/${pageId}/posts/${postId}`;
+}
