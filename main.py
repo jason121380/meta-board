@@ -670,7 +670,7 @@ async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Opti
                 # the Dashboard tree. Preview modal uses image_url
                 # (full resolution) so shrinking thumbnail_url only
                 # affects the tiny list icons — saves ~20× per-image
-                # bytes. Matches the account-level get_account_ads.
+                # bytes.
                 params["thumbnail_width"] = "120"
                 params["thumbnail_height"] = "120"
             return await fb_get(f"{adset_id}/ads", params)
@@ -711,81 +711,6 @@ async def update_ad_status(ad_id: str, status: str = Query(...)):
 
 
 # ── 帳戶整體成效 ──────────────────────────────────────────────────────
-
-@app.get("/api/accounts/{account_id}/ads")
-async def get_account_ads(
-    account_id: str,
-    date_preset: str = "last_30d",
-    time_range: Optional[str] = None,
-):
-    """Flat list of every ad in an ad account, with creative +
-    insights + parent campaign metadata.
-
-    Used by the Creative Center (素材中心) which aggregates 3rd-level
-    ads across every enabled account into a single sortable table.
-
-    Progressive fallback — FB's ``/{account_id}/ads`` edge appears
-    to reject deeply nested field expansion on some accounts (tested
-    with user-reported "no thumbnails" symptom). The tiers strip the
-    deepest nesting first so thumbnails and parent campaign names
-    survive even on restrictive accounts:
-
-        1. creative (thumb + image + title/body) + campaign{name}
-        2. creative (thumb only) + campaign{name}
-        3. creative (thumb only)      (drop campaign expansion)
-        4. insights only               (no creative — thumbnails gone)
-        5. id/name/status only         (last resort)
-
-    Note: ``object_story_spec{video_data}`` was intentionally removed
-    from tier 1 — it pushes the field depth past FB's limit on this
-    edge. Video playback in Creative Center preview is sacrificed so
-    thumbnails always work; videos still play on the Dashboard tree
-    via the per-adset /ads endpoint which accepts deeper nesting.
-    """
-    ins = _insights_clause("spend,clicks,ctr,cpc,actions", date_preset, time_range)
-    # `effective_object_story_id` + `instagram_permalink_url` let the
-    # preview modal deep-link to the original FB/IG post. Cheap string
-    # fields — include from the earliest tier that already has creative.
-    attempts = [
-        f"id,name,status,campaign{{name}},creative{{thumbnail_url,image_url,effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
-        f"id,name,status,campaign{{name}},creative{{thumbnail_url,effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
-        f"id,name,status,creative{{thumbnail_url,effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
-        f"id,name,status,{ins}",
-        "id,name,status",
-    ]
-    last_error: Optional[HTTPException] = None
-    for tier_idx, fields in enumerate(attempts, start=1):
-        try:
-            params = {"fields": fields, "limit": "200"}
-            if "thumbnail_url" in fields:
-                # 120px is 4× DPR for the 30×30 row icon — sharp on
-                # retina, ~20× fewer bytes than the 600×600 we used
-                # to ship. The preview modal prefers creative.image_url
-                # (full resolution) so it's unaffected; thumbnail_url
-                # only feeds the tiny list icons here.
-                params["thumbnail_width"] = "120"
-                params["thumbnail_height"] = "120"
-            ads = await fb_get_paginated(f"{account_id}/ads", params)
-            # Loud success log so we can see in Zeabur which tier
-            # actually works for each account. Helps diagnose
-            # "no thumbnails" reports without another round-trip.
-            print(
-                f"[account_ads] {account_id} tier={tier_idx} ok, {len(ads)} ads",
-                flush=True,
-            )
-            return {"data": ads}
-        except HTTPException as e:
-            print(
-                f"[account_ads] {account_id} tier={tier_idx} fail: "
-                f"{e.status_code} {e.detail}",
-                flush=True,
-            )
-            last_error = e
-            continue
-    if last_error is not None:
-        raise last_error
-    raise HTTPException(status_code=502, detail="Failed to load account ads")
-
 
 async def _fetch_account_insights(
     account_id: str,

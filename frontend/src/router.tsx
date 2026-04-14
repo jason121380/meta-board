@@ -25,16 +25,12 @@ import { Navigate, createBrowserRouter } from "react-router-dom";
 const importAnalytics = () => import("@/views/analytics/AnalyticsView");
 const importAlerts = () => import("@/views/alerts/AlertsView");
 const importFinance = () => import("@/views/finance/FinanceView");
-const importCreatives = () => import("@/views/creatives/CreativeCenterView");
 const importLaunch = () => import("@/views/launch/QuickLaunchView");
 const importSettings = () => import("@/views/settings/SettingsView");
 
 const AnalyticsView = lazy(() => importAnalytics().then((m) => ({ default: m.AnalyticsView })));
 const AlertsView = lazy(() => importAlerts().then((m) => ({ default: m.AlertsView })));
 const FinanceView = lazy(() => importFinance().then((m) => ({ default: m.FinanceView })));
-const CreativeCenterView = lazy(() =>
-  importCreatives().then((m) => ({ default: m.CreativeCenterView })),
-);
 const QuickLaunchView = lazy(() => importLaunch().then((m) => ({ default: m.QuickLaunchView })));
 const SettingsView = lazy(() => importSettings().then((m) => ({ default: m.SettingsView })));
 
@@ -49,9 +45,6 @@ export const prefetchView = (path: string): void => {
       return;
     case "/finance":
       void importFinance();
-      return;
-    case "/creatives":
-      void importCreatives();
       return;
     case "/launch":
       void importLaunch();
@@ -75,7 +68,6 @@ export const router = createBrowserRouter([
       { path: "analytics", element: lazyView(<AnalyticsView />) },
       { path: "alerts", element: lazyView(<AlertsView />) },
       { path: "finance", element: lazyView(<FinanceView />) },
-      { path: "creatives", element: lazyView(<CreativeCenterView />) },
       { path: "launch", element: lazyView(<QuickLaunchView />) },
       { path: "settings", element: lazyView(<SettingsView />) },
       { path: "*", element: <Navigate to="/dashboard" replace /> },

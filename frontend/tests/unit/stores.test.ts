@@ -25,7 +25,6 @@ const resetStores = () => {
       analytics: { preset: "this_month", from: null, to: null },
       alerts: { preset: "this_month", from: null, to: null },
       finance: { preset: "this_month", from: null, to: null },
-      creatives: { preset: "this_month", from: null, to: null },
     },
   });
   useFinanceStore.setState({ rowMarkups: {}, pinnedIds: [], defaultMarkup: 5 });

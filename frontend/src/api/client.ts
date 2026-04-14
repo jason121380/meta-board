@@ -199,12 +199,6 @@ export const api = {
       request<{ data: FbCampaign[] }>("GET", `/api/accounts/${accountId}/campaigns`, {
         query: { ...dateParams(date), include_archived: includeArchived ? "true" : undefined },
       }),
-    /** Flat list of every ad in the account, with creative + insights
-     * + parent campaign/adset names. Used by the Creative Center. */
-    ads: (accountId: string, date: DateConfig) =>
-      request<{ data: FbCreativeEntity[] }>("GET", `/api/accounts/${accountId}/ads`, {
-        query: dateParams(date),
-      }),
   },
 
   campaigns: {

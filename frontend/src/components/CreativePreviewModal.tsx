@@ -5,9 +5,8 @@ import { fbPostLinkFromStoryId } from "@/lib/fbLinks";
 import type { FbCreativeEntity } from "@/types/fb";
 
 /**
- * Preview modal for a 3rd-level ad creative. Shared by the Dashboard
- * tree (CreativeRow) and the Creative Center (素材中心) flat table so
- * both views render exactly the same preview behavior.
+ * Preview modal for a 3rd-level ad creative. Rendered from the
+ * Dashboard tree (CreativeRow) whenever the user clicks an ad row.
  *
  * Video creatives are lazy-resolved via useVideoSource — the hook
  * only fires when `creative !== null` so we don't pay the per-row

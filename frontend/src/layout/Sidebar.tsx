@@ -9,8 +9,9 @@ import { NavLink } from "react-router-dom";
  * dropdown at the bottom that opens upward.
  *
  * Layout and behavior ported from dashboard.html lines 801–843.
- * Seven nav items: 儀表板 / 數據分析 / 警示列表 / 費用中心 / 素材中心 /
- * 快速上架 / 設定.
+ * Five visible nav items: 儀表板 / 數據分析 / 警示列表 / 費用中心 / 設定.
+ * (快速上架 route still exists for direct URL access but is hidden
+ * from the sidebar nav per product decision 2026-04-14.)
  */
 
 interface NavItem {
@@ -102,50 +103,11 @@ const NAV_ITEMS: NavItem[] = [
       </svg>
     ),
   },
-  {
-    to: "/creatives",
-    label: "素材中心",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-        <circle cx="9" cy="9" r="2" />
-        <path d="M21 15l-5-5L5 21" />
-      </svg>
-    ),
-  },
 ];
 
+// 快速上架 hidden from the sidebar nav (route still exists for
+// direct URL access). Settings is the only tool item now.
 const TOOL_ITEMS: NavItem[] = [
-  {
-    to: "/launch",
-    label: "快速上架",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <line x1="12" y1="5" x2="12" y2="19" />
-        <line x1="5" y1="12" x2="19" y2="12" />
-      </svg>
-    ),
-  },
   {
     to: "/settings",
     label: "設定",
