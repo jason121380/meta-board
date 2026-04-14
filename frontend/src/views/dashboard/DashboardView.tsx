@@ -4,6 +4,7 @@ import { useMultiAccountInsights } from "@/api/hooks/useMultiAccountInsights";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
+import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { getIns } from "@/lib/insights";
@@ -91,10 +92,12 @@ export function DashboardView() {
   return (
     <>
       <Topbar title="儀表板">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3">
           <DatePicker value={date} onChange={(cfg) => setDate("dashboard", cfg)} />
-          <TopbarSeparator />
-          <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[13px] text-gray-500">
+          <span className="hidden md:inline">
+            <TopbarSeparator />
+          </span>
+          <label className="hidden cursor-pointer items-center gap-1.5 whitespace-nowrap text-[13px] text-gray-500 md:flex">
             <input
               type="checkbox"
               className="custom-cb"
@@ -103,7 +106,9 @@ export function DashboardView() {
             />
             只顯示有花費
           </label>
-          <TopbarSeparator />
+          <span className="hidden md:inline">
+            <TopbarSeparator />
+          </span>
           <RefreshButton
             isFetching={campaignsQuery.isFetching || insights.isFetching}
             onClick={onRefresh}
@@ -111,13 +116,30 @@ export function DashboardView() {
         </div>
       </Topbar>
 
-      <div className="flex flex-1 overflow-hidden">
-        <AccountPanel
-          accounts={visibleAccounts}
-          activeAccountId={activeAccountId}
-          isLoading={accountsQuery.isLoading}
-          onSelect={(account) => setActiveIds([account.id])}
-        />
+      <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
+        {/* Desktop sidebar (≥768px) */}
+        <div className="hidden md:flex">
+          <AccountPanel
+            accounts={visibleAccounts}
+            activeAccountId={activeAccountId}
+            isLoading={accountsQuery.isLoading}
+            onSelect={(account) => setActiveIds([account.id])}
+          />
+        </div>
+
+        {/* Mobile picker (<768px) — opens a modal */}
+        <div className="border-b border-border md:hidden">
+          <MobileAccountPicker
+            accounts={visibleAccounts}
+            selectedId={activeAccountId}
+            onSelect={(id) => {
+              if (id === null) return;
+              const acc = visibleAccounts.find((a) => a.id === id);
+              if (acc) setActiveIds([acc.id]);
+            }}
+            includeAllOption={false}
+          />
+        </div>
 
         <div className="flex flex-1 flex-col overflow-hidden">
           <StatsGrid
@@ -126,19 +148,28 @@ export function DashboardView() {
             isLoading={insights.isLoading}
           />
 
-          <div className="m-4 flex flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-white">
-            <div className="flex shrink-0 items-center gap-2.5 rounded-t-2xl border-b border-border px-4 py-3">
+          <div className="m-3 flex flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-white md:m-4">
+            <div className="flex shrink-0 flex-wrap items-center gap-2.5 rounded-t-2xl border-b border-border px-3 py-2.5 md:px-4 md:py-3">
               <input
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.currentTarget.value)}
                 placeholder="搜尋行銷活動..."
-                className="h-[34px] max-w-[260px] flex-1 rounded-pill border-[1.5px] border-border bg-bg px-3 text-[13px] outline-none focus:border-orange focus:bg-white"
+                className="h-10 max-w-[260px] flex-1 rounded-pill border-[1.5px] border-border bg-bg px-4 text-[13px] outline-none focus:border-orange focus:bg-white md:h-[34px] md:px-3"
               />
-              <span className="text-xs text-gray-500">
+              <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[12px] text-gray-500 md:hidden">
+                <input
+                  type="checkbox"
+                  className="custom-cb"
+                  checked={activeOnly}
+                  onChange={(e) => setActiveOnly(e.currentTarget.checked)}
+                />
+                有花費
+              </label>
+              <span className="whitespace-nowrap text-xs text-gray-500">
                 {campaignsQuery.isLoading ? "…" : `${filteredCampaigns.length} 個活動`}
               </span>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-auto">
               {activeAccounts.length === 0 ? (
                 <EmptyState>從左側選擇廣告帳戶</EmptyState>
               ) : campaignsQuery.isLoading ? (

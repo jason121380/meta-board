@@ -107,13 +107,13 @@ interface StatProps {
 
 function Stat({ label, value, loading }: StatProps) {
   return (
-    <div className="rounded-2xl border border-border bg-white px-5 py-4 transition-[transform,box-shadow] duration-150 hover:-translate-y-px hover:shadow-sm">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.5px] text-gray-300">
+    <div className="rounded-xl border border-border bg-white px-3 py-3 transition-[transform,box-shadow] duration-150 hover:-translate-y-px hover:shadow-sm md:rounded-2xl md:px-5 md:py-4">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.5px] text-gray-300 md:text-[11px]">
         {label}
       </div>
       <div
         className={cn(
-          "mt-1 flex min-h-7 items-center text-[22px] font-bold leading-none tracking-[-0.5px] text-ink",
+          "mt-1 flex min-h-7 items-center text-[17px] font-bold leading-none tracking-[-0.3px] text-ink md:text-[22px] md:tracking-[-0.5px]",
           "tabular-nums",
         )}
       >
@@ -129,7 +129,7 @@ export function StatsGrid({ accounts, insights, isLoading }: StatsGridProps) {
   const empty = accounts.length === 0;
 
   return (
-    <div className="grid shrink-0 grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-3 bg-bg p-4 pb-0">
+    <div className="grid shrink-0 grid-cols-3 gap-2 bg-bg p-3 pb-0 md:grid-cols-[repeat(auto-fit,minmax(120px,1fr))] md:gap-3 md:p-4 md:pb-0">
       <Stat label="花費" value={empty ? "—" : fM(totals.spend)} loading={isLoading && !empty} />
       <Stat
         label="曝光"

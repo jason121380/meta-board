@@ -35,8 +35,8 @@ function KpiCard({
 export function AnalyticsKpisRow({ kpis, accountCount, periodLabel }: AnalyticsKpisProps) {
   return (
     <div
-      className="mb-5 grid gap-3"
-      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}
+      className="mb-3 grid gap-2 md:mb-5 md:gap-3"
+      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}
     >
       <KpiCard
         label="總花費"

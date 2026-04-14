@@ -37,18 +37,21 @@ export function Modal({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[900] flex items-center justify-center bg-black/30 p-4" />
+        <Dialog.Overlay className="fixed inset-0 z-[900] bg-black/40 backdrop-blur-[1px] animate-fade-in" />
         <Dialog.Content
-          style={{ width, maxWidth: "100%" }}
+          style={{ width, maxWidth: "calc(100vw - 24px)" }}
           className={cn(
             "fixed left-1/2 top-1/2 z-[901] -translate-x-1/2 -translate-y-1/2",
-            "rounded-xl bg-white p-6 shadow-md",
-            "focus:outline-none",
+            "max-h-[calc(100vh-48px)] overflow-y-auto",
+            "rounded-2xl bg-white p-5 shadow-md md:p-6",
+            "focus:outline-none animate-fade-in",
             className,
           )}
         >
           {title && (
-            <Dialog.Title className="mb-1 text-base font-bold text-ink">{title}</Dialog.Title>
+            <Dialog.Title className="mb-1 text-[15px] font-bold text-ink md:text-base">
+              {title}
+            </Dialog.Title>
           )}
           {subtitle && (
             <Dialog.Description className="mb-4 text-xs text-gray-500">

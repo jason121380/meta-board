@@ -114,13 +114,14 @@ export function SettingsView() {
         </div>
       </Topbar>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left: BM panel */}
-        <aside className="flex w-[260px] shrink-0 flex-col border-r border-border bg-white">
-          <div className="border-b border-border px-4 py-3.5 text-[13px] font-bold text-ink">
+      <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
+        {/* Left: BM panel — full-width horizontal scroll on mobile,
+            260px sidebar on desktop */}
+        <aside className="flex shrink-0 flex-col border-b border-border bg-white md:w-[260px] md:border-b-0 md:border-r">
+          <div className="hidden border-b border-border px-4 py-3.5 text-[13px] font-bold text-ink md:block">
             企業管理平台
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex flex-row gap-2 overflow-x-auto px-3 py-2 md:flex-1 md:flex-col md:gap-0 md:overflow-y-auto md:px-0 md:py-0">
             {accountsQuery.isLoading ? (
               <Loading>載入中</Loading>
             ) : groups.length === 0 ? (
@@ -135,12 +136,14 @@ export function SettingsView() {
                     type="button"
                     onClick={() => setActiveBmKey(g.key)}
                     className={cn(
-                      "flex w-full cursor-pointer items-center justify-between gap-2 border-b border-border px-4 py-3 text-left",
-                      active ? "border-l-[3px] border-l-orange bg-orange-bg" : "hover:bg-orange-bg",
+                      "flex shrink-0 cursor-pointer items-center justify-between gap-2 rounded-xl border-[1.5px] border-border px-3 py-2 text-left active:scale-[0.98] md:w-full md:rounded-none md:border-0 md:border-b md:px-4 md:py-3",
+                      active
+                        ? "border-orange bg-orange-bg md:border-l-[3px] md:border-l-orange md:border-r-0 md:border-t-0"
+                        : "hover:bg-orange-bg",
                     )}
                   >
-                    <div>
-                      <div className="text-[13px] font-semibold text-ink">{g.name}</div>
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-semibold text-ink">{g.name}</div>
                       <div className="mt-0.5 text-[11px] text-gray-500">
                         {g.accounts.length} 個帳號
                       </div>
@@ -158,17 +161,17 @@ export function SettingsView() {
         </aside>
 
         {/* Right: accounts panel */}
-        <div className="flex flex-1 flex-col bg-bg">
-          <div className="flex flex-col gap-2 border-b border-border bg-white px-4 py-3">
+        <div className="flex min-h-0 flex-1 flex-col bg-bg">
+          <div className="flex flex-col gap-2 border-b border-border bg-white px-3 py-2.5 md:px-4 md:py-3">
             <div className="flex items-center gap-2">
-              <div className="flex-1 text-sm font-bold text-ink">
-                {activeGroup?.name ?? "選擇左側企業管理平台"}
+              <div className="flex-1 truncate text-sm font-bold text-ink">
+                {activeGroup?.name ?? "選擇企業管理平台"}
               </div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => selectAllInGroup(true)}
-                className="px-2 text-[11px]"
+                className="px-2.5 text-[11px]"
               >
                 全選
               </Button>
@@ -176,7 +179,7 @@ export function SettingsView() {
                 variant="ghost"
                 size="sm"
                 onClick={() => selectAllInGroup(false)}
-                className="px-2 text-[11px]"
+                className="px-2.5 text-[11px]"
               >
                 全消
               </Button>
@@ -185,13 +188,13 @@ export function SettingsView() {
               placeholder="搜尋廣告帳號..."
               value={search}
               onChange={(e) => setSearch(e.currentTarget.value)}
-              className="h-[30px] w-full rounded-lg border border-border px-2.5 text-xs outline-none focus:border-orange"
+              className="h-10 w-full rounded-lg border border-border px-3 text-[13px] outline-none focus:border-orange md:h-[30px] md:px-2.5 md:text-xs"
             />
           </div>
 
           <div className="flex-1 overflow-y-auto">
             {!activeGroup ? (
-              <EmptyState>點選左側企業管理平台</EmptyState>
+              <EmptyState>點選企業管理平台</EmptyState>
             ) : visibleInGroup.length === 0 ? (
               <EmptyState>無符合條件的廣告帳號</EmptyState>
             ) : (
@@ -212,13 +215,13 @@ export function SettingsView() {
                       onDrop(acc.id);
                     }}
                     className={cn(
-                      "flex cursor-pointer items-center gap-2.5 border-b border-border bg-white px-4 py-2.5 hover:bg-orange-bg",
+                      "flex min-h-[56px] cursor-pointer items-center gap-3 border-b border-border bg-white px-4 py-2.5 active:bg-orange-bg hover:bg-orange-bg",
                       isDragging && "opacity-40",
                     )}
                     onClick={() => toggleCheck(acc.id)}
                   >
                     <span
-                      className="shrink-0 cursor-grab px-1 text-xs text-gray-300"
+                      className="hidden shrink-0 cursor-grab px-1 text-sm text-gray-300 md:inline"
                       onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
                     >
@@ -233,11 +236,13 @@ export function SettingsView() {
                       aria-label={`toggle ${acc.name}`}
                     />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px] font-medium">{acc.name}</div>
+                      <div className="truncate text-[14px] font-medium md:text-[13px]">
+                        {acc.name}
+                      </div>
                       <div className="text-[11px] text-gray-300">{acc.id}</div>
                     </div>
                     <span
-                      className="shrink-0 rounded-full px-1.5 py-[1px] text-[11px] font-semibold"
+                      className="shrink-0 rounded-full px-2 py-[2px] text-[11px] font-semibold"
                       style={{
                         background: `var(--${color}-bg)`,
                         color: `var(--${color})`,

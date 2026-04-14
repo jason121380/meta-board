@@ -23,7 +23,8 @@ export function Topbar({ title, children, className }: TopbarProps) {
   return (
     <div
       className={cn(
-        "flex min-h-[60px] shrink-0 items-center gap-3 border-b border-border bg-white px-6",
+        "flex min-h-[56px] shrink-0 items-center gap-2 border-b border-border bg-white px-3",
+        "md:min-h-[60px] md:gap-3 md:px-6",
         "shadow-[0_1px_0_var(--border)] z-[50]",
         className,
       )}
@@ -32,12 +33,14 @@ export function Topbar({ title, children, className }: TopbarProps) {
         type="button"
         aria-label="開啟選單"
         onClick={toggle}
-        className="shell-hamburger hidden h-8 w-8 items-center justify-center rounded-lg border border-border text-xl leading-none text-ink hover:bg-orange-bg hover:text-orange"
+        className="shell-hamburger -ml-1 hidden h-11 w-11 items-center justify-center rounded-xl border border-border text-2xl leading-none text-ink active:scale-95 active:bg-orange-bg active:text-orange"
       >
         ☰
       </button>
-      <div className="text-base font-bold tracking-[-0.2px] text-ink">{title}</div>
-      <div className="flex flex-1 items-center justify-end gap-3">{children}</div>
+      <div className="truncate text-[15px] font-bold tracking-[-0.2px] text-ink md:text-base">
+        {title}
+      </div>
+      <div className="flex flex-1 items-center justify-end gap-2 md:gap-3">{children}</div>
     </div>
   );
 }

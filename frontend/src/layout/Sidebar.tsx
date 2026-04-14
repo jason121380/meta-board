@@ -168,7 +168,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       }}
     >
       {/* Logo header */}
-      <div className="flex h-[60px] shrink-0 items-center gap-2 border-b border-border px-4">
+      <div className="flex h-[56px] shrink-0 items-center gap-2 border-b border-border px-4 md:h-[60px]">
         <div className="text-[15px] font-bold tracking-[-0.2px] text-ink">
           METADASH <span className="text-orange">by LURE</span>
         </div>
@@ -192,24 +192,24 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       </nav>
 
       {/* User dropdown — opens upward from the bottom */}
-      <div className="mt-auto border-t border-border px-2 py-2.5">
+      <div className="mt-auto border-t border-border px-2 py-3">
         <div className="relative" onMouseLeave={() => setMenuOpen(false)}>
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
             className={cn(
-              "flex w-full select-none items-center gap-2 rounded-lg px-2.5 py-2",
+              "flex w-full select-none items-center gap-2.5 rounded-lg px-2.5 py-2.5",
               "bg-transparent hover:bg-transparent", // no hover per style.md
             )}
           >
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-orange-bg text-[11px] font-bold text-orange">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-orange-bg text-[12px] font-bold text-orange">
               {user?.pictureUrl ? (
                 <img src={user.pictureUrl} alt="" className="h-full w-full object-cover" />
               ) : (
                 (user?.name?.[0] ?? "?").toUpperCase()
               )}
             </div>
-            <span className="flex-1 truncate text-left text-xs font-semibold text-ink">
+            <span className="flex-1 truncate text-left text-[13px] font-semibold text-ink">
               {user?.name ?? ""}
             </span>
           </button>
@@ -249,8 +249,9 @@ function SidebarLink({ item }: { item: NavItem }) {
       to={item.to}
       className={({ isActive }) =>
         cn(
-          "mb-0.5 flex select-none items-center gap-2.5 rounded-xl px-3.5 py-[11px]",
-          "text-sm font-medium transition-[all] duration-150 cursor-pointer",
+          "mb-1 flex min-h-[44px] select-none items-center gap-3 rounded-xl px-3.5 py-2.5",
+          "text-[14px] font-medium transition-[all] duration-150 cursor-pointer",
+          "active:scale-[0.98]",
           isActive
             ? "bg-orange-bg font-semibold text-orange"
             : "text-gray-500 hover:bg-orange-bg hover:text-orange",

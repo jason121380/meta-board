@@ -96,26 +96,27 @@ export function AlertCard({
 
   return (
     <div
-      className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-white"
+      className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-white"
       style={{ borderTop: "2px solid var(--orange)" }}
     >
       <div
-        className="flex items-center gap-2 border-b-2 border-orange px-3.5 py-2.5"
+        className="flex items-center gap-2 border-b-2 border-orange px-4 py-3"
         style={{ background: "var(--orange-bg)" }}
       >
-        <div>
-          <div className="text-[13px] font-bold text-orange">{title}</div>
-          <div className="mt-0.5 text-[10px] font-medium text-orange opacity-70">{description}</div>
+        <div className="min-w-0">
+          <div className="text-[14px] font-bold text-orange md:text-[13px]">{title}</div>
+          <div className="mt-0.5 text-[11px] font-medium text-orange opacity-70 md:text-[10px]">
+            {description}
+          </div>
         </div>
         {filterLabel && (
-          <label className="ml-auto flex cursor-pointer items-center gap-1 text-[11px] font-normal text-orange opacity-85">
+          <label className="ml-auto flex shrink-0 cursor-pointer items-center gap-1.5 text-[11px] font-normal text-orange opacity-85">
             {filterLabel}
             <input
               type="checkbox"
               className="custom-cb"
               checked={filterOn}
               onChange={(e) => setFilterOn(e.currentTarget.checked)}
-              style={{ width: 13, height: 13 }}
             />
           </label>
         )}
@@ -149,7 +150,7 @@ export function AlertCard({
                 );
                 return (
                   <tr key={entry.campaign.id} className="border-b border-border">
-                    <td className="max-w-[220px] px-2.5 py-2 text-left text-xs">
+                    <td className="max-w-[220px] px-3 py-3 text-left text-[13px] md:px-2.5 md:py-2 md:text-xs">
                       <div className="flex items-center">
                         <span className="flex-1 truncate font-semibold" title={entry.campaign.name}>
                           {entry.campaign.name}
@@ -159,7 +160,7 @@ export function AlertCard({
                             href={link}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="ml-1.5 shrink-0 text-[11px] text-gray-300 no-underline"
+                            className="ml-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[13px] text-gray-300 no-underline active:bg-orange-bg active:text-orange md:ml-1.5 md:h-auto md:w-auto md:text-[11px]"
                             title="開啟臉書後台"
                           >
                             ↗
@@ -167,7 +168,7 @@ export function AlertCard({
                         )}
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-2.5 py-2 text-right text-xs">
+                    <td className="whitespace-nowrap px-3 py-3 text-right text-[13px] md:px-2.5 md:py-2 md:text-xs">
                       {metric.render(entry)}
                     </td>
                   </tr>

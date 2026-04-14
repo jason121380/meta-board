@@ -3,6 +3,7 @@ import { useMultiAccountCampaigns } from "@/api/hooks/useMultiAccountCampaigns";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
+import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { useAccountsStore } from "@/stores/accountsStore";
@@ -70,14 +71,26 @@ export function AlertsView() {
         </div>
       </Topbar>
 
-      <div className="flex flex-1 overflow-hidden">
-        <AlertAccountPanel
-          accounts={visibleAll}
-          selectedAccountId={selectedAcctId}
-          onSelect={setSelectedAcctId}
-        />
+      <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
+        {/* Desktop sidebar (≥768px) */}
+        <div className="hidden md:flex">
+          <AlertAccountPanel
+            accounts={visibleAll}
+            selectedAccountId={selectedAcctId}
+            onSelect={setSelectedAcctId}
+          />
+        </div>
 
-        <div className="flex-1 overflow-y-auto p-5">
+        {/* Mobile picker (<768px) — single tap target opens a modal */}
+        <div className="border-b border-border md:hidden">
+          <MobileAccountPicker
+            accounts={visibleAll}
+            selectedId={selectedAcctId}
+            onSelect={setSelectedAcctId}
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3 md:p-5">
           {visibleAll.length === 0 ? (
             <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
           ) : campaignsQuery.isLoading ? (
@@ -89,7 +102,7 @@ export function AlertsView() {
           ) : campaignsQuery.campaigns.length === 0 ? (
             <EmptyState>無廣告資料可分析</EmptyState>
           ) : (
-            <div className="flex flex-wrap items-start gap-3.5">
+            <div className="grid items-start gap-3 md:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] md:gap-3.5">
               <AlertCard
                 cardKey="msg"
                 title="私訊成本過高"
