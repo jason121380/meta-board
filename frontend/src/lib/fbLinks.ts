@@ -66,3 +66,28 @@ export function fbPostLinkFromStoryId(storyId: string | undefined): string | nul
   const postId = storyId.slice(underscoreAt + 1);
   return `https://www.facebook.com/${pageId}/posts/${postId}`;
 }
+
+/**
+ * Is this creative built from an existing organic FB/IG post (as
+ * opposed to assets authored inside Ads Manager)?
+ *
+ * We detect it by the presence of `effective_object_story_id` (FB
+ * post handle) or `instagram_permalink_url` (IG post direct link)
+ * on the creative object. Both fields are requested from tier 1 of
+ * the backend `creative{...}` field expansion in `get_ads` /
+ * `get_account_ads`, so they're populated for anything the API
+ * lets us read.
+ *
+ * Used by the Creative Center table and the Dashboard tree to
+ * show a "前台貼文" badge on rows that re-use an existing post,
+ * so users can tell at a glance which creatives are boosted posts
+ * vs. Ads-Manager-authored assets.
+ */
+export function isFrontPostCreative(creative: {
+  effective_object_story_id?: string;
+  instagram_permalink_url?: string;
+}): boolean {
+  return Boolean(
+    creative.effective_object_story_id || creative.instagram_permalink_url,
+  );
+}

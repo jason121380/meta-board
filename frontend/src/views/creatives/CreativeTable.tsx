@@ -1,6 +1,6 @@
 import { Skeleton } from "@/components/Skeleton";
 import { cn } from "@/lib/cn";
-import { fbAdLink } from "@/lib/fbLinks";
+import { fbAdLink, isFrontPostCreative } from "@/lib/fbLinks";
 import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
 import type { FbAccount, FbCreativeEntity } from "@/types/fb";
@@ -142,6 +142,7 @@ export function CreativeTable({ ads, sort, onSort, accounts, onRowClick }: Creat
           const businessId = accounts.find((a) => a.id === r.ad._accountId)?.business?.id;
           const href = fbAdLink(r.ad.id, r.ad._accountId, businessId);
           const thumb = r.ad.creative?.thumbnail_url;
+          const isFrontPost = r.ad.creative ? isFrontPostCreative(r.ad.creative) : false;
           const handleActivate = () => onRowClick(r.ad);
           return (
             <tr
@@ -188,6 +189,14 @@ export function CreativeTable({ ads, sort, onSort, accounts, onRowClick }: Creat
                   <span className="min-w-0 flex-1 truncate text-[13px] font-medium" title={r.ad.name}>
                     {r.ad.name}
                   </span>
+                  {isFrontPost && (
+                    <span
+                      className="shrink-0 rounded-full bg-[#E3F2FD] px-1.5 py-[1px] text-[10px] font-semibold text-[#1565C0]"
+                      title="這支廣告是從既有的 FB/IG 貼文建立"
+                    >
+                      前台貼文
+                    </span>
+                  )}
                   {href && (
                     <a
                       href={href}
