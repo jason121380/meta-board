@@ -2,7 +2,7 @@ import { useEntityStatusMutation } from "@/api/hooks/useEntityMutations";
 import { Badge } from "@/components/Badge";
 import { confirm } from "@/components/ConfirmDialog";
 import { Toggle } from "@/components/Toggle";
-import { escHtml, fM, fN, fP } from "@/lib/format";
+import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
 import type { FbCreativeEntity } from "@/types/fb";
 
@@ -46,8 +46,16 @@ export function CreativeRow({ creative, multiAcct }: CreativeRowProps) {
       <td>
         <div className="flex max-w-[240px] items-center gap-1.5 pl-[72px]">
           {creative.creative?.thumbnail_url ? (
+            // NOTE: do NOT wrap the URL in escHtml(). The legacy
+            // dashboard.html did so because it injected the <img> via
+            // innerHTML, where the browser re-parses `&amp;` back to
+            // `&`. In React JSX, `src={...}` is an attribute binding,
+            // so escHtml would leave `&amp;` literally in the URL and
+            // break Facebook's signed CDN URLs (signature mismatch →
+            // 403 → broken thumbnail). See the 3rd-level ad thumbnail
+            // regression investigated 2026-04-14.
             <img
-              src={escHtml(creative.creative.thumbnail_url)}
+              src={creative.creative.thumbnail_url}
               alt=""
               className="h-[30px] w-[30px] shrink-0 rounded-sm border border-border object-cover"
             />
