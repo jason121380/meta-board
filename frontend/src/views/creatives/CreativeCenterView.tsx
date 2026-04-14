@@ -183,26 +183,27 @@ export function CreativeCenterView() {
               </div>
             )}
 
-            <div className="relative min-h-0 flex-1 overflow-auto">
+            {/* Loading-state expectation banner — rendered ABOVE the
+                scroll area (as a flex sibling) instead of absolute-
+                positioned inside it. An absolute banner collides
+                with the CreativeTableSkeleton's sticky <th> row for
+                the top-0 spot; keeping it outside the scroll avoids
+                the stacking-context fight entirely. */}
+            {adsQuery.isLoading && activeAccounts.length > 0 && (
+              <div className="flex shrink-0 items-center justify-center gap-2 border-b border-border bg-orange-bg px-4 py-1.5 text-[12px] font-medium text-orange">
+                <span className="inline-block h-3 w-3 animate-spin rounded-full border-[2px] border-orange-border border-t-orange" />
+                載入素材中...首次通常需要 5–15 秒
+              </div>
+            )}
+            <div className="min-h-0 flex-1 overflow-auto">
               {activeAccounts.length === 0 ? (
                 <EmptyState>從左側選擇廣告帳戶</EmptyState>
               ) : adsQuery.isLoading ? (
-                <>
-                  {/* Skeleton table gives the user an immediate sense
-                      of the layout that's about to materialize — much
-                      less jarring than a blank area for a 5-15s first
-                      load. */}
-                  <CreativeTableSkeleton rows={12} />
-                  {/* Floating banner overlay with expectation-setting
-                      copy. Positioned absolute so it doesn't push the
-                      skeleton around when the data lands. */}
-                  <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center pt-3">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-orange-border bg-white px-3.5 py-1.5 text-[12px] font-medium text-orange shadow-sm">
-                      <span className="inline-block h-3 w-3 animate-spin rounded-full border-[2px] border-border border-t-orange" />
-                      載入素材中...首次通常需要 5–15 秒
-                    </div>
-                  </div>
-                </>
+                // Skeleton table gives the user an immediate sense
+                // of the layout that's about to materialize — much
+                // less jarring than a blank area for a 5-15s first
+                // load.
+                <CreativeTableSkeleton rows={12} />
               ) : filtered.length === 0 ? (
                 <EmptyState>無符合條件的素材</EmptyState>
               ) : (
