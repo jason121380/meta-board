@@ -37,10 +37,10 @@ export function Topbar({ title, children, className }: TopbarProps) {
       >
         ☰
       </button>
-      <div className="truncate text-[15px] font-bold tracking-[-0.2px] text-ink md:text-base">
+      <div className="min-w-0 shrink-0 truncate text-[15px] font-bold tracking-[-0.2px] text-ink md:text-base">
         {title}
       </div>
-      <div className="flex flex-1 items-center justify-end gap-2 md:gap-3">{children}</div>
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-2 md:gap-3">{children}</div>
     </div>
   );
 }
