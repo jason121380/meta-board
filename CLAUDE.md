@@ -137,6 +137,20 @@ Same two-column: account list | detail panel
 All checkboxes use `.custom-cb` class for consistent white-checkmark-on-orange style.
 Do NOT use `accent-color` inline style — always use the `custom-cb` class.
 
+### Tree / Finance row compactness (React)
+- Body `<td>`s in `table.tree` and `FinanceTable` have NO vertical padding — row height is driven by the tallest child control (typically `Button size="sm"` = 30px or pin button `h-[30px] w-[30px]`). Result: both tables have ~30px row height on desktop.
+- On mobile, `globals.css` overrides `table.tree th/td` padding to `6px 6px` (header `8px 6px` for sort-arrow headroom). Combined with the nowrap badge, mobile tree rows are ~32px instead of the ~70px they used to be.
+- `.badge` has `white-space: nowrap` so "進行中" never wraps into three stacked CJK characters in narrow mobile cells.
+
+### Modal (Radix Dialog)
+- The `<Modal/>` component always renders a tappable X close button in the top-right corner. Title and subtitle get `pr-10` so they do not overlap the X. Mobile users can't hit Esc, and the backdrop-tap affordance isn't always discoverable.
+- `MobileAccountPicker` opens a search-enabled Modal: autofocused `<input type="search">` filters accounts by substring match on name. Search state resets every open. "全部帳戶" is suppressed while the user is typing.
+
+### Ad creative preview (3rd level)
+- Clicking a `CreativeRow` opens a preview Modal showing the FB thumbnail enlarged, plus the creative title / body text.
+- Backend `get_ads` passes `thumbnail_width=600` and `thumbnail_height=600` when requesting the creative field so the thumbnail is sharp at modal scale. FB returns the nearest CDN size.
+- The dashboard tree card has a transparent bg (only the search header has `bg-white` explicitly). When the table is shorter than the card, the area below 合計 shows the page warm-white instead of a stark white block.
+
 ## Alert Thresholds
 
 | Code | Category | Trigger |
@@ -167,6 +181,15 @@ Do NOT use `accent-color` inline style — always use the `custom-cb` class.
   invisible). Use `creative-*` or another prefix instead. The
   `frontend/scripts/check-no-ad-class.mjs` pre-commit guard enforces
   this automatically — it runs as part of `pnpm lint`.
+- **Wrap URLs passed to React JSX `src={...}` in `escHtml()`**. JSX
+  attribute bindings write the value literally — they do NOT re-parse
+  `&amp;` back to `&` the way `innerHTML` does. escHtml is correct in
+  legacy `dashboard.html` (which injects via innerHTML) but will
+  literally insert `&amp;` into the attribute and break Facebook's
+  signed CDN URLs (signature mismatch → 403 → broken thumbnail). This
+  was the root cause of the 3rd-level ad preview regression (commit
+  `9a9e81b`). Use the raw URL directly in React; React already escapes
+  attribute values correctly.
 
 ## React rewrite (as of 2026-04-13)
 

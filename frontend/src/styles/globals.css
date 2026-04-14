@@ -93,6 +93,10 @@
     border-radius: 9999px;
     font-size: 11px;
     font-weight: 600;
+    /* Keep CJK labels on a single line. Without this, narrow mobile
+       cells wrap "進行中" into three stacked characters, which the
+       user correctly called ugly. */
+    white-space: nowrap;
   }
   .badge-active {
     background: var(--green-bg);
@@ -335,10 +339,17 @@
   }
   table.tree th,
   table.tree td {
-    padding: 10px 8px !important;
+    /* Compact mobile rows — reduced from 10px 8px so rows match the
+       desktop tree height (~30px). Combined with badge white-space:
+       nowrap, "進行中" no longer wraps vertically and rows collapse
+       from ~70px to ~32px. */
+    padding: 6px 6px !important;
     font-size: 12px;
   }
   table.tree th {
+    /* Header keeps a slightly taller padding so the sort arrow has
+       room to sit above the label. */
+    padding: 8px 6px !important;
     font-size: 10px !important;
     letter-spacing: 0.3px;
   }

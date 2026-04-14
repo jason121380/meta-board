@@ -112,3 +112,32 @@ Excludes 0% bucket — only shows campaigns with CTR > 0.
 - Personal ad accounts (not in any Business Manager) will never return a business field
 - 3rd level ads (adset → ads): loading works when server is running latest code; ensure server is restarted after deploy
 - `getMsgCount` must be global — if defined locally inside a function, other module-level helpers (`_alertRowCtx`) will throw ReferenceError and alert cards will be blank
+
+## 2026-04-14 — 3rd-level thumbnail + preview + compact pass
+
+Batch of UX fixes landed on branch `claude/read-all-files-Aj5R8`:
+
+### `escHtml()` in React JSX is a trap (commit `9a9e81b`)
+- Legacy `dashboard.html` wraps FB thumbnail URLs in `escHtml()` and injects via `innerHTML`. The browser re-parses `&amp;` back to `&` so the URL is valid.
+- React JSX `src={...}` is an attribute binding — React writes the value verbatim, so `&amp;` stays `&amp;` and every `&` in FB's signed CDN URL gets mangled → signature mismatch → FB 403 → broken thumbnail icons.
+- Fix: pass raw `thumbnail_url` directly in React. Inline comment in `CreativeRow.tsx` warns the next person porting from innerHTML.
+
+### 3rd-level ad creative preview modal (commit `1175a0f`)
+- Clicking a `CreativeRow` opens a Radix Dialog showing the thumbnail enlarged, plus creative title / body text if FB returned them.
+- Toggle cell already stops propagation so ACTIVE/PAUSED toggling does not open the modal.
+
+### Larger thumbnails from FB (commit `b8c3354`)
+- FB default `thumbnail_url` is ~64×64 which was too blurry in the 520px modal.
+- `main.py:get_ads` now passes `thumbnail_width=600` and `thumbnail_height=600` when requesting the creative field. FB honors these on the AdCreative edge and returns the nearest CDN size (400–600 typically). Backend cache key already includes sorted params so it busts cleanly.
+
+### Compact rows + mobile UX polish (commits `40b758c`, `7a8493d`)
+- Finance table rows dropped from 52px to 30px: removed `py-2` from every body `<td>`, shrunk pin button from `h-9 w-9` to `h-[30px] w-[30px]`. Matches the dashboard tree compactness.
+- Mobile `table.tree` padding reduced from `10px 8px` to `6px 6px` (header `8px 6px`). Combined with the new `.badge { white-space: nowrap }`, mobile tree rows collapsed from ~70px (badge wrapping "進 行 中" into 3 vertical chars) to ~32px.
+- `Modal` component always renders a tappable X close button in the top-right. Title/subtitle get `pr-10` so they never overlap the X. Mobile users can't hit Esc easily and backdrop-tap isn't obvious.
+- `MobileAccountPicker` got an autofocused search input at the top so 80+ account lists are usable. Search state resets on every open; "全部帳戶" is suppressed while the user is typing. Rows dropped from `min-h-[48px]` to `min-h-[44px]`, lost the per-row border, and extend edge-to-edge via `-mx-5` so the active highlight is continuous.
+
+### Sidebar toggle icon (commits `918b03b`, `e246f94`)
+- `AcctSidebarToggle` in the Topbar uses a hamburger (3-line) icon instead of the two-person Users glyph. Outer border and background were dropped; the icon is now frameless and just changes color between ink/orange to signal collapsed state.
+
+### Dashboard "empty block" fix (commit `6181a15`)
+- Tree card lost its `bg-white`. Only the search header carries an explicit `bg-white`. Table rows still paint their own white from globals.css. Result: when the table is shorter than the flex-1 card, the area below 合計 shows the page warm-white color inside the rounded card border instead of a large stark white block.

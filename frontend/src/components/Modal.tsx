@@ -56,8 +56,31 @@ export function Modal({
             className,
           )}
         >
+          {/* Always-present close affordance. Mobile users expect a
+              tappable X in the top-right (Esc is hidden on touch).
+              Positioned absolute + z-10 so it floats above the title
+              and any children that bleed to the corner. */}
+          <Dialog.Close
+            aria-label="關閉"
+            className="absolute right-2 top-2 z-10 flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-bg hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange/40 md:right-3 md:top-3"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </Dialog.Close>
           {title && (
-            <Dialog.Title className="mb-1 text-[15px] font-bold text-ink md:text-base">
+            <Dialog.Title className="mb-1 pr-10 text-[15px] font-bold text-ink md:text-base">
               {title}
             </Dialog.Title>
           )}
@@ -66,7 +89,7 @@ export function Modal({
               description is sr-only and just echoes the title for
               screen readers. */}
           {subtitle ? (
-            <Dialog.Description className="mb-4 text-xs text-gray-500">
+            <Dialog.Description className="mb-4 pr-10 text-xs text-gray-500">
               {subtitle}
             </Dialog.Description>
           ) : (

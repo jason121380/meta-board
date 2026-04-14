@@ -21,10 +21,8 @@ export function AcctSidebarToggle() {
       aria-label={collapsed ? "展開廣告帳戶側欄" : "收合廣告帳戶側欄"}
       aria-pressed={collapsed}
       className={cn(
-        "ml-1 hidden h-9 w-9 items-center justify-center rounded-xl border-[1.5px] active:scale-95 md:flex",
-        collapsed
-          ? "border-border bg-white text-ink hover:border-orange-border hover:bg-orange-bg hover:text-orange"
-          : "border-orange bg-orange-bg text-orange",
+        "ml-1 hidden h-9 w-9 items-center justify-center rounded-xl border-none bg-transparent active:scale-95 md:flex",
+        collapsed ? "text-ink hover:text-orange" : "text-orange",
       )}
     >
       <svg
