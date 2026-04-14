@@ -1,3 +1,4 @@
+import { usePageInfo } from "@/api/hooks/usePageInfo";
 import { useVideoSource } from "@/api/hooks/useVideoSource";
 import { Modal } from "@/components/Modal";
 import { Spinner } from "@/components/Spinner";
@@ -5,18 +6,35 @@ import { fbPostLinkFromStoryId } from "@/lib/fbLinks";
 import type { FbCreativeEntity } from "@/types/fb";
 
 /**
- * Preview modal for a 3rd-level ad creative. Shared by the Dashboard
- * tree (CreativeRow) and the Creative Center (素材中心) flat table so
- * both views render exactly the same preview behavior.
+ * Preview modal for a 3rd-level ad creative. Rendered from the
+ * Dashboard tree (CreativeRow) whenever the user clicks an ad row.
  *
- * Video creatives are lazy-resolved via useVideoSource — the hook
- * only fires when `creative !== null` so we don't pay the per-row
- * FB round-trip for videos the user never opens.
+ * Visual design: mimics a real FB / IG post so the user sees the
+ * creative in the context it will appear in-feed, not as a bare
+ * thumbnail.
  *
- * Fallback chain:
+ *   ┌──────────────────────────────────┐
+ *   │ [avatar] Page name     · 贊助 ×  │  ← sticky header (via Modal)
+ *   ├──────────────────────────────────┤
+ *   │                                  │
+ *   │        [image / video]           │
+ *   │                                  │
+ *   ├──────────────────────────────────┤
+ *   │ creative body text...            │
+ *   │                                  │
+ *   │ [在 FB/IG 開啟原始貼文 ↗]        │
+ *   └──────────────────────────────────┘
+ *
+ * Lazy fetches (both only run while the modal is open):
+ *   - useVideoSource → playable video source + poster
+ *   - usePageInfo    → FB Page name + avatar, keyed on the pageId
+ *                      extracted from effective_object_story_id
+ *
+ * Fallback chain for the media block:
  *   1. video_id present → <video> with FB signed source
  *   2. video source unavailable → <img> with video poster
  *   3. no video → <img> with image_url (full-res) or thumbnail_url
+ *   4. nothing usable → "無預覽素材" placeholder
  */
 
 export interface CreativePreviewModalProps {
@@ -25,25 +43,33 @@ export interface CreativePreviewModalProps {
   onClose: () => void;
 }
 
+/** Pull `pageId` out of `effective_object_story_id` = `"{pageId}_{postId}"`. */
+function extractPageId(storyId: string | undefined): string | null {
+  if (!storyId) return null;
+  const i = storyId.indexOf("_");
+  if (i <= 0) return null;
+  return storyId.slice(0, i);
+}
+
 export function CreativePreviewModal({ creative, onClose }: CreativePreviewModalProps) {
+  const isOpen = creative !== null;
   const videoId = creative?.creative?.object_story_spec?.video_data?.video_id ?? null;
-  const videoQuery = useVideoSource(videoId, creative !== null);
+  const videoQuery = useVideoSource(videoId, isOpen);
+
+  const storyId = creative?.creative?.effective_object_story_id;
+  const pageId = extractPageId(storyId);
+  const pageQuery = usePageInfo(pageId, isOpen);
 
   const thumb = creative?.creative?.thumbnail_url;
   const previewImage = creative?.creative?.image_url ?? thumb;
   const videoPoster =
     creative?.creative?.object_story_spec?.video_data?.image_url ?? previewImage;
-  const creativeTitle = creative?.creative?.title;
   const creativeBody = creative?.creative?.body;
+
   // IG permalink takes priority since it's explicit and direct;
-  // otherwise try to resolve a FB post link from
-  // effective_object_story_id. Used to render the "open original
-  // post" row because the Marketing API thumbnails are already
-  // compressed — the only way to see the real asset is on FB/IG.
+  // otherwise build a FB post link from effective_object_story_id.
   const igPostUrl = creative?.creative?.instagram_permalink_url ?? null;
-  const fbPostUrl = igPostUrl
-    ? null
-    : fbPostLinkFromStoryId(creative?.creative?.effective_object_story_id);
+  const fbPostUrl = igPostUrl ? null : fbPostLinkFromStoryId(storyId);
   const postUrl = igPostUrl ?? fbPostUrl;
   const postPlatform: "Instagram" | "Facebook" | null = igPostUrl
     ? "Instagram"
@@ -51,18 +77,64 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
       ? "Facebook"
       : null;
 
+  // Header display fields — prefer the real page name/avatar for FB
+  // posts. For IG posts we can't pull the account name from the
+  // Marketing API, so we show a generic "Instagram" label.
+  const headerName = pageQuery.data?.name ?? (igPostUrl ? "Instagram" : creative?.name ?? "");
+  const headerAvatar = pageQuery.data?.picture_url ?? null;
+
   return (
     <Modal
-      open={creative !== null}
+      open={isOpen}
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
-      title={creative?.name ?? ""}
-      subtitle={creativeTitle}
+      title={
+        <div className="flex min-w-0 items-center gap-2.5">
+          {headerAvatar ? (
+            <img
+              src={headerAvatar}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
+            />
+          ) : igPostUrl ? (
+            // Instagram fallback avatar — generic IG camera glyph
+            // on a subtle gradient so IG-sourced creatives still get
+            // a recognisable header.
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#FEDA77] via-[#F58529] to-[#DD2A7B] text-white">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="2" y="2" width="20" height="20" rx="5" />
+                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+              </svg>
+            </div>
+          ) : (
+            <div className="h-10 w-10 shrink-0 rounded-full bg-bg" />
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[14px] font-semibold leading-tight text-ink">
+              {headerName}
+            </div>
+            <div className="text-[11px] font-normal text-gray-300">贊助 · 廣告</div>
+          </div>
+        </div>
+      }
       width={520}
     >
       {creative && (
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-col gap-3">
           {videoId ? (
             videoQuery.isLoading || videoQuery.isPending ? (
               <div className="flex min-h-[240px] w-full items-center justify-center rounded-lg border border-border bg-bg">
@@ -104,7 +176,7 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
             </div>
           )}
           {creativeBody && (
-            <p className="w-full whitespace-pre-wrap text-[13px] leading-relaxed text-gray-500">
+            <p className="w-full whitespace-pre-wrap text-[13px] leading-relaxed text-ink">
               {creativeBody}
             </p>
           )}

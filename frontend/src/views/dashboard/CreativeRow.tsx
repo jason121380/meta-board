@@ -3,6 +3,7 @@ import { Badge } from "@/components/Badge";
 import { CreativePreviewModal } from "@/components/CreativePreviewModal";
 import { confirm } from "@/components/ConfirmDialog";
 import { Toggle } from "@/components/Toggle";
+import { isFrontPostCreative } from "@/lib/fbLinks";
 import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
 import type { FbCreativeEntity } from "@/types/fb";
@@ -30,6 +31,7 @@ export function CreativeRow({ creative, multiAcct }: CreativeRowProps) {
   const spend = Number(ins.spend) || 0;
   const mutation = useEntityStatusMutation();
   const thumb = creative.creative?.thumbnail_url;
+  const isFrontPost = creative.creative ? isFrontPostCreative(creative.creative) : false;
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const onToggleStatus = async (nextChecked: boolean) => {
@@ -80,6 +82,14 @@ export function CreativeRow({ creative, multiAcct }: CreativeRowProps) {
             <span className="truncate text-[13px] font-normal text-gray-500" title={creative.name}>
               {creative.name}
             </span>
+            {isFrontPost && (
+              <span
+                className="shrink-0 rounded-full bg-[#E3F2FD] px-1.5 py-[1px] text-[10px] font-semibold text-[#1565C0]"
+                title="這支廣告是從既有的 FB/IG 貼文建立"
+              >
+                前台貼文
+              </span>
+            )}
           </div>
         </td>
         {multiAcct && <td />}

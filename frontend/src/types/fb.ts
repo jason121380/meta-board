@@ -97,20 +97,6 @@ export interface FbCreative {
  * targets `ad-*`. See commit d720fa2. */
 export interface FbCreativeEntity extends FbBaseEntity {
   creative?: FbCreative;
-  /** Parent campaign / adset ids — returned by the flat
-   * `/api/accounts/{id}/ads` endpoint used by the Creative Center
-   * (素材中心) so rows can link back to the ad's context. */
-  campaign_id?: string;
-  adset_id?: string;
-  /** Nested parent entities (requested via field expansion on the
-   * flat endpoint). Only id/name are guaranteed. */
-  campaign?: { id?: string; name?: string };
-  adset?: { id?: string; name?: string };
-  /** Client-side injected account context so multi-account rows can
-   * render the account name and deep-link to Ads Manager. Populated
-   * by the `useMultiAccountAds` normalizer. */
-  _accountId?: string;
-  _accountName?: string;
 }
 
 export interface FbBusiness {

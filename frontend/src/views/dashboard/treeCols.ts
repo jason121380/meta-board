@@ -2,6 +2,47 @@ import { getIns, getMsgCount } from "@/lib/insights";
 import type { FbBaseEntity } from "@/types/fb";
 
 /**
+ * Status sort weight — lower = higher priority. ACTIVE first,
+ * PAUSED second, ARCHIVED third, DELETED / unknown last. Gives the
+ * tree a useful "what's live at the top" grouping on descending sort.
+ */
+function statusRank(status: string | undefined): number {
+  switch (status) {
+    case "ACTIVE":
+      return 0;
+    case "PAUSED":
+      return 1;
+    case "ARCHIVED":
+      return 2;
+    case "DELETED":
+      return 3;
+    default:
+      return 4;
+  }
+}
+
+/**
+ * Name sort uses a hashed numeric surrogate so the TreeTable sort
+ * comparator (which assumes numeric return from `sortKey`) still
+ * works without refactoring to a Comparator<T>. We use the UTF-16
+ * code units of the name so the ordering is deterministic and
+ * locale-insensitive (matches legacy dashboard.html behavior). For
+ * proper zh-TW collation we'd switch to localeCompare, but that
+ * requires touching the TreeTable sorter.
+ */
+function nameRank(name: string | undefined): number {
+  if (!name) return 0;
+  // Only use the first ~8 chars so the resulting number stays
+  // inside Number.MAX_SAFE_INTEGER after the base-16 weighting.
+  const sample = name.slice(0, 8);
+  let rank = 0;
+  for (let i = 0; i < sample.length; i++) {
+    rank = rank * 65536 + sample.charCodeAt(i);
+  }
+  return rank;
+}
+
+/**
  * Column schema for the dashboard tree table. Ported from the
  * `cols` array defined inside `renderTree()` at dashboard.html line
  * 1958. Multi-account mode inserts the "帳戶" column between name and
@@ -37,13 +78,13 @@ export interface TreeCol {
 export function buildTreeCols(multiAcct: boolean): TreeCol[] {
   const cols: TreeCol[] = [
     { key: "no", label: "No." },
-    { key: "name", label: "名稱" },
+    { key: "name", label: "名稱", sortKey: (i) => nameRank(i.name) },
   ];
   if (multiAcct) {
     cols.push({ key: "account", label: "帳戶" });
   }
   cols.push(
-    { key: "status", label: "狀態" },
+    { key: "status", label: "狀態", sortKey: (i) => statusRank(i.status) },
     { key: "spend", label: "花費", sortKey: (i) => Number(getIns(i).spend) || 0 },
     { key: "impressions", label: "曝光", sortKey: (i) => Number(getIns(i).impressions) || 0 },
     { key: "clicks", label: "點擊", sortKey: (i) => Number(getIns(i).clicks) || 0 },
