@@ -164,6 +164,16 @@ export const api = {
       }),
   },
 
+  videos: {
+    /** Resolve a FB video asset id to its playable source URL and
+     * poster frame. Only called lazily when a preview modal opens. */
+    source: (videoId: string) =>
+      request<{ source?: string; picture?: string }>(
+        "GET",
+        `/api/videos/${videoId}/source`,
+      ),
+  },
+
   launch: {
     campaign: (payload: {
       account_id: string;
