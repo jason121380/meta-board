@@ -1,3 +1,4 @@
+import { Skeleton } from "@/components/Skeleton";
 import { cn } from "@/lib/cn";
 import { fbAdLink } from "@/lib/fbLinks";
 import { fM, fN, fP } from "@/lib/format";
@@ -233,6 +234,96 @@ export function CreativeTable({ ads, sort, onSort, accounts, onRowClick }: Creat
             </td>
           </tr>
         )}
+      </tbody>
+    </table>
+  );
+}
+
+/**
+ * Skeleton placeholder for CreativeTable — renders the real column
+ * headers + N shimmer rows so users see the eventual table shape
+ * while the real data is loading. Much less jarring than a blank
+ * area or a lone spinner on a first load that can take 5-15 seconds.
+ */
+export function CreativeTableSkeleton({ rows = 12 }: { rows?: number }) {
+  return (
+    <table className="w-full min-w-[960px] border-collapse text-[13px]">
+      <thead>
+        <tr>
+          <th className="sticky top-0 z-[1] w-10 border-b border-border bg-bg px-2 py-2 text-left text-[11px] font-bold text-gray-500">
+            No.
+          </th>
+          <th className="sticky top-0 z-[1] border-b border-border bg-bg px-2 py-2 text-left text-[11px] font-bold text-gray-500">
+            廣告帳號
+          </th>
+          <th className="sticky top-0 z-[1] border-b border-border bg-bg px-2 py-2 text-left text-[11px] font-bold text-gray-500">
+            行銷活動
+          </th>
+          <th className="sticky top-0 z-[1] border-b border-border bg-bg px-2 py-2 text-left text-[11px] font-bold text-gray-500">
+            第三層廣告
+          </th>
+          <th className="sticky top-0 z-[1] border-b border-border bg-bg px-2 py-2 text-right text-[11px] font-bold text-gray-500">
+            花費
+          </th>
+          <th className="sticky top-0 z-[1] border-b border-border bg-bg px-2 py-2 text-right text-[11px] font-bold text-gray-500">
+            點擊
+          </th>
+          <th className="sticky top-0 z-[1] border-b border-border bg-bg px-2 py-2 text-right text-[11px] font-bold text-gray-500">
+            CTR
+          </th>
+          <th className="sticky top-0 z-[1] border-b border-border bg-bg px-2 py-2 text-right text-[11px] font-bold text-gray-500">
+            CPC
+          </th>
+          <th className="sticky top-0 z-[1] border-b border-border bg-bg px-2 py-2 text-right text-[11px] font-bold text-gray-500">
+            私訊數
+          </th>
+          <th className="sticky top-0 z-[1] border-b border-border bg-bg px-2 py-2 text-right text-[11px] font-bold text-gray-500">
+            私訊成本
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {Array.from({ length: rows }, (_, i) => (
+          <tr
+            // biome-ignore lint/suspicious/noArrayIndexKey: static positions
+            key={i}
+            className="border-b border-border bg-white"
+          >
+            <td className="w-10 px-2 py-1.5 text-center">
+              <Skeleton width={14} height={11} />
+            </td>
+            <td className="px-2 py-1.5">
+              <Skeleton width={90} height={11} />
+            </td>
+            <td className="px-2 py-1.5">
+              <Skeleton width={140} height={12} />
+            </td>
+            <td className="px-2 py-1.5">
+              <div className="flex items-center gap-1.5">
+                <Skeleton width={30} height={30} radius={3} />
+                <Skeleton width={180} height={12} />
+              </div>
+            </td>
+            <td className="px-2 py-1.5 text-right">
+              <Skeleton width={50} height={12} />
+            </td>
+            <td className="px-2 py-1.5 text-right">
+              <Skeleton width={40} height={12} />
+            </td>
+            <td className="px-2 py-1.5 text-right">
+              <Skeleton width={44} height={12} />
+            </td>
+            <td className="px-2 py-1.5 text-right">
+              <Skeleton width={40} height={12} />
+            </td>
+            <td className="px-2 py-1.5 text-right">
+              <Skeleton width={30} height={12} />
+            </td>
+            <td className="px-2 py-1.5 text-right">
+              <Skeleton width={44} height={12} />
+            </td>
+          </tr>
+        ))}
       </tbody>
     </table>
   );

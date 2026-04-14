@@ -29,6 +29,10 @@ export interface LoadingStateProps {
   /** Progress counts. If provided, renders a progress bar. */
   loaded?: number;
   total?: number;
+  /** Optional hint line below the subtitle — use to set user
+   * expectations about how long the load usually takes (e.g.
+   * "首次載入約需 5-15 秒"). Rendered in smaller muted text. */
+  hint?: ReactNode;
   className?: string;
 }
 
@@ -37,6 +41,7 @@ export function LoadingState({
   subtitle,
   loaded,
   total,
+  hint,
   className,
 }: LoadingStateProps) {
   const loadedSafe = typeof loaded === "number" ? loaded : 0;
@@ -74,6 +79,11 @@ export function LoadingState({
               style={{ width: `${pct}%` }}
             />
           )}
+        </div>
+      )}
+      {hint && (
+        <div className="mt-1 max-w-[280px] text-center text-[11px] leading-relaxed text-gray-300">
+          {hint}
         </div>
       )}
     </div>

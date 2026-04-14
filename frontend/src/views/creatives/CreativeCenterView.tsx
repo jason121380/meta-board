@@ -14,7 +14,12 @@ import type { FbCreativeEntity } from "@/types/fb";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { AccountPanel } from "../dashboard/AccountPanel";
-import { CreativeTable, type CreativeSortKey, type CreativeSortState } from "./CreativeTable";
+import {
+  CreativeTable,
+  CreativeTableSkeleton,
+  type CreativeSortKey,
+  type CreativeSortState,
+} from "./CreativeTable";
 
 /**
  * Creative Center (素材中心) — flat, sortable aggregation of every
@@ -159,15 +164,26 @@ export function CreativeCenterView() {
               </div>
             )}
 
-            <div className="min-h-0 flex-1 overflow-auto">
+            <div className="relative min-h-0 flex-1 overflow-auto">
               {activeAccounts.length === 0 ? (
                 <EmptyState>從左側選擇廣告帳戶</EmptyState>
               ) : adsQuery.isLoading ? (
-                <LoadingState
-                  title="載入素材中..."
-                  loaded={adsQuery.loadedCount}
-                  total={adsQuery.totalCount}
-                />
+                <>
+                  {/* Skeleton table gives the user an immediate sense
+                      of the layout that's about to materialize — much
+                      less jarring than a blank area for a 5-15s first
+                      load. */}
+                  <CreativeTableSkeleton rows={12} />
+                  {/* Floating banner overlay with expectation-setting
+                      copy. Positioned absolute so it doesn't push the
+                      skeleton around when the data lands. */}
+                  <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center pt-3">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-orange-border bg-white px-3.5 py-1.5 text-[12px] font-medium text-orange shadow-sm">
+                      <span className="inline-block h-3 w-3 animate-spin rounded-full border-[2px] border-border border-t-orange" />
+                      載入素材中...首次通常需要 5–15 秒
+                    </div>
+                  </div>
+                </>
               ) : filtered.length === 0 ? (
                 <EmptyState>無符合條件的素材</EmptyState>
               ) : (
