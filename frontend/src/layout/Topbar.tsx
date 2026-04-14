@@ -14,11 +14,15 @@ import { useMobileSidebarToggle } from "./Shell";
 
 export interface TopbarProps {
   title: ReactNode;
+  /** Optional control rendered immediately after the title — used by
+   * Dashboard/Alerts/Finance to mount the account-sidebar collapse
+   * toggle right next to the page title. */
+  titleAction?: ReactNode;
   children?: ReactNode;
   className?: string;
 }
 
-export function Topbar({ title, children, className }: TopbarProps) {
+export function Topbar({ title, titleAction, children, className }: TopbarProps) {
   const toggle = useMobileSidebarToggle();
   return (
     <div
@@ -54,6 +58,7 @@ export function Topbar({ title, children, className }: TopbarProps) {
       <div className="min-w-0 shrink-0 truncate text-[15px] font-bold tracking-[-0.2px] text-ink md:text-base">
         {title}
       </div>
+      {titleAction}
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2 md:gap-3">{children}</div>
     </div>
   );

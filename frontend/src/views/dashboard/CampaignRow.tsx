@@ -1,8 +1,10 @@
+import { useAccounts } from "@/api/hooks/useAccounts";
 import { useAdsets } from "@/api/hooks/useAdsets";
 import { useEntityStatusMutation } from "@/api/hooks/useEntityMutations";
 import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
 import { confirm } from "@/components/ConfirmDialog";
+import { FbCampaignLink } from "@/components/FbCampaignLink";
 import { Spinner } from "@/components/Spinner";
 import { Toggle } from "@/components/Toggle";
 import type { DateConfig } from "@/lib/datePicker";
@@ -42,6 +44,8 @@ export function CampaignRow({
   const toggleCamp = useUiStore((s) => s.toggleCamp);
   const adsetsQuery = useAdsets(campaign.id, date, expanded);
   const mutation = useEntityStatusMutation();
+  const accountsQuery = useAccounts();
+  const businessId = accountsQuery.data?.find((a) => a.id === campaign._accountId)?.business?.id;
 
   const ins = getIns(campaign);
   const msgs = getMsgCount(campaign);
@@ -77,16 +81,25 @@ export function CampaignRow({
       >
         <td className="w-10 text-center text-xs text-gray-300">{index + 1}</td>
         <td>
-          <div className="flex max-w-[240px] items-center gap-1.5">
+          <div className="flex max-w-[260px] items-center gap-1.5">
             <span
               aria-hidden="true"
               className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[10px] text-ink"
             >
               {expanded ? "▼" : "▶"}
             </span>
-            <span className="truncate text-[13px] font-semibold" title={campaign.name}>
+            <span
+              className="min-w-0 flex-1 truncate text-[13px] font-semibold"
+              title={campaign.name}
+            >
               {campaign.name}
             </span>
+            <FbCampaignLink
+              campaignId={campaign.id}
+              accountId={campaign._accountId}
+              campaignName={campaign.name}
+              businessId={businessId}
+            />
           </div>
         </td>
         {multiAcct && (
