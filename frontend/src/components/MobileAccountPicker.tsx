@@ -3,7 +3,7 @@ import { StatusDot } from "@/components/StatusDot";
 import { accountDotState } from "@/lib/accountStatus";
 import { cn } from "@/lib/cn";
 import type { FbAccount } from "@/types/fb";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /**
  * Mobile-only account picker — a single tap-target that displays the
@@ -19,6 +19,11 @@ import { useState } from "react";
  * Pass `selectedId={null}` and an empty selected label to represent
  * the "全部帳戶" (all-accounts) option, which is supported by
  * AlertsView and FinanceView (DashboardView always picks exactly one).
+ *
+ * The dialog body supports substring search on account name. With
+ * 80+ accounts per user, scrolling the whole list on mobile is
+ * painful; the search box is autoFocused on open so the keyboard
+ * pops up immediately and typing filters the list live.
  */
 
 export interface MobileAccountPickerProps {
@@ -43,6 +48,23 @@ export function MobileAccountPicker({
   className,
 }: MobileAccountPickerProps) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  // Reset the search box every time the dialog opens so users never
+  // see stale filter state from a previous session.
+  useEffect(() => {
+    if (open) setQuery("");
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return accounts;
+    return accounts.filter((a) => a.name.toLowerCase().includes(q));
+  }, [accounts, query]);
+
+  // Suppress "全部帳戶" while searching — if the user typed anything
+  // they clearly want a specific account, not the aggregate view.
+  const showAll = includeAllOption && query.trim() === "";
 
   const currentName =
     selectedId === null
@@ -64,7 +86,7 @@ export function MobileAccountPicker({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label={`選擇廣告帳戶，目前：${currentName}`}
+        aria-label={`選擇廣告帳戶,目前:${currentName}`}
         aria-haspopup="dialog"
         className="flex h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-pill border-[1.5px] border-border bg-white px-4 text-left text-[14px] font-medium text-ink active:scale-[0.98] active:bg-orange-bg"
       >
@@ -74,9 +96,23 @@ export function MobileAccountPicker({
         </span>
       </button>
 
-      <Modal open={open} onOpenChange={setOpen} title="選擇廣告帳戶" width={360} className="!p-0">
-        <div className="max-h-[65vh] overflow-y-auto py-1">
-          {includeAllOption && (
+      <Modal open={open} onOpenChange={setOpen} title="選擇廣告帳戶" width={360}>
+        <input
+          type="search"
+          // biome-ignore lint/a11y/noAutofocus: mobile pickers benefit
+          // from an immediate keyboard to filter 80+ accounts.
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.currentTarget.value)}
+          placeholder="搜尋帳戶..."
+          aria-label="搜尋帳戶"
+          className="mb-2 mt-1 h-10 w-full rounded-lg border-[1.5px] border-border bg-white px-3 text-[14px] text-ink placeholder:text-gray-300 focus:border-orange focus:outline-none"
+        />
+        {/* Negative horizontal margin lets the active-row highlight
+            bleed to the modal edge so the list reads as a list, not
+            a set of inset cards. */}
+        <div className="-mx-5 max-h-[58vh] overflow-y-auto md:-mx-6">
+          {showAll && (
             <PickerRow
               active={selectedId === null}
               dotState="on"
@@ -84,7 +120,7 @@ export function MobileAccountPicker({
               onClick={() => handlePick(null)}
             />
           )}
-          {accounts.map((a) => (
+          {filtered.map((a) => (
             <PickerRow
               key={a.id}
               active={selectedId === a.id}
@@ -93,8 +129,10 @@ export function MobileAccountPicker({
               onClick={() => handlePick(a.id)}
             />
           ))}
-          {accounts.length === 0 && (
-            <div className="px-4 py-6 text-center text-xs text-gray-300">尚無帳戶</div>
+          {filtered.length === 0 && !showAll && (
+            <div className="px-5 py-6 text-center text-xs text-gray-300">
+              {query.trim() ? "沒有符合的帳戶" : "尚無帳戶"}
+            </div>
           )}
         </div>
       </Modal>
@@ -118,8 +156,8 @@ function PickerRow({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex min-h-[48px] w-full cursor-pointer select-none items-center gap-2.5 border-b border-border px-4 py-3 text-left",
-        active ? "bg-orange-bg" : "active:bg-orange-bg hover:bg-orange-bg",
+        "flex min-h-[44px] w-full cursor-pointer select-none items-center gap-2.5 px-5 py-2 text-left md:px-6",
+        active ? "bg-orange-bg" : "active:bg-orange-bg hover:bg-orange-bg/60",
       )}
     >
       <StatusDot state={dotState} />
