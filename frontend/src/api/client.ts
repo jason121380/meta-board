@@ -180,6 +180,34 @@ export const api = {
       ),
   },
 
+  overview: {
+    /** Batch fetch campaigns + insights for N accounts in a single
+     * backend request. Bypasses the browser's 6-connection-per-origin
+     * HTTP/1.1 limit that was the real bottleneck on Analytics /
+     * Alerts / Finance first-load. */
+    batch: (
+      accountIds: string[],
+      date: DateConfig,
+      opts?: { includeArchived?: boolean },
+    ) =>
+      request<{
+        data: Record<
+          string,
+          {
+            campaigns: FbCampaign[];
+            insights: FbInsights | null;
+            error: string | null;
+          }
+        >;
+      }>("GET", "/api/overview", {
+        query: {
+          ids: accountIds.join(","),
+          ...dateParams(date),
+          include_archived: opts?.includeArchived ? "true" : undefined,
+        },
+      }),
+  },
+
   launch: {
     campaign: (payload: {
       account_id: string;

@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import Any, Optional, List
+import asyncio
 import httpx
 import asyncpg
 import json
@@ -500,21 +501,23 @@ async def get_accounts():
 
 # ── 行銷活動 ─────────────────────────────────────────────────────────
 
-@app.get("/api/accounts/{account_id}/campaigns")
-async def get_campaigns(account_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None, include_archived: bool = False):
-    """List campaigns for an account, with progressive fallback so a
-    single FB-side restriction (e.g. effective_status not allowed on
-    a particular ad account) doesn't make the whole call return 400.
+async def _fetch_campaigns_for_account(
+    account_id: str,
+    date_preset: str,
+    time_range: Optional[str],
+    include_archived: bool,
+) -> List[dict]:
+    """Core campaign-fetch logic with FB-side progressive fallback.
 
-    Attempts, in order — each tier strips one source of FB rejection:
-      1. fields + insights + effective_status (full data, all states)
-      2. fields + insights                   (drops archived filter)
-      3. fields only                          (drops insights too)
-      4. minimal id/name/status               (last-resort smoke test)
+    Extracted from the ``get_campaigns`` route so the same behavior
+    (including the 4-tier retry chain) can be shared by the batch
+    ``/api/overview`` endpoint without duplication. Returns the raw
+    campaign list; the caller wraps it into whatever envelope shape
+    it needs.
 
-    Returns the FIRST attempt that succeeds. If every attempt fails
-    we re-raise the last error so the frontend gets the actual FB
-    message instead of a silent empty list.
+    Raises ``HTTPException`` if every tier fails so callers can
+    decide whether to surface the error or swallow it for a
+    partial-success response.
     """
     ins = _insights_clause(
         "spend,impressions,clicks,ctr,cpc,cpm,frequency,reach,actions",
@@ -539,13 +542,12 @@ async def get_campaigns(account_id: str, date_preset: str = "last_30d", time_ran
         try:
             camps = await fb_get_paginated(f"{account_id}/campaigns", params)
             if last_error is not None:
-                # Log the recovery so we can spot consistently bad accounts
                 print(
                     f"[campaigns] {account_id} recovered at tier={tier} "
                     f"after earlier failure: {last_error.detail}",
                     flush=True,
                 )
-            return {"data": camps}
+            return camps
         except HTTPException as e:
             print(
                 f"[campaigns] {account_id} tier={tier} failed: "
@@ -555,11 +557,24 @@ async def get_campaigns(account_id: str, date_preset: str = "last_30d", time_ran
             last_error = e
             continue
 
-    # All attempts failed — re-raise the last so the frontend sees
-    # the real FB message, not a generic 400.
     if last_error is not None:
         raise last_error
     raise HTTPException(status_code=502, detail="Failed to load campaigns from Facebook API")
+
+
+@app.get("/api/accounts/{account_id}/campaigns")
+async def get_campaigns(account_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None, include_archived: bool = False):
+    """List campaigns for an account, with progressive fallback so a
+    single FB-side restriction (e.g. effective_status not allowed on
+    a particular ad account) doesn't make the whole call return 400.
+
+    Delegates to :func:`_fetch_campaigns_for_account` so the batch
+    ``/api/overview`` endpoint can share the same retry logic.
+    """
+    camps = await _fetch_campaigns_for_account(
+        account_id, date_preset, time_range, include_archived
+    )
+    return {"data": camps}
 
 
 @app.post("/api/campaigns/{campaign_id}/status")
@@ -651,8 +666,13 @@ async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Opti
         try:
             params = {"fields": fields, "limit": "100"}
             if "thumbnail_url" in fields:
-                params["thumbnail_width"] = "600"
-                params["thumbnail_height"] = "600"
+                # 120px is 4× DPR for the 30×30 row icon displayed in
+                # the Dashboard tree. Preview modal uses image_url
+                # (full resolution) so shrinking thumbnail_url only
+                # affects the tiny list icons — saves ~20× per-image
+                # bytes. Matches the account-level get_account_ads.
+                params["thumbnail_width"] = "120"
+                params["thumbnail_height"] = "120"
             return await fb_get(f"{adset_id}/ads", params)
         except HTTPException as e:
             last_error = e
@@ -767,8 +787,16 @@ async def get_account_ads(
     raise HTTPException(status_code=502, detail="Failed to load account ads")
 
 
-@app.get("/api/accounts/{account_id}/insights")
-async def get_account_insights(account_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None):
+async def _fetch_account_insights(
+    account_id: str,
+    date_preset: str,
+    time_range: Optional[str],
+) -> dict:
+    """Core account-insights fetch. Returns the raw FB envelope
+    (``{"data": [...], "paging": {...}}``) so callers can pluck the
+    first entry or keep the full shape. Shared by the per-account
+    route and the batch ``/api/overview`` endpoint.
+    """
     params = {
         "fields": "spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions",
     }
@@ -776,8 +804,108 @@ async def get_account_insights(account_id: str, date_preset: str = "last_30d", t
         params["time_range"] = time_range
     else:
         params["date_preset"] = date_preset
-    data = await fb_get(f"{account_id}/insights", params)
-    return data
+    return await fb_get(f"{account_id}/insights", params)
+
+
+@app.get("/api/accounts/{account_id}/insights")
+async def get_account_insights(
+    account_id: str,
+    date_preset: str = "last_30d",
+    time_range: Optional[str] = None,
+):
+    return await _fetch_account_insights(account_id, date_preset, time_range)
+
+
+# ── 批次總覽（多帳戶並行）──────────────────────────────────────
+
+@app.get("/api/overview")
+async def get_overview(
+    ids: str = Query(..., description="Comma-separated account ids (e.g. 'act_1,act_2')"),
+    date_preset: str = "last_30d",
+    time_range: Optional[str] = None,
+    include_archived: bool = False,
+):
+    """Batch multi-account overview endpoint.
+
+    Fetches campaigns + insights for *every* account in ``ids``
+    concurrently on the backend via ``asyncio.gather`` and returns
+    them in a single response. This consolidates what would otherwise
+    be ``2 × N`` parallel browser requests (one campaigns call + one
+    insights call per account) into a single client round-trip,
+    completely bypassing the 6-connection-per-origin HTTP/1.1 limit
+    that was the real bottleneck on Analytics / Alerts / Finance
+    first-load — the slowest-account tail no longer queues behind
+    other requests on the browser side, only on the backend-to-FB
+    leg (where there's no 6-connection cap).
+
+    Response shape::
+
+        {
+          "data": {
+            "act_1": {
+              "campaigns": [...],
+              "insights": {...} | null,   # flat first entry
+              "error": null | "message"
+            },
+            "act_2": {...}
+          }
+        }
+
+    Per-account errors are captured (not raised) so one bad account
+    doesn't blow up the whole batch — the caller can render partial
+    data and surface errors inline.
+    """
+    account_ids = [aid.strip() for aid in ids.split(",") if aid.strip()]
+    if not account_ids:
+        return {"data": {}}
+
+    async def _fetch_one(aid: str):
+        """Campaigns + insights for one account in parallel. Sub-fetch
+        failures are captured as an ``error`` string so the outer
+        gather always resolves cleanly.
+        """
+        camps_task = asyncio.create_task(
+            _fetch_campaigns_for_account(aid, date_preset, time_range, include_archived)
+        )
+        ins_task = asyncio.create_task(
+            _fetch_account_insights(aid, date_preset, time_range)
+        )
+        await asyncio.gather(camps_task, ins_task, return_exceptions=True)
+
+        error_parts: list[str] = []
+        camps: List[dict] = []
+        ins_flat: Optional[dict] = None
+
+        camps_exc = camps_task.exception()
+        if camps_exc is not None:
+            detail = (
+                camps_exc.detail if isinstance(camps_exc, HTTPException) else str(camps_exc)
+            )
+            error_parts.append(f"campaigns: {detail}")
+        else:
+            camps = camps_task.result()
+
+        ins_exc = ins_task.exception()
+        if ins_exc is not None:
+            detail = (
+                ins_exc.detail if isinstance(ins_exc, HTTPException) else str(ins_exc)
+            )
+            error_parts.append(f"insights: {detail}")
+        else:
+            raw = ins_task.result()
+            items = raw.get("data") or [] if isinstance(raw, dict) else []
+            ins_flat = items[0] if items else None
+
+        return aid, {
+            "campaigns": camps,
+            "insights": ins_flat,
+            "error": "; ".join(error_parts) if error_parts else None,
+        }
+
+    # Outer gather — N accounts concurrent. fetch_one catches its own
+    # exceptions so return_exceptions isn't needed here.
+    results = await asyncio.gather(*[_fetch_one(aid) for aid in account_ids])
+    return {"data": dict(results)}
 
 
 # ── 用戶設定（PostgreSQL 雲端同步）─────────────────────────────
