@@ -33,9 +33,23 @@ export function Topbar({ title, children, className }: TopbarProps) {
         type="button"
         aria-label="開啟選單"
         onClick={toggle}
-        className="shell-hamburger -ml-1 hidden h-11 w-11 items-center justify-center rounded-xl border border-border text-2xl leading-none text-ink active:scale-95 active:bg-orange-bg active:text-orange"
+        className="shell-hamburger -ml-1 hidden h-11 w-11 items-center justify-center rounded-xl border border-border text-ink active:scale-95 active:bg-orange-bg active:text-orange"
       >
-        ☰
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
       </button>
       <div className="min-w-0 shrink-0 truncate text-[15px] font-bold tracking-[-0.2px] text-ink md:text-base">
         {title}

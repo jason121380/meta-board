@@ -39,11 +39,19 @@ export function Modal({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[900] bg-black/40 backdrop-blur-[1px] animate-fade-in" />
         <Dialog.Content
-          style={{ width, maxWidth: "calc(100vw - 24px)" }}
+          style={{
+            width,
+            maxWidth: "calc(100vw - 24px)",
+            maxHeight: "calc(100vh - 48px)",
+          }}
+          // Centering pattern: position fixed + inset:0 + margin:auto
+          // distributes remaining space equally on every side, so the
+          // dialog is perfectly centered regardless of any transformed
+          // ancestors that would have broken `left-1/2 -translate-x-1/2`.
+          // h-fit prevents the dialog from stretching to viewport height.
           className={cn(
-            "fixed left-1/2 top-1/2 z-[901] -translate-x-1/2 -translate-y-1/2",
-            "max-h-[calc(100vh-48px)] overflow-y-auto",
-            "rounded-2xl bg-white p-5 shadow-md md:p-6",
+            "fixed inset-0 z-[901] m-auto h-fit",
+            "overflow-y-auto rounded-2xl bg-white p-5 shadow-md md:p-6",
             "focus:outline-none animate-fade-in",
             className,
           )}

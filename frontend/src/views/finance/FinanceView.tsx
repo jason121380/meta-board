@@ -130,9 +130,24 @@ export function FinanceView() {
             title="下載 CSV"
             aria-label="下載 CSV"
             onClick={onDownloadCsv}
-            className="h-10 min-w-[40px] px-2.5 text-base md:h-[30px] md:min-w-0"
+            className="h-10 w-10 justify-center px-0 md:h-[30px] md:w-[30px]"
           >
-            <span aria-hidden="true">⬇</span>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              className="block"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
           </Button>
         </div>
       </Topbar>
