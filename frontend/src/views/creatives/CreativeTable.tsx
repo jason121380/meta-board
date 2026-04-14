@@ -142,11 +142,28 @@ export function CreativeTable({ ads, sort, onSort, accounts, onRowClick }: Creat
           const businessId = accounts.find((a) => a.id === r.ad._accountId)?.business?.id;
           const href = fbAdLink(r.ad.id, r.ad._accountId, businessId);
           const thumb = r.ad.creative?.thumbnail_url;
+          const handleActivate = () => onRowClick(r.ad);
           return (
             <tr
               key={r.ad.id}
-              className="cursor-zoom-in border-b border-border bg-white hover:bg-[#fefaf7]"
-              onClick={() => onRowClick(r.ad)}
+              className="cursor-zoom-in border-b border-border bg-white hover:bg-[#fefaf7] focus-within:bg-[#fefaf7]"
+              onClick={handleActivate}
+              // Keyboard / assistive-tech activation — Enter or Space
+              // on a focused row opens the preview modal, same as click.
+              // role=button + tabIndex makes the row a first-class
+              // interactive element so browsers reliably fire click
+              // handlers on it (a plain <tr> with onClick is
+              // technically valid in React but can be skipped by
+              // some accessibility layers).
+              role="button"
+              tabIndex={0}
+              aria-label={`預覽 ${r.ad.name}`}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleActivate();
+                }
+              }}
             >
               <td className="w-10 px-2 text-center text-xs text-gray-300">{i + 1}</td>
               <td className="max-w-[140px] truncate px-2 text-[11px] text-gray-500" title={r.accountName}>
@@ -161,6 +178,8 @@ export function CreativeTable({ ads, sort, onSort, accounts, onRowClick }: Creat
                     <img
                       src={thumb}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="h-[30px] w-[30px] shrink-0 rounded-sm border border-border object-cover"
                     />
                   ) : (
