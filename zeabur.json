@@ -1,9 +1,0 @@
-{
-  "$schema": "https://schema.zeabur.app/zeabur.json",
-  "build": {
-    "buildCommand": "corepack enable && corepack prepare pnpm@10.33.0 --activate && cd frontend && pnpm install --frozen-lockfile && pnpm build && cd .. && pip install -r requirements.txt"
-  },
-  "start": {
-    "command": "uvicorn main:app --host 0.0.0.0 --port $PORT"
-  }
-}
