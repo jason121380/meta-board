@@ -75,6 +75,11 @@ export interface FbObjectStorySpec {
 }
 
 export interface FbCreative {
+  /** FB AdCreative node id. Requested so the frontend can hit
+   * /api/creatives/{id}/hires-thumbnail for a 600px fallback when
+   * /api/posts/{post_id}/media can't read the underlying page post
+   * (typically because the token lacks pages_read_engagement). */
+  id?: string;
   /** Small (~64-600px) thumbnail URL — used for the 30x30 row icon. */
   thumbnail_url?: string;
   /** Full-resolution source asset URL (typically 1080px+) — used by
