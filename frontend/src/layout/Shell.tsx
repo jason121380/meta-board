@@ -1,3 +1,4 @@
+import { EmptyAccountsPrompt } from "@/components/EmptyAccountsPrompt";
 import { useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
@@ -61,6 +62,11 @@ export function Shell() {
           <Outlet />
         </MobileToggleContext.Provider>
       </main>
+      {/* Mounted inside the router layout so its `useNavigate()` works
+          and it sees the same QueryClient context as the views. Fires
+          at most once per page load when the user has FB accounts but
+          hasn't picked any in Settings yet. */}
+      <EmptyAccountsPrompt />
     </div>
   );
 }

@@ -2,11 +2,13 @@ import { useAccounts } from "@/api/hooks/useAccounts";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
 import { Loading } from "@/components/Loading";
+import { toast } from "@/components/Toast";
 import { Topbar } from "@/layout/Topbar";
 import { accountStatusColor, accountStatusLabel } from "@/lib/accountStatus";
 import { cn } from "@/lib/cn";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   countChecked,
   groupAccountsByBusiness,
@@ -27,6 +29,7 @@ import {
  * Ported from dashboard.html lines 2296–2415.
  */
 export function SettingsView() {
+  const navigate = useNavigate();
   const accountsQuery = useAccounts();
   const allAccounts = accountsQuery.data ?? [];
   const savedSelectedIds = useAccountsStore((s) => s.selectedIds);
@@ -76,6 +79,11 @@ export function SettingsView() {
 
   const save = () => {
     setSelectedIds([...pendingChecked]);
+    // The setState call above writes through installAccountsStorageSync
+    // into localStorage. There's no DB round-trip to await — we show
+    // the toast and navigate immediately.
+    toast("儲存成功");
+    navigate("/dashboard");
   };
 
   // ── Drag handlers ─────────────────────────────────────────
@@ -135,11 +143,13 @@ export function SettingsView() {
                     key={g.key}
                     type="button"
                     onClick={() => setActiveBmKey(g.key)}
+                    // Desktop: no left-edge orange indicator, no bottom
+                    // divider — active state is a pure background fill.
+                    // Mobile keeps the rounded-chip outline for
+                    // horizontal scrolling clarity.
                     className={cn(
-                      "flex shrink-0 cursor-pointer items-center justify-between gap-2 rounded-xl border-[1.5px] border-border px-3 py-2 text-left active:scale-[0.98] md:w-full md:rounded-none md:border-0 md:border-b md:px-4 md:py-3",
-                      active
-                        ? "border-orange bg-orange-bg md:border-l-[3px] md:border-l-orange md:border-r-0 md:border-t-0"
-                        : "hover:bg-orange-bg",
+                      "flex shrink-0 cursor-pointer items-center justify-between gap-2 rounded-xl border-[1.5px] border-border px-3 py-2 text-left active:scale-[0.98] md:w-full md:rounded-none md:border-0 md:px-4 md:py-3",
+                      active ? "border-orange bg-orange-bg" : "hover:bg-orange-bg",
                     )}
                   >
                     <div className="min-w-0">

@@ -46,8 +46,15 @@ export function LoginView() {
         </div>
       </div>
 
-      {/* Right login card */}
-      <div className="flex w-[440px] shrink-0 flex-col items-center justify-center bg-white px-13 py-15 text-center">
+      {/* Right login card.
+          NOTE on padding — DO NOT use `px-13`/`py-15` here: those
+          aren't real Tailwind spacing tokens (the scale jumps from
+          12→14→16), so both classes were silently dropped and the
+          440px card rendered with zero horizontal padding, which
+          made `w-full` push the blue login button edge-to-edge ("太
+          寬爆版"). `px-14 py-14` = 56px of padding on every side,
+          which leaves ~328px for the button inside a 440px card. */}
+      <div className="flex w-[440px] shrink-0 flex-col items-center justify-center bg-white px-14 py-14 text-center">
         <div className="mb-1 text-[22px] font-extrabold tracking-[-0.3px] text-ink">
           METADASH <span className="text-orange">by LURE</span>
         </div>

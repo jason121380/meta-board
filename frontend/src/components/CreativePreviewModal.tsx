@@ -132,6 +132,40 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
   const headerAvatar = pageQuery.data?.picture_url ?? null;
   const headerSubtitle = postPlatform ? `贊助 · ${postPlatform}` : "贊助 · 廣告";
 
+  // The "view post" CTA — both back-stage and front-stage variants
+  // now live in the sticky header row (via Modal's titleAction slot)
+  // instead of at the top or bottom of the body. Back-stage posts
+  // keep the orange-outline ghost style ("查看廣告貼文"); front-stage
+  // posts get "在 Facebook/Instagram 開啟原始貼文". The hi-res-failed
+  // case still has its own on-image CTA (in MediaBlock) so we skip
+  // the header button there to avoid a duplicate call-to-action.
+  const showHeaderPostButton = postUrl && postPlatform && !hiResFailed;
+  const headerPostButton = showHeaderPostButton ? (
+    <a
+      href={postUrl ?? undefined}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 rounded-pill border-[1.5px] border-orange bg-white px-3 py-1 text-[12px] font-semibold text-orange transition hover:bg-orange-bg active:scale-[0.98]"
+    >
+      {isFrontPost ? `在 ${postPlatform} 開啟原始貼文` : "查看廣告貼文"}
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+        <polyline points="15 3 21 3 21 9" />
+        <line x1="10" y1="14" x2="21" y2="3" />
+      </svg>
+    </a>
+  ) : null;
+
   return (
     <Modal
       open={isOpen}
@@ -180,40 +214,11 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
           </div>
         </div>
       }
+      titleAction={headerPostButton}
       width={520}
     >
       {creative && (
         <div className="flex flex-col gap-3">
-          {/* Back-stage (dark-post) layout: "查看廣告貼文" button at
-              the top in an orange-outline ghost style. Only shown for
-              non-front-stage creatives that actually have a resolvable
-              post URL. */}
-          {!isFrontPost && postUrl && (
-            <a
-              href={postUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 self-start rounded-pill border-[1.5px] border-orange bg-white px-4 py-1.5 text-[12px] font-semibold text-orange transition hover:bg-orange-bg active:scale-[0.98]"
-            >
-              查看廣告貼文
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                <polyline points="15 3 21 3 21 9" />
-                <line x1="10" y1="14" x2="21" y2="3" />
-              </svg>
-            </a>
-          )}
-
           <MediaBlock
             creativeName={creative.name}
             videoId={videoId}
@@ -237,37 +242,6 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
             <p className="w-full whitespace-pre-wrap text-[13px] leading-relaxed text-ink">
               {creativeBody}
             </p>
-          )}
-
-          {/* Front-stage success: keep the existing bottom link so
-              the user can still jump to the organic source. In the
-              hi-res FAILED case the MediaBlock already renders an
-              on-image CTA, so we skip the bottom link to avoid
-              duplicating the call-to-action. */}
-          {isFrontPost && !hiResFailed && postUrl && postPlatform && (
-            <a
-              href={postUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 self-start rounded-pill border-[1.5px] border-border bg-white px-3 py-1.5 text-[12px] font-medium text-gray-500 hover:border-orange-border hover:bg-orange-bg hover:text-orange active:scale-[0.98]"
-            >
-              在 {postPlatform} 開啟原始貼文
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                <polyline points="15 3 21 3 21 9" />
-                <line x1="10" y1="14" x2="21" y2="3" />
-              </svg>
-            </a>
           )}
         </div>
       )}

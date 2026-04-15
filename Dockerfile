@@ -5,10 +5,10 @@
 # Why a Dockerfile (not zeabur.json buildCommand):
 #   Zeabur's auto-detection sees `requirements.txt` at the repo root
 #   and picks the Python buildpack, which only runs `pip install` —
-#   completely ignoring the `pnpm build` step in zeabur.json. The
-#   result is no `dist/`, so FastAPI silently falls back to serving
-#   the legacy `dashboard.html` at "/". With this Dockerfile both
-#   stages run regardless of buildpack heuristics.
+#   completely ignoring any `pnpm build` step. The result would be
+#   no `dist/`, so FastAPI would serve a minimal placeholder at "/".
+#   With this Dockerfile both stages run regardless of buildpack
+#   heuristics.
 #
 # Stage 1: Node 20 + pnpm → frontend/ → dist/
 # Stage 2: Python 3.11 slim → uvicorn serves FastAPI + the dist/
@@ -39,9 +39,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy server source + the legacy fallback. dist/ comes from stage 1.
-COPY main.py dashboard.html ./
-COPY static ./static
+# Copy the FastAPI server source. dist/ (the React build output,
+# plus favicon.png / icon-192.png / icon-512.png which Vite copies
+# from frontend/public/) comes from stage 1.
+COPY main.py ./
 COPY --from=frontend-builder /app/dist ./dist
 
 # Default to 8001 locally; Zeabur sets $PORT

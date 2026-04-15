@@ -5,7 +5,7 @@ import type { DateConfig } from "@/lib/datePicker";
 import { fM, fN } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
 import { useUiStore } from "@/stores/uiStore";
-import type { FbCreativeEntity } from "@/types/fb";
+import type { FbAdset, FbCreativeEntity } from "@/types/fb";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { CreativeRow } from "./CreativeRow";
@@ -36,18 +36,62 @@ export interface ComparisonTableProps {
 
 export function ComparisonTable({ multiAcct, date, searchTerm }: ComparisonTableProps) {
   const { status } = useFbAuth();
+  const expandedCamps = useUiStore((s) => s.expandedCamps);
   const expandedAdsets = useUiStore((s) => s.expandedAdsets);
   const treeSort = useUiStore((s) => s.treeSort);
   const setTreeSort = useUiStore((s) => s.setTreeSort);
 
   const cols = useMemo(() => buildTreeCols(multiAcct), [multiAcct]);
 
+  // Subscribe to the adsets queries for every currently-expanded
+  // campaign. Purely read-only from this view's perspective — the
+  // fetches were already triggered by the tree's `AdsetRow` when
+  // the user expanded the campaigns. We use useQueries here only
+  // so the components re-render when the cache changes.
+  const adsetsQueries = useQueries({
+    queries: expandedCamps.map((campId) => ({
+      queryKey: ["adsets", campId, date] as const,
+      queryFn: async (): Promise<FbAdset[]> => {
+        const res = await api.campaigns.adsets(campId, date);
+        return res.data ?? [];
+      },
+      enabled: status === "auth",
+      staleTime: 5 * 60_000,
+    })),
+  });
+
+  // Build the set of "adsets the user can currently SEE in the
+  // tree right now". An adset qualifies only if BOTH:
+  //   1. its parent campaign is in expandedCamps, AND
+  //   2. the adset itself is in expandedAdsets
+  // This drops stale adsets from comparison when:
+  //   - the user collapsed the adset directly, OR
+  //   - the user collapsed its parent campaign (which hides the
+  //     adset visually in the tree but doesn't remove it from
+  //     expandedAdsets — so the old code leaked those creatives
+  //     into comparison mode, which the user reported as a bug).
+  const visibleAdsetIds = useMemo(() => {
+    const expandedSet = new Set(expandedAdsets);
+    const visible: string[] = [];
+    for (const q of adsetsQueries) {
+      for (const adset of q.data ?? []) {
+        if (expandedSet.has(adset.id)) {
+          visible.push(adset.id);
+        }
+      }
+    }
+    return visible;
+    // adsetsQueries is a new array every render; depend on its
+    // derived data shape instead. React's Object.is equality on
+    // the expandedAdsets array handles the rest.
+  }, [adsetsQueries, expandedAdsets]);
+
   // React Query shares cache by `queryKey`, so hitting the same
   // ["creatives", adsetId, date] tuple that `useCreatives` already
   // populated in `AdsetRow` means this useQueries call is almost
   // always a cache hit rather than a fresh FB round-trip.
   const queries = useQueries({
-    queries: expandedAdsets.map((adsetId) => ({
+    queries: visibleAdsetIds.map((adsetId) => ({
       queryKey: ["creatives", adsetId, date] as const,
       queryFn: async (): Promise<FbCreativeEntity[]> => {
         const res = await api.adsets.creatives(adsetId, date);
@@ -72,21 +116,32 @@ export function ComparisonTable({ multiAcct, date, searchTerm }: ComparisonTable
     return allCreatives.filter((c) => c.name.toLowerCase().includes(term));
   }, [allCreatives, searchTerm]);
 
+  // Default sort = CTR descending. User can override by clicking a
+  // column header, which sets treeSort in the uiStore. The same
+  // treeSort is shared with the tree view, but when treeSort.key is
+  // null (user hasn't clicked anything) we force CTR desc here so
+  // the comparison view never starts unsorted — per the product
+  // decision that "CTR desc is the most useful default for
+  // side-by-side creative evaluation".
+  const effectiveSort = useMemo(
+    () => (treeSort.key ? treeSort : { key: "ctr" as const, dir: "desc" as const }),
+    [treeSort],
+  );
+
   const sorted = useMemo(() => {
-    if (!treeSort.key) return filtered;
-    const col = cols.find((c) => c.key === treeSort.key);
+    const col = cols.find((c) => c.key === effectiveSort.key);
     if (!col?.sortKey) return filtered;
     const sortKey = col.sortKey;
-    const dir = treeSort.dir === "asc" ? 1 : -1;
+    const dir = effectiveSort.dir === "asc" ? 1 : -1;
     return [...filtered].sort((a, b) => {
       const va = sortKey(a);
       const vb = sortKey(b);
       if (va === vb) return 0;
       return va > vb ? dir : -dir;
     });
-  }, [filtered, cols, treeSort]);
+  }, [filtered, cols, effectiveSort]);
 
-  if (expandedAdsets.length === 0) {
+  if (visibleAdsetIds.length === 0) {
     return (
       <div className="p-[60px] text-center text-[13px] text-gray-300">
         請先展開任一行銷活動與廣告組合,再啟用素材比較
@@ -118,7 +173,12 @@ export function ComparisonTable({ multiAcct, date, searchTerm }: ComparisonTable
       <thead>
         <tr>
           {cols.map((c) => (
-            <ComparisonHeaderCell key={c.key} col={c} treeSort={treeSort} onSort={setTreeSort} />
+            <ComparisonHeaderCell
+              key={c.key}
+              col={c}
+              treeSort={effectiveSort}
+              onSort={setTreeSort}
+            />
           ))}
         </tr>
       </thead>

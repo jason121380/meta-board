@@ -1,6 +1,7 @@
 import { FbAuthProvider, useFbAuth } from "@/auth/FbAuthProvider";
 import { ConfirmDialogHost } from "@/components/ConfirmDialog";
 import { PwaInstallHint } from "@/components/PwaInstallHint";
+import { ToastHost } from "@/components/Toast";
 import { router } from "@/router";
 import { hydrateAllStores, installStorageSync } from "@/stores";
 import { LoginView } from "@/views/login/LoginView";
@@ -15,8 +16,8 @@ import { RouterProvider } from "react-router-dom";
  * - Wraps everything in <FbAuthProvider> so useFbAuth() works anywhere.
  * - Shows <LoginView/> while unauthenticated; only mounts the
  *   <RouterProvider/> after the FB SDK reports connected status.
- * - Mounts <ConfirmDialogHost/> at the root so `confirm()` works
- *   globally without threading state through props.
+ * - Mounts <ConfirmDialogHost/> + <ToastHost/> at the root so
+ *   `confirm()` / `toast()` work globally without prop drilling.
  */
 
 // Hydrate at module load time — runs once per page load, before
@@ -34,6 +35,7 @@ export function App() {
     <FbAuthProvider>
       <AuthGate />
       <ConfirmDialogHost />
+      <ToastHost />
     </FbAuthProvider>
   );
 }

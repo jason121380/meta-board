@@ -1,5 +1,5 @@
 import { cn } from "@/lib/cn";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Spinner } from "./Spinner";
 
 /**
@@ -9,31 +9,72 @@ import { Spinner } from "./Spinner";
  *
  *   - A centered 32px spinner
  *   - A bold title line ("載入資料中...")
- *   - An optional subtitle (e.g. "3 / 5 個帳戶")
- *   - An optional progress bar showing loaded / total
+ *   - A percentage number that counts up during the wait
+ *   - A progress bar that tracks the same percentage
  *
  * Designed to look OBVIOUSLY different from an empty state — no
  * gray-300 text, no ambiguous "—" placeholder, no risk the user
  * thinks the screen is broken.
  *
- * Progress display rules:
- *   - total > 1 AND loaded > 0 → determinate bar at loaded/total %
- *   - total > 1 AND loaded = 0 → indeterminate shimmer bar
- *   - total ≤ 1               → no counter, no bar (single fetch
- *                                is binary, a 0/1 counter is noise)
+ * How the percentage works (IMPORTANT):
+ *
+ * The dashboard's batched `/api/overview` endpoint is a SINGLE
+ * backend round-trip. From the browser's point of view it's either
+ * in-flight or done — there's no intermediate "2/N accounts" state
+ * to surface honestly. The old UI exposed `loaded/total` counters
+ * that sat at 0/N the whole time and snapped to N/N at the end,
+ * which was indistinguishable from a broken bar.
+ *
+ * This version uses a TIME-BASED fake progress curve that sweeps
+ * smoothly from 0% to ~90% while the request is in flight, then
+ * snaps to 100% as soon as the component unmounts (the parent
+ * switches to the real data view). The sweep uses an asymptotic
+ * `1 - e^(-t/tau)` curve so it slows down as it approaches the
+ * cap, which matches the "long tail" feel of real network waits
+ * and never lies that we're 99% done when we've only been waiting
+ * 200ms. Total expected duration is driven by `estimatedDurationMs`
+ * (default 4s for `/api/overview` against 80 accounts).
+ *
+ * If the caller passes `loaded`/`total` counts from per-account
+ * queries (the legacy `useQueries` fan-out, e.g. used during
+ * per-adset creative fetches), those take precedence and drive the
+ * bar honestly — we detect that mode via `total > 1 && loaded`.
  */
 
 export interface LoadingStateProps {
   title?: ReactNode;
   subtitle?: ReactNode;
-  /** Progress counts. If provided, renders a progress bar. */
+  /** Optional per-query progress counts. When provided AND honest
+   * (i.e. `loaded` increments as real queries resolve), the bar
+   * follows them. Leave undefined to use the time-based curve. */
   loaded?: number;
   total?: number;
-  /** Optional hint line below the subtitle — use to set user
-   * expectations about how long the load usually takes (e.g.
-   * "首次載入約需 5-15 秒"). Rendered in smaller muted text. */
+  /** How long the caller expects the load to take, in ms. Used to
+   * shape the time-based fake-progress curve. Default 4000ms. */
+  estimatedDurationMs?: number;
+  /** Optional hint line below the percentage — use to set user
+   * expectations about how long the load usually takes. */
   hint?: ReactNode;
   className?: string;
+}
+
+// Percentage cap for the fake time-based curve. The bar asymptotes
+// here rather than reaching 100% so we don't lie about being done —
+// the caller unmounts us when the real data arrives and the parent
+// view takes over.
+const FAKE_CAP = 92;
+// Animation tick resolution. 16ms ≈ 60fps; anything faster is
+// wasted since the <100 rerenders/sec eye can't tell the difference
+// and browsers throttle setInterval below 4ms anyway.
+const TICK_MS = 50;
+
+/** 1 - e^(-t/tau), scaled to FAKE_CAP. `tau = duration / 3` puts
+ * the curve at ~63% of the cap after one-third of the expected
+ * duration, ~86% after two-thirds, asymptotic after that. */
+function fakePercent(elapsedMs: number, durationMs: number): number {
+  const tau = Math.max(1, durationMs / 3);
+  const raw = 1 - Math.exp(-elapsedMs / tau);
+  return Math.min(FAKE_CAP, raw * FAKE_CAP);
 }
 
 export function LoadingState({
@@ -41,20 +82,39 @@ export function LoadingState({
   subtitle,
   loaded,
   total,
+  estimatedDurationMs = 4000,
   hint,
   className,
 }: LoadingStateProps) {
+  // Honest mode: `loaded` actually increments as queries resolve.
+  // We detect this by checking if the caller provided numbers AND
+  // `loaded` is not stuck at zero (the old "0/N until done" lie).
+  // If loaded is 0 but total > 0, we fall back to the fake curve
+  // so the user still sees motion.
   const loadedSafe = typeof loaded === "number" ? loaded : 0;
-  // Only show the progress counter / bar when there are at least
-  // two concurrent fetches. A single fetch can only be 0/1, which
-  // is noise — a plain spinner reads better.
-  const showProgress = typeof total === "number" && total > 1;
-  const pct = showProgress ? Math.min(100, Math.round((loadedSafe / total) * 100)) : 0;
-  // When the user hasn't seen anything load yet, animate the bar
-  // with an indeterminate shimmer instead of freezing at 0%.
-  const indeterminate = showProgress && loadedSafe === 0;
+  const totalSafe = typeof total === "number" ? total : 0;
+  const honest = totalSafe > 1 && loadedSafe > 0;
+
+  // Time-based fake progress ticker. Starts at component mount and
+  // runs until we unmount (parent switches to the real view). A
+  // single setInterval drives the state so the component rerenders
+  // at TICK_MS cadence while visible.
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (honest) return; // honest mode doesn't need the ticker
+    const start = performance.now();
+    const id = setInterval(() => {
+      setElapsed(performance.now() - start);
+    }, TICK_MS);
+    return () => clearInterval(id);
+  }, [honest]);
+
+  const pct = honest
+    ? Math.min(100, Math.round((loadedSafe / totalSafe) * 100))
+    : Math.round(fakePercent(elapsed, estimatedDurationMs));
+
   const effectiveSubtitle =
-    subtitle ?? (showProgress ? `${loadedSafe} / ${total} 個帳戶已載入` : undefined);
+    subtitle ?? (honest && totalSafe > 1 ? `${loadedSafe} / ${totalSafe} 個帳戶已載入` : undefined);
 
   return (
     <div
@@ -66,21 +126,18 @@ export function LoadingState({
       <Spinner size={32} />
       <div className="text-[14px] font-semibold text-ink">{title}</div>
       {effectiveSubtitle && <div className="text-[12px] text-gray-500">{effectiveSubtitle}</div>}
-      {showProgress && (
-        <div className="mt-1 h-1 w-[200px] overflow-hidden rounded-full bg-border">
-          {indeterminate ? (
-            <div
-              className="h-full w-full rounded-full bg-gradient-to-r from-orange-bg via-orange to-orange-bg bg-[length:200%_100%] animate-shimmer"
-              aria-hidden="true"
-            />
-          ) : (
-            <div
-              className="h-full bg-orange transition-[width] duration-300 ease-out"
-              style={{ width: `${pct}%` }}
-            />
-          )}
+      <progress value={pct} max={100} className="sr-only" aria-label="載入進度">
+        {pct}%
+      </progress>
+      <div className="flex w-[220px] flex-col items-center gap-1.5" aria-hidden="true">
+        <div className="text-[11px] font-semibold tabular-nums text-orange">{pct}%</div>
+        <div className="h-1 w-full overflow-hidden rounded-full bg-border">
+          <div
+            className="h-full bg-orange transition-[width] duration-300 ease-out"
+            style={{ width: `${pct}%` }}
+          />
         </div>
-      )}
+      </div>
       {hint && (
         <div className="mt-1 max-w-[280px] text-center text-[11px] leading-relaxed text-gray-300">
           {hint}
