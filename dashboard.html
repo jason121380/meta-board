@@ -1271,8 +1271,11 @@ let finRowMarkups = JSON.parse(localStorage.getItem('fin_row_markups') || '{}');
 let finPinnedIds = JSON.parse(localStorage.getItem('fin_pinned_ids') || '[]'); // pinned campaign IDs (shown at top)
 let finSort = { key: null, dir: 'desc' };
 let currentLaunchStep = 1;
-let _currentUserId = null;  // FB user ID for cloud settings sync
-let _syncTimer = null;       // debounce timer for cloud sync
+// NOTE: cloud settings sync used to live in this legacy dashboard.html
+// via loadCloudSettings() + syncToCloud(). The React rewrite now
+// owns the DB persistence story (see frontend/src/stores/cloudSync.ts);
+// to avoid two writers clobbering each other, the legacy paths were
+// removed. Legacy users still get localStorage persistence on this file.
 let dpDash = null, dpAi = null, dpFin = null; // date picker instances
 
 // ── Format ─────────────────────────────────────────────────
@@ -1591,9 +1594,10 @@ async function fbLogout() {
 async function setToken(token) {
   const r = await fetch(`${API}/api/auth/token`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({token}) }).then(r=>r.json());
   if(r.ok) {
-    _currentUserId = r.id;
-    // Load cloud settings before rendering
-    await loadCloudSettings(r.id);
+    // Cloud-settings sync used to happen here via loadCloudSettings(r.id).
+    // Removed: the React app (frontend/src/stores/cloudSync.ts) is now
+    // the single writer for /api/settings/{user_id}. Legacy users still
+    // get localStorage persistence on this file.
     // Get picture separately
     FB.api('/me', {fields:'picture'}, resp => {
       showApp(r.name, resp?.picture);
@@ -1633,58 +1637,14 @@ async function init() {
   }
 }
 
-// ── Cloud Settings Sync ────────────────────────────────────
-async function loadCloudSettings(userId) {
-  try {
-    const res = await fetch(`${API}/api/settings/${userId}`).then(r=>r.json());
-    if(res.settings) {
-      const s = res.settings;
-      if(s.selected_accounts?.length) {
-        savedSelectedIds = s.selected_accounts;
-        localStorage.setItem('fb_selected_accounts', JSON.stringify(savedSelectedIds));
-      }
-      if(s.active_accounts?.length) {
-        localStorage.setItem('fb_active_accounts', JSON.stringify(s.active_accounts));
-      }
-      if(s.acct_order?.length) {
-        acctOrder = s.acct_order;
-        localStorage.setItem('acct_order', JSON.stringify(acctOrder));
-      }
-      if(s.filter_active_only !== undefined) {
-        filterActiveOnly = s.filter_active_only;
-        localStorage.setItem('filter_active_only', String(filterActiveOnly));
-      }
-      if(s.fin_row_markups && Object.keys(s.fin_row_markups).length) {
-        finRowMarkups = s.fin_row_markups;
-      }
-      if(s.fin_markup_default !== undefined) {
-        const el = document.getElementById('financeMarkupDefault');
-        if(el) el.value = s.fin_markup_default;
-      }
-    }
-  } catch(e) { /* offline or DB not configured — use localStorage */ }
-}
-
-function syncToCloud() {
-  if(!_currentUserId) return;
-  clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(async () => {
-    try {
-      await fetch(`${API}/api/settings/${_currentUserId}`, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-          selected_accounts: savedSelectedIds,
-          active_accounts: selectedAccounts.map(a=>a.id),
-          acct_order: acctOrder,
-          filter_active_only: filterActiveOnly,
-          fin_row_markups: finRowMarkups,
-          fin_markup_default: parseFloat(document.getElementById('financeMarkupDefault')?.value) || 5
-        })
-      });
-    } catch(e) { /* silently fail if offline */ }
-  }, 500);
-}
+// ── Cloud Settings Sync (REMOVED — see cloudSync.ts in React app) ──
+// The React rewrite owns DB persistence for user settings via
+// frontend/src/stores/cloudSync.ts. Having two writers (this legacy
+// file + React) would cause them to clobber each other on every
+// localStorage / DB handshake. This file is now localStorage-only.
+// syncToCloud() used to debounce-save on every settings change; all
+// its callsites in this file are now no-ops.
+function syncToCloud() { /* no-op — React app owns /api/settings/* */ }
 
 async function loadAllAccounts() {
   const res = await fetch(`${API}/api/accounts`).then(r=>r.json());

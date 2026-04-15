@@ -1,4 +1,5 @@
 import { ApiError, api } from "@/api/client";
+import { initCloudSync, teardownCloudSync } from "@/stores/cloudSync";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   type ReactNode,
@@ -144,6 +145,15 @@ export function FbAuthProvider({ children }: { children: ReactNode }) {
         // the refresh button. `resetQueries` clears the error state
         // too, not just the data (vs invalidateQueries).
         queryClient.resetQueries();
+        // Hydrate the 3 persisted stores (accounts / filters /
+        // finance) from the PostgreSQL-backed /api/settings/{id}
+        // endpoint, then install the debounced-save subscription.
+        // Fire-and-forget: the initial DB pull shouldn't block
+        // the UI from becoming interactive. If the DB isn't
+        // configured the promise no-ops into localStorage-only mode.
+        if (id) {
+          void initCloudSync(id);
+        }
       } catch (err) {
         const msg = err instanceof ApiError ? err.detail : (err as Error).message;
         setError(msg);
@@ -194,6 +204,10 @@ export function FbAuthProvider({ children }: { children: ReactNode }) {
   }, [exchangeToken]);
 
   const logout = useCallback(async () => {
+    // Tear down the cloud-sync subscription FIRST so a lingering
+    // setState from a view unmount doesn't POST the outgoing user's
+    // state against the next user's row.
+    teardownCloudSync();
     try {
       window.FB?.logout();
     } catch {
