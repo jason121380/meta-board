@@ -122,11 +122,41 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
   const videoPoster = creative?.creative?.object_story_spec?.video_data?.image_url ?? previewImage;
   const creativeBody = creative?.creative?.body;
 
-  // IG permalink takes priority since it's explicit and direct;
-  // otherwise build a FB post link from effective_object_story_id.
+  // "View original post" URL resolution.
+  //
+  // We used to pass `instagram_permalink_url` straight through for
+  // IG-sourced creatives, but the user reported getting Instagram's
+  // "發生錯誤,無法載入頁面" error when clicking. That happens
+  // whenever the underlying IG post is private / deleted / restricted
+  // — IG returns the same generic error in all those cases, and
+  // there's no way to verify the URL is live from the browser.
+  //
+  // Fix: prefer the **FB shadow-post URL** (derived from
+  // `effective_object_story_id` via `fbPostLinkFromStoryId`). FB
+  // internally creates a shadow post for every ad, including IG-
+  // sourced ones, and those shadow posts:
+  //   - are accessible using the user's already-logged-in FB session
+  //     (the user is running the LURE dashboard, so they're signed
+  //     into FB),
+  //   - embed the original IG content for IG-sourced creatives, so
+  //     the user sees the same material they expected,
+  //   - keep working even if the IG source post has since been
+  //     removed or made private.
+  //
+  // The IG permalink is still captured as `igPostUrl` for two
+  // reasons: (1) it controls the header subtitle ("贊助 ·
+  // Instagram" vs "贊助 · Facebook") so the user still sees where
+  // the content originated, and (2) it's exposed as an optional
+  // secondary text link so a user who explicitly wants the native
+  // IG experience can click it.
   const igPostUrl = creative?.creative?.instagram_permalink_url ?? null;
-  const fbPostUrl = igPostUrl ? null : fbPostLinkFromStoryId(storyId);
-  const postUrl = igPostUrl ?? fbPostUrl;
+  const fbPostUrl = fbPostLinkFromStoryId(storyId);
+  const postUrl = fbPostUrl ?? igPostUrl;
+  // postPlatform reflects the ORIGIN of the content (IG if the
+  // creative exposed an instagram_permalink_url, otherwise FB),
+  // NOT the URL we're actually linking to. This drives the header
+  // subtitle so users see "贊助 · Instagram" for IG-sourced ads
+  // even though the button opens the FB shadow post.
   const postPlatform: "Instagram" | "Facebook" | null = igPostUrl
     ? "Instagram"
     : fbPostUrl
@@ -155,14 +185,15 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
   const headerAvatar = pageQuery.data?.picture_url ?? null;
   const headerSubtitle = postPlatform ? `贊助 · ${postPlatform}` : "贊助 · 廣告";
 
-  // The "view post" CTA — both back-stage and front-stage variants
-  // now live in the sticky header row (via Modal's titleAction slot)
-  // instead of at the top or bottom of the body. Back-stage posts
-  // keep the orange-outline ghost style ("查看廣告貼文"); front-stage
-  // posts get "在 Facebook/Instagram 開啟原始貼文". The hi-res-failed
-  // case still has its own on-image CTA (in MediaBlock) so we skip
+  // The "view post" CTA lives in the sticky header row via Modal's
+  // titleAction slot. The label is now platform-neutral ("查看
+  // 廣告貼文") because the link always goes to the FB shadow post
+  // regardless of content origin — see the `postUrl` resolution
+  // comment above. The header subtitle still tells the user where
+  // the content is originally from ("贊助 · Instagram" etc.).
+  // The hi-res-failed case has its own on-image CTA, so we skip
   // the header button there to avoid a duplicate call-to-action.
-  const showHeaderPostButton = postUrl && postPlatform && !hiResFailed;
+  const showHeaderPostButton = postUrl && !hiResFailed;
   const headerPostButton = showHeaderPostButton ? (
     <a
       href={postUrl ?? undefined}
@@ -170,7 +201,7 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
       rel="noopener noreferrer"
       className="inline-flex items-center gap-1.5 rounded-pill border-[1.5px] border-orange bg-white px-3 py-1 text-[12px] font-semibold text-orange transition hover:bg-orange-bg active:scale-[0.98]"
     >
-      {isFrontPost ? `在 ${postPlatform} 開啟原始貼文` : "查看廣告貼文"}
+      查看廣告貼文
       <svg
         width="12"
         height="12"
@@ -260,7 +291,6 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
             imgError={imgError}
             onImgError={() => setImgError(true)}
             postUrl={postUrl}
-            postPlatform={postPlatform}
           />
 
           {creativeBody && (
@@ -310,7 +340,6 @@ interface MediaBlockProps {
   imgError: boolean;
   onImgError: () => void;
   postUrl: string | null;
-  postPlatform: "Facebook" | "Instagram" | null;
 }
 
 function MediaBlock(props: MediaBlockProps) {
@@ -332,7 +361,6 @@ function MediaBlock(props: MediaBlockProps) {
     imgError,
     onImgError,
     postUrl,
-    postPlatform,
   } = props;
 
   // Shared text-only fallback for "we tried, image didn't load,
@@ -362,14 +390,14 @@ function MediaBlock(props: MediaBlockProps) {
         <polyline points="21 15 16 10 5 21" />
       </svg>
       <div className="text-[13px] leading-relaxed text-gray-500">{message}</div>
-      {postUrl && postPlatform && (
+      {postUrl && (
         <a
           href={postUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-1 inline-flex items-center gap-1.5 rounded-pill border-[1.5px] border-orange bg-white px-4 py-1.5 text-[12px] font-semibold text-orange transition hover:bg-orange-bg active:scale-[0.98]"
         >
-          在 {postPlatform} 查看原始貼文
+          查看廣告貼文
           <svg
             width="12"
             height="12"
@@ -461,9 +489,7 @@ function MediaBlock(props: MediaBlockProps) {
   // fire onError again in an endless loop on some browsers.
   if (imgError && isFrontPost) {
     return renderTextFallback(
-      postPlatform === "Facebook"
-        ? "這則廣告是前台貼文,預覽圖在此無法載入。點下方按鈕到 Facebook 查看原圖或影片。"
-        : "這則廣告是前台貼文,預覽圖在此無法載入。點下方按鈕到原始貼文查看。",
+      "這則廣告是前台貼文,預覽圖在此無法載入。點下方按鈕查看廣告貼文原圖或影片。",
     );
   }
 
@@ -472,8 +498,8 @@ function MediaBlock(props: MediaBlockProps) {
   // with a soft warm-white bg (NOT black — broken images on a
   // black background look totally broken) and a blur so the
   // pixelation reads as intentional. The CTA overlay points the
-  // user to the original post for the real thing.
-  if (hiResFailed && thumb && postUrl && postPlatform) {
+  // user to the FB shadow post for the real thing.
+  if (hiResFailed && thumb && postUrl) {
     return (
       <div className="relative w-full overflow-hidden rounded-lg border border-border bg-bg">
         <img
@@ -493,7 +519,7 @@ function MediaBlock(props: MediaBlockProps) {
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 rounded-pill bg-white/95 px-4 py-2 text-[13px] font-semibold text-ink shadow-md backdrop-blur hover:bg-white active:scale-[0.98]"
           >
-            在 {postPlatform} 查看原始貼文
+            查看廣告貼文
             <svg
               width="13"
               height="13"

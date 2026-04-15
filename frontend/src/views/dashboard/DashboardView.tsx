@@ -13,7 +13,7 @@ import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useQueryClient } from "@tanstack/react-query";
-import { Suspense, lazy, useCallback, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { AccountPanel } from "./AccountPanel";
 import type { BudgetModalTarget } from "./BudgetModal";
 import { StatsGrid } from "./StatsGrid";
@@ -63,6 +63,30 @@ export function DashboardView() {
   const visibleAccounts = useAccountsStore((s) => s.visibleAccounts)(allAccounts);
   const activeIds = useAccountsStore((s) => s.activeIds);
   const setActiveIds = useAccountsStore((s) => s.setActiveIds);
+
+  // Auto-select the first visible account as soon as the accounts
+  // list resolves and the user has no selection yet. Without this,
+  // a first-time user who's just saved their Settings would land on
+  // the Dashboard with an empty state ("從左側選擇廣告帳戶") and
+  // have to click an account in the sidebar to trigger loading —
+  // which the user reported as a confusing "nothing loaded" moment
+  // right after they configured everything. Auto-selecting the
+  // top row fires the overview query immediately so the dashboard
+  // is populated on arrival.
+  //
+  // Guards:
+  //   - Only runs when visibleAccounts is non-empty (nothing to
+  //     select otherwise)
+  //   - Only runs when activeIds is empty (don't stomp on an
+  //     existing selection the user deliberately made)
+  //   - The effect's only state-mutation is `setActiveIds`, which
+  //     is a stable Zustand setter — no loop risk
+  useEffect(() => {
+    if (activeIds.length > 0) return;
+    if (visibleAccounts.length === 0) return;
+    const first = visibleAccounts[0];
+    if (first) setActiveIds([first.id]);
+  }, [activeIds, visibleAccounts, setActiveIds]);
 
   const activeAccounts = useMemo(
     () => visibleAccounts.filter((a) => activeIds.includes(a.id)),
