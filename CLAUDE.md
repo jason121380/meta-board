@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Facebook Ads management dashboard for LURE agency. FastAPI backend + single-page HTML frontend.
+Facebook Ads management dashboard for LURE agency. FastAPI backend + React SPA.
 Connects to Facebook Marketing API v21.0 to manage 80+ ad accounts across multiple Business Managers.
 
 ## Branding
@@ -14,21 +14,24 @@ Connects to Facebook Marketing API v21.0 to manage 80+ ad accounts across multip
 
 ## Tech Stack
 
-- **Backend**: Python 3.9 / FastAPI / httpx (async)
-- **Frontend**: Vanilla JS, single `dashboard.html` (no build step)
-- **Charts**: Chart.js 4.4.0 + chartjs-plugin-datalabels 2.2.0 (CDN)
+- **Backend**: Python 3.9+ / FastAPI / httpx (async)
+- **Frontend**: React 18 + Vite + TypeScript (`frontend/`)
+- **Charts**: Chart.js 4.4.0 + chartjs-plugin-datalabels 2.2.0
 - **Auth**: Facebook JS SDK (browser) + FastAPI token endpoint (server)
 - **AI**: Google Gemini API (optional, for AI recommendations)
-- **DB**: PostgreSQL via asyncpg (optional, for user settings sync)
+- **Storage**: Browser localStorage only — there is NO server-side user DB
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `main.py` | FastAPI app, all API routes |
-| `dashboard.html` | Full SPA frontend (login + all views) |
-| `static/manifest.json` | PWA manifest |
-| `static/sw.js` | Service worker |
+| `frontend/` | React + Vite + TypeScript SPA source |
+| `frontend/src/main.tsx` | React entry + QueryClient provider |
+| `frontend/src/App.tsx` | Auth gate + host-level modals |
+| `frontend/src/router.tsx` | Router + lazy-loaded views |
+| `frontend/public/` | Favicon + PWA icons (copied to `dist/` root at build) |
+| `dist/` | `pnpm build` output — served by FastAPI in prod |
 | `.env` | FB + Gemini credentials (never commit) |
 | `.env.example` | Template for credentials |
 | `MEMORY.md` | Project context, known issues, architecture decisions |
@@ -42,7 +45,6 @@ FB_ACCESS_TOKEN — Long-lived user access token (fallback, overridden by FB Log
 FB_API_VERSION  — Graph API version (default: v21.0)
 GEMINI_API_KEY  — Google Gemini API key (for AI recommendations)
 GEMINI_MODEL    — Gemini model (default: gemini-3-flash-preview)
-DATABASE_URL    — PostgreSQL connection string (optional)
 ```
 
 ## Token Flow
@@ -181,34 +183,35 @@ Do NOT use `accent-color` inline style — always use the `custom-cb` class.
   invisible). Use `creative-*` or another prefix instead. The
   `frontend/scripts/check-no-ad-class.mjs` pre-commit guard enforces
   this automatically — it runs as part of `pnpm lint`.
-- **Wrap URLs passed to React JSX `src={...}` in `escHtml()`**. JSX
-  attribute bindings write the value literally — they do NOT re-parse
-  `&amp;` back to `&` the way `innerHTML` does. escHtml is correct in
-  legacy `dashboard.html` (which injects via innerHTML) but will
-  literally insert `&amp;` into the attribute and break Facebook's
-  signed CDN URLs (signature mismatch → 403 → broken thumbnail). This
-  was the root cause of the 3rd-level ad preview regression (commit
-  `9a9e81b`). Use the raw URL directly in React; React already escapes
-  attribute values correctly.
+- **Wrap URLs passed to React JSX `src={...}` in any `escHtml()`-style
+  helper**. JSX attribute bindings write the value literally — they do
+  NOT re-parse `&amp;` back to `&`. Any HTML-escaping of a Facebook
+  signed CDN URL will literally insert `&amp;` into the attribute and
+  break the signature (→ 403 → broken thumbnail). Use the raw URL
+  directly in React; React already escapes attribute values correctly.
 
-## React rewrite (as of 2026-04-13)
+## React-only architecture (as of 2026-04-15)
 
-The frontend is being migrated from the single `dashboard.html` file
-to a React + Vite + TypeScript app under `frontend/`. Both coexist
-during the transition:
+The legacy `dashboard.html` single-file SPA was deleted in the
+React-only cutover. The React app under `frontend/` is now the ONE
+and ONLY frontend:
 
-- `main.py` serves the built React bundle at `/` when `dist/` exists,
-  falling back to `dashboard.html`
-- `/legacy` always serves `dashboard.html` for side-by-side diffing
-- `pnpm build` output goes to repo-root `dist/` so FastAPI serves it
-  via `StaticFiles(directory="dist")`
+- `main.py` serves the built React bundle at `/` from module-level
+  cached bytes (the SPA catch-all reads from `_REACT_INDEX_HTML`,
+  not from disk per request)
+- `pnpm build` output goes to repo-root `dist/`
+- Top-level PWA assets (`favicon.png`, `icon-192.png`, `icon-512.png`)
+  live in `frontend/public/` and are copied to `dist/` at build time;
+  `main.py` serves them via dedicated routes
 - Zeabur deploy config: `zeabur.json` runs
   `corepack enable && cd frontend && pnpm install && pnpm build && cd .. && pip install -r requirements.txt`
-- The "no build step" rule is dropped for the React app but the
-  legacy `dashboard.html` is still editable without a build
+- User settings (selected accounts, markups, etc.) are persisted to
+  **localStorage ONLY** — there is no server-side DB. The PostgreSQL
+  `user_settings` table and `/api/settings/*` endpoints were removed
+  alongside the legacy cutover.
 
 Quality gates (all run in CI, enforced by `pnpm check`):
 - `pnpm typecheck` — strict TS + `noUncheckedIndexedAccess`
 - `pnpm lint`      — Biome + `lint:no-ad-class` guard
-- `pnpm test`      — Vitest (~115 unit tests for pure business logic)
-- `pnpm test:e2e`  — Playwright visual regression (Phase 9b)
+- `pnpm test`      — Vitest unit tests for pure business logic
+- `pnpm test:e2e`  — Playwright visual regression

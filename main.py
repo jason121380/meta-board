@@ -7,8 +7,6 @@ from contextlib import asynccontextmanager
 from typing import Any, Optional, List
 import asyncio
 import httpx
-import asyncpg
-import json
 import os
 from dotenv import load_dotenv
 from pathlib import Path
@@ -23,54 +21,32 @@ API_VERSION = os.getenv("FB_API_VERSION", "v21.0")
 BASE_URL = f"https://graph.facebook.com/{API_VERSION}"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
-DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 # Runtime token override (from FB Login)
 _runtime_token: Optional[str] = None
 # Shared httpx client (created in lifespan)
 _http_client: Optional[httpx.AsyncClient] = None
-# PostgreSQL connection pool
-_db_pool: Optional[asyncpg.Pool] = None
 
 
 def get_token() -> str:
     return _runtime_token or _ACCESS_TOKEN or ""
 
 
-DASHBOARD_HTML = Path(__file__).parent / "dashboard.html"
-STATIC_DIR = Path(__file__).parent / "static"
-# Built React app output (from frontend/ via `pnpm build`).
-# When this directory exists, FastAPI serves it instead of dashboard.html.
+# Built React app output (from frontend/ via `pnpm build`). Served as
+# the ONE and ONLY frontend — the legacy dashboard.html + the optional
+# PostgreSQL user-settings sync were removed in the React-only cutover.
 DIST_DIR = Path(__file__).parent / "dist"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _http_client, _db_pool
+    global _http_client
     # Per-request overrides in _fb_fetch_and_cache set the real
     # timeout (10s for GET, 30s for POST). This client-level value
     # is just a safety ceiling for any code path that slips through
     # without an explicit override.
     _http_client = httpx.AsyncClient(timeout=30)
-    # Connect to PostgreSQL if configured
-    if DATABASE_URL:
-        try:
-            _db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
-            async with _db_pool.acquire() as conn:
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS user_settings (
-                        user_id TEXT PRIMARY KEY,
-                        settings JSONB NOT NULL DEFAULT '{}',
-                        updated_at TIMESTAMP DEFAULT NOW()
-                    )
-                """)
-        except Exception as e:
-            print(f"[DB] Connection failed: {e}")
-            _db_pool = None
     yield
-    if _db_pool:
-        await _db_pool.close()
-        _db_pool = None
     await _http_client.aclose()
     _http_client = None
 
@@ -85,15 +61,10 @@ app.add_middleware(
 )
 
 # Gzip EVERY response >500 bytes for clients that send Accept-Encoding:
-# gzip. The legacy dashboard.html is ~212KB uncompressed but only ~60KB
-# gzipped, and every FB API JSON response compresses roughly 4-5×.
+# gzip. Every FB API JSON response compresses roughly 4-5× so the
+# savings on the proxy path are substantial.
 # level=6 is the httpx / nginx default — best size/CPU balance.
 app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
-
-# Serve legacy static files (PWA manifest, service worker, icons) — used
-# only when the React build dist/ is not present (transitional fallback).
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # Serve built React assets (JS / CSS chunks emitted by Vite). Vite's build
 # places hashed files under dist/assets/. Mounted before any catch-all so
@@ -107,16 +78,12 @@ if _REACT_ASSETS_PRESENT:
 
 # ── Startup-cached HTML / PWA assets ────────────────────────────────
 #
-# Previously `_react_index()` / `_legacy_index()` called `.read_text()`
-# on every single GET to `/` and to the SPA catch-all. The SPA
-# catch-all fires on EVERY browser hard-refresh of a React route
-# (/dashboard, /analytics, …), so this was a real hotpath: disk read
-# on every tab reload × N users. Plus the sw.js / manifest endpoints
-# did the same thing per request.
-#
-# Now we read everything exactly once at import time into module-
-# level bytes. Responses are served straight from memory. A redeploy
-# restarts the Python process and picks up fresh bytes automatically.
+# The SPA catch-all fires on EVERY browser hard-refresh of a React
+# route (/dashboard, /analytics, …). Reading index.html from disk per
+# request would be a real hotpath. Same for sw.js / manifest.json /
+# favicons. Everything is read exactly once at import time into
+# module-level bytes — responses are served straight from memory.
+# A redeploy restarts the Python process and picks up fresh bytes.
 def _read_bytes(path: Path) -> Optional[bytes]:
     try:
         return path.read_bytes() if path.exists() else None
@@ -125,20 +92,24 @@ def _read_bytes(path: Path) -> Optional[bytes]:
 
 
 _REACT_INDEX_HTML: Optional[bytes] = _read_bytes(DIST_DIR / "index.html")
-_LEGACY_INDEX_HTML: Optional[bytes] = _read_bytes(DASHBOARD_HTML)
-
-_SW_JS: Optional[bytes] = _read_bytes(DIST_DIR / "sw.js") or _read_bytes(STATIC_DIR / "sw.js")
-
+_SW_JS: Optional[bytes] = _read_bytes(DIST_DIR / "sw.js")
 _MANIFEST_JSON: Optional[bytes] = (
     _read_bytes(DIST_DIR / "manifest.webmanifest")
     or _read_bytes(DIST_DIR / "manifest.json")
-    or _read_bytes(STATIC_DIR / "manifest.json")
 )
+
+# Top-level PWA assets — Vite copies these from frontend/public/ to
+# the root of dist/ at build time. They must be served at `/favicon.png`
+# etc. (not under `/assets/`) because frontend/index.html references
+# them at the root path.
+_FAVICON_PNG: Optional[bytes] = _read_bytes(DIST_DIR / "favicon.png")
+_ICON_192_PNG: Optional[bytes] = _read_bytes(DIST_DIR / "icon-192.png")
+_ICON_512_PNG: Optional[bytes] = _read_bytes(DIST_DIR / "icon-512.png")
 
 # Loud startup banner so Zeabur logs show at-a-glance whether the
 # React build was found. If you see "[startup] React build: MISSING"
-# in the logs, the user will be served dashboard.html (legacy) at "/"
-# until you fix the build step.
+# in the logs, the server has no index.html to serve and will
+# return a minimal placeholder at "/" until you fix the build step.
 print(
     f"[startup] React build: {'OK' if _REACT_BUILD_PRESENT else 'MISSING'} "
     f"(dist/index.html), assets mount: {'OK' if _REACT_ASSETS_PRESENT else 'MISSING'}",
@@ -503,17 +474,13 @@ def _insights_clause(fields: str, date_preset: str = "last_30d", time_range: Opt
 # ── Pages ───────────────────────────────────────────────────────────
 
 def _index_bytes() -> bytes:
-    """Pick the right pre-cached index HTML for the root route.
-
-    React build takes priority; legacy dashboard.html is the fallback
-    when `dist/index.html` doesn't exist (transitional deploys). Both
-    are read into memory at module import time, so this never touches
-    disk at request time.
+    """Return the pre-cached React index.html. Read into memory at
+    module import time, so this never touches disk at request time.
+    If the React build is missing (e.g. `pnpm build` didn't run),
+    returns a minimal placeholder so the server doesn't 500.
     """
     if _REACT_INDEX_HTML is not None:
         return _REACT_INDEX_HTML
-    if _LEGACY_INDEX_HTML is not None:
-        return _LEGACY_INDEX_HTML
     return b"<!doctype html><title>LURE Meta Platform</title><body>build missing</body>"
 
 
@@ -524,39 +491,41 @@ async def root():
 
 @app.get("/api/_status")
 async def app_status():
-    """Diagnostic endpoint: which build is the server actually serving?
-
-    Useful when something at "/" looks wrong and you can't tell
-    whether you're hitting React or the legacy dashboard.html. Hit
-    this URL directly and the response tells you exactly what the
-    server can see on disk.
+    """Diagnostic endpoint: confirms the server has a React build
+    loaded. Hit this URL directly if "/" looks wrong.
     """
     return {
-        "serving": "react" if _REACT_BUILD_PRESENT else "legacy",
         "react_index_present": _REACT_BUILD_PRESENT,
         "react_assets_present": _REACT_ASSETS_PRESENT,
         "dist_dir": str(DIST_DIR),
-        "legacy_url": "/legacy",
     }
 
 
-@app.get("/legacy", response_class=HTMLResponse)
-async def legacy_dashboard():
-    """Always serve the old dashboard.html, even if the React build exists.
-    Kept until Phase 10 cutover for side-by-side visual regression testing.
-    """
-    body = _LEGACY_INDEX_HTML or _index_bytes()
-    return Response(content=body, media_type="text/html; charset=utf-8")
+@app.get("/favicon.png")
+async def favicon_png():
+    if _FAVICON_PNG is None:
+        raise HTTPException(status_code=404, detail="favicon missing")
+    return Response(content=_FAVICON_PNG, media_type="image/png")
+
+
+@app.get("/icon-192.png")
+async def icon_192_png():
+    if _ICON_192_PNG is None:
+        raise HTTPException(status_code=404, detail="icon missing")
+    return Response(content=_ICON_192_PNG, media_type="image/png")
+
+
+@app.get("/icon-512.png")
+async def icon_512_png():
+    if _ICON_512_PNG is None:
+        raise HTTPException(status_code=404, detail="icon missing")
+    return Response(content=_ICON_512_PNG, media_type="image/png")
 
 
 @app.get("/sw.js")
 async def service_worker():
-    """Serve service worker from root scope.
-
-    Vite PWA emits sw.js into dist/ at build time; prefer that. Fall back
-    to the hand-written static/sw.js if no React build is present. The
-    chosen bytes are cached at module import so this route never touches
-    disk at request time.
+    """Serve the Workbox service worker Vite PWA emits into dist/.
+    Cached at module import so this route never touches disk.
     """
     body = _SW_JS if _SW_JS is not None else b"// no service worker"
     return Response(content=body, media_type="application/javascript")
@@ -564,11 +533,7 @@ async def service_worker():
 
 @app.get("/manifest.json")
 async def manifest():
-    """Serve PWA manifest from root.
-
-    Vite PWA writes manifest.webmanifest into dist/; fall back to
-    static/manifest.json during transition. Cached at startup.
-    """
+    """Serve the PWA manifest Vite PWA emits into dist/."""
     if _MANIFEST_JSON is not None:
         return Response(
             content=_MANIFEST_JSON,
@@ -1143,43 +1108,6 @@ async def get_overview(
     # exceptions so return_exceptions isn't needed here.
     results = await asyncio.gather(*[_fetch_one(aid) for aid in account_ids])
     return {"data": dict(results)}
-
-
-# ── 用戶設定（PostgreSQL 雲端同步）─────────────────────────────
-
-class UserSettings(BaseModel):
-    selected_accounts: List[str] = []
-    active_accounts: List[str] = []
-    acct_order: List[str] = []
-    filter_active_only: bool = True
-    fin_row_markups: dict = {}
-    fin_markup_default: float = 5
-
-@app.get("/api/settings/{user_id}")
-async def get_settings(user_id: str):
-    if not _db_pool:
-        return {"settings": None}
-    async with _db_pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT settings FROM user_settings WHERE user_id = $1", user_id
-        )
-    if row:
-        return {"settings": json.loads(row["settings"]) if isinstance(row["settings"], str) else row["settings"]}
-    return {"settings": None}
-
-@app.post("/api/settings/{user_id}")
-async def save_settings(user_id: str, payload: UserSettings):
-    if not _db_pool:
-        raise HTTPException(status_code=503, detail="Database not configured")
-    data = json.dumps(payload.dict())
-    async with _db_pool.acquire() as conn:
-        await conn.execute("""
-            INSERT INTO user_settings (user_id, settings, updated_at)
-            VALUES ($1, $2::jsonb, NOW())
-            ON CONFLICT (user_id)
-            DO UPDATE SET settings = $2::jsonb, updated_at = NOW()
-        """, user_id, data)
-    return {"ok": True}
 
 
 # ── AI Chat (Gemini) ──────────────────────────────────────────

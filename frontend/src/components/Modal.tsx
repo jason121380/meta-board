@@ -18,6 +18,11 @@ export interface ModalProps {
   onOpenChange: (open: boolean) => void;
   title?: ReactNode;
   subtitle?: ReactNode;
+  /** Extra content rendered in the sticky header row, between the
+   * title column and the X close button. Typically used for a
+   * call-to-action that belongs to the entire modal (e.g. the
+   * creative preview modal's "view original post" link). */
+  titleAction?: ReactNode;
   children?: ReactNode;
   footer?: ReactNode;
   width?: number | string;
@@ -29,6 +34,7 @@ export function Modal({
   onOpenChange,
   title,
   subtitle,
+  titleAction,
   children,
   footer,
   width = 360,
@@ -67,12 +73,18 @@ export function Modal({
               modals (e.g. 3rd-level ad creative with long body text)
               trapped mobile users because the backdrop-tap gesture
               isn't obvious and there was no reachable close. */}
-          <div className="sticky top-0 z-10 flex items-start gap-2 bg-white px-5 pt-5 md:px-6 md:pt-6">
+          <div className="sticky top-0 z-10 flex items-center gap-2 bg-white px-5 pt-5 md:px-6 md:pt-6">
             <div className="min-w-0 flex-1">
-              {title && (
+              {title ? (
                 <Dialog.Title className="mb-1 text-[15px] font-bold text-ink md:text-base">
                   {title}
                 </Dialog.Title>
+              ) : (
+                // Radix Dialog requires Dialog.Title for a11y — if
+                // the caller didn't pass a visible title, we still
+                // render one in sr-only form so the screen-reader
+                // announcement works and Radix stays quiet.
+                <Dialog.Title className="sr-only">對話視窗</Dialog.Title>
               )}
               {/* Always render a Description so Radix's a11y warning
                   stays quiet. When no subtitle is supplied, the
@@ -86,9 +98,10 @@ export function Modal({
                 <Dialog.Description className="sr-only">{title ?? "對話視窗"}</Dialog.Description>
               )}
             </div>
+            {titleAction && <div className="shrink-0">{titleAction}</div>}
             <Dialog.Close
               aria-label="關閉"
-              className="-mr-2 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-bg hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange/40 md:-mr-3"
+              className="-mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-bg hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange/40 md:-mr-3"
             >
               <svg
                 width="18"

@@ -327,13 +327,6 @@ export const api = {
     }) => request<{ id: string }>("POST", "/api/quick-launch/campaign", { body: payload }),
   },
 
-  settings: {
-    get: (userId: string) =>
-      request<{ settings: Record<string, unknown> | null }>("GET", `/api/settings/${userId}`),
-    save: (userId: string, payload: Record<string, unknown>) =>
-      request<{ ok: boolean }>("POST", `/api/settings/${userId}`, { body: payload }),
-  },
-
   ai: {
     chat: (messages: Array<{ role: "user" | "model"; text: string }>, context?: string) =>
       request<{ reply: string }>("POST", "/api/ai/chat", {

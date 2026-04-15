@@ -208,15 +208,16 @@ export function FinanceView() {
               })}
             </div>
           )}
-          <div className="min-h-0 flex-1 overflow-auto">
+          {/* Explicit bg-bg on the scroll container so the area
+              BELOW the last row of the finance table (when the
+              table is shorter than the viewport) shows the warm-
+              white page bg instead of a stark white block. Matches
+              the Dashboard tree card's transparent-bg trick. */}
+          <div className="min-h-0 flex-1 overflow-auto bg-bg">
             {visible.length === 0 ? (
               <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
             ) : overview.isLoading ? (
-              <LoadingState
-                title="載入財務資料中..."
-                loaded={overview.loadedCount}
-                total={overview.totalCount}
-              />
+              <LoadingState title="載入財務資料中..." />
             ) : (
               <FinanceTable
                 campaigns={tableCampaigns}

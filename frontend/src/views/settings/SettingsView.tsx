@@ -79,13 +79,9 @@ export function SettingsView() {
 
   const save = () => {
     setSelectedIds([...pendingChecked]);
-    // The setState call above triggers two async side effects:
-    //  1. localStorage write via installAccountsStorageSync
-    //  2. POST /api/settings/{userId} via installCloudSync (debounced 500ms)
-    // Neither blocks the UI; we optimistically show the success toast
-    // immediately and navigate away. If the DB write fails it's
-    // silent (see cloudSync.ts — localStorage is the backup), so
-    // pessimistic await-before-redirect isn't worth the latency.
+    // The setState call above writes through installAccountsStorageSync
+    // into localStorage. There's no DB round-trip to await — we show
+    // the toast and navigate immediately.
     toast("儲存成功");
     navigate("/dashboard");
   };

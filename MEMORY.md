@@ -9,12 +9,13 @@
 
 ## FB App
 
-- App ID: `2780372365654462` (hardcoded in dashboard.html FB JS SDK init)
+- App ID: `2780372365654462` (hardcoded in `frontend/src/auth/FbAuthProvider.tsx`)
 - API Version: `v21.0`
 - Token type: Long-lived user token (60 days), stored in `.env` as fallback
 - Runtime token: stored in `_runtime_token` (set via FB Login, overrides .env)
 - Required scopes: `ads_read`, `ads_management`, `business_management`
 - Note: `business` field on ad accounts requires `business_management` scope. The `.env` token may lack this — user re-logs via FB Login to get updated scopes.
+- **NOT included**: `pages_read_engagement` — which is why `/api/posts/{id}/media` and `/api/pages/{id}/info` almost always fail on front-stage posts. See the fallback chain in `CreativePreviewModal`.
 
 ## Ad Accounts
 
@@ -28,12 +29,12 @@
 
 ## Architecture
 
-- **Backend**: FastAPI (Python 3.9), port 8001
-- **Frontend**: Single HTML file (`dashboard.html`), no build step
+- **Backend**: FastAPI (Python 3.9+), port 8001
+- **Frontend**: React 18 + Vite + TypeScript (`frontend/`), built to `dist/`
 - **Auth**: FB JS SDK (browser) → `POST /api/auth/token` → `_runtime_token` in memory
-- **Charts**: Chart.js 4.4.0 + chartjs-plugin-datalabels 2.2.0 (CDN, loaded in head)
+- **Charts**: Chart.js 4.4.0 + chartjs-plugin-datalabels 2.2.0 (tree-shaken imports, not CDN)
 - **AI**: Google Gemini API via `/api/ai/chat` endpoint
-- **DB**: PostgreSQL via asyncpg — optional, used only for user settings sync
+- **Storage**: Browser localStorage only — no server-side DB. The PostgreSQL `user_settings` table and `/api/settings/*` endpoints were removed in the 2026-04-15 React-only cutover.
 
 ## Layout
 

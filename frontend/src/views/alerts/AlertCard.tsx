@@ -157,11 +157,31 @@ export function AlertCard({
                             href={link}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="ml-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[13px] text-gray-300 no-underline active:bg-orange-bg active:text-orange md:ml-1.5 md:h-auto md:w-auto md:text-[11px]"
+                            onClick={(e) => e.stopPropagation()}
+                            className="ml-2 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-300 no-underline hover:bg-orange-bg hover:text-orange active:bg-orange-bg active:text-orange md:ml-1.5"
                             title="在 Facebook 廣告管理員開啟"
                             aria-label={`在 Facebook 廣告管理員開啟 ${entry.campaign.name}`}
                           >
-                            <span aria-hidden="true">↗</span>
+                            {/* Same SVG as <FbCampaignLink/> in the
+                                dashboard tree — box-with-arrow
+                                external link glyph, not the ↗ text
+                                glyph, so the icon is visually
+                                consistent across views. */}
+                            <svg
+                              width="13"
+                              height="13"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                              <polyline points="15 3 21 3 21 9" />
+                              <line x1="10" y1="14" x2="21" y2="3" />
+                            </svg>
                             <span className="sr-only">在 Facebook 廣告管理員開啟</span>
                           </a>
                         )}

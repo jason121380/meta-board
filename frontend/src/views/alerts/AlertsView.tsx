@@ -34,20 +34,26 @@ export function AlertsView() {
   const selectedAcctId = useUiStore((s) => s.alertSelectedAcctId);
   const setSelectedAcctId = useUiStore((s) => s.setAlertSelectedAcctId);
 
-  const scopedAccounts = useMemo(() => {
-    if (selectedAcctId === null) return visibleAll;
-    return visibleAll.filter((a) => a.id === selectedAcctId);
-  }, [visibleAll, selectedAcctId]);
-
   const date = useFiltersStore((s) => s.date.alerts);
   const setDate = useFiltersStore((s) => s.setDate);
 
-  // Batch endpoint — alerts only consumes campaigns from the bundle,
-  // but we share the same `/api/overview` pipeline with Analytics /
-  // Finance so all three views benefit from one trip to the backend.
-  const overview = useMultiAccountOverview(scopedAccounts, date);
+  // Batch endpoint — ALWAYS request the full visible account set,
+  // regardless of which single account the user has clicked in the
+  // left panel. Previously this hook was called with a filtered
+  // `scopedAccounts` array, which changed the query key every time
+  // the user switched accounts → React Query saw a brand new query
+  // → loading spinner every click, even though the underlying data
+  // for every account was already in the "all accounts" cache entry.
+  // Fetching once for the full set and filtering CLIENT-SIDE below
+  // makes per-account switching instant.
+  const overview = useMultiAccountOverview(visibleAll, date);
 
-  const buckets = useMemo(() => computeAlertBuckets(overview.campaigns), [overview.campaigns]);
+  const scopedCampaigns = useMemo(() => {
+    if (selectedAcctId === null) return overview.campaigns;
+    return overview.campaigns.filter((c) => c._accountId === selectedAcctId);
+  }, [overview.campaigns, selectedAcctId]);
+
+  const buckets = useMemo(() => computeAlertBuckets(scopedCampaigns), [scopedCampaigns]);
 
   const businessIdForCampaign = (accountId: string | undefined) => {
     if (!accountId) return undefined;

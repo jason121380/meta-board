@@ -58,7 +58,18 @@ export function confirm(
   return useConfirm.getState().ask(message, opts);
 }
 
-/** Mount this once at the top of App.tsx. */
+/** Mount this once at the top of App.tsx.
+ *
+ * Design note — we deliberately DON'T pass the title through Modal's
+ * `title` prop. If we did, the title would render in the sticky
+ * header row (left-aligned, next to the X close button), and the
+ * body content below (icon / message / buttons — all centered)
+ * would look asymmetric. Instead we render the title as a centered
+ * heading INSIDE the body column so everything aligns on the same
+ * vertical axis. Modal's header still carries the X close button
+ * in the top-right, which is fine — the empty flex-1 space to its
+ * left visually balances the centered body content.
+ */
 export function ConfirmDialogHost() {
   const { open, title, message, icon, _close } = useConfirm();
   return (
@@ -68,17 +79,19 @@ export function ConfirmDialogHost() {
         if (!v) _close(false);
       }}
       width={320}
-      title={title}
     >
-      <div className="mb-4 text-center text-2xl">{icon}</div>
-      <p className="mb-5 text-center text-[13px] leading-relaxed text-gray-500">{message}</p>
-      <div className="flex justify-center gap-2.5">
-        <Button variant="ghost" size="sm" className="min-w-20" onClick={() => _close(false)}>
-          取消
-        </Button>
-        <Button variant="primary" size="sm" className="min-w-20" onClick={() => _close(true)}>
-          確定
-        </Button>
+      <div className="flex flex-col items-center text-center">
+        <h3 className="mb-3 text-[15px] font-bold text-ink md:text-base">{title}</h3>
+        <div className="mb-4 text-2xl">{icon}</div>
+        <p className="mb-5 text-[13px] leading-relaxed text-gray-500">{message}</p>
+        <div className="flex gap-2.5">
+          <Button variant="ghost" size="sm" className="min-w-20" onClick={() => _close(false)}>
+            取消
+          </Button>
+          <Button variant="primary" size="sm" className="min-w-20" onClick={() => _close(true)}>
+            確定
+          </Button>
+        </div>
       </div>
     </Modal>
   );
