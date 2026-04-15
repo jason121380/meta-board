@@ -6,6 +6,7 @@ import { Modal } from "@/components/Modal";
 import { Spinner } from "@/components/Spinner";
 import { fbPostLinkFromStoryId, isFrontPostCreative } from "@/lib/fbLinks";
 import type { FbCreativeEntity } from "@/types/fb";
+import { useEffect, useState } from "react";
 
 /**
  * Preview modal for a 3rd-level ad creative. Rendered from the
@@ -68,6 +69,29 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
   const videoId = creative?.creative?.object_story_spec?.video_data?.video_id ?? null;
   const videoQuery = useVideoSource(videoId, isOpen);
 
+  // Track <img> load failures in the media block. For FB front-stage
+  // posts, the chain often lands on `<img src={thumb}>` (the tiny
+  // 120px thumbnail from the ad edge) — and FB commonly serves a
+  // first-video-frame thumbnail for boosted video posts, which is
+  // frequently BLACK (intro fade-in). Worse, the signed CDN URL
+  // sometimes 403s when it expires mid-session. Either way, showing
+  // a black box isn't helpful. When the img reports `onError`, we
+  // switch to a text-only fallback that pushes the user to the
+  // "view original post" CTA.
+  //
+  // The state resets whenever the modal opens for a different
+  // creative so a past load failure doesn't shadow a different ad.
+  const creativeId = creative?.creative?.id ?? creative?.id ?? null;
+  const [imgError, setImgError] = useState(false);
+  // Reset `imgError` whenever the modal opens for a different
+  // creative so a previous load failure doesn't shadow the new ad.
+  // biome's exhaustive-deps hint here is a warning we accept — the
+  // effect is intentionally keyed on creativeId even though only
+  // setImgError is read in the body.
+  useEffect(() => {
+    setImgError(false);
+  }, [creativeId]);
+
   const storyId = creative?.creative?.effective_object_story_id;
   const pageId = extractPageId(storyId);
   const pageQuery = usePageInfo(pageId, isOpen);
@@ -87,8 +111,7 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
   //    ads_read scope that the rest of the dashboard uses, so it
   //    almost always succeeds.
   const needsHires = isFrontPost && postMediaResolved && !postImage && !postVideoSource;
-  const creativeId = creative?.creative?.id ?? null;
-  const hiresQuery = useHiresThumbnail(creativeId, isOpen && needsHires, 600);
+  const hiresQuery = useHiresThumbnail(creative?.creative?.id ?? null, isOpen && needsHires, 600);
   const hiresUrl = hiresQuery.data?.thumbnail_url ?? null;
   const hiresResolved = !needsHires || (!hiresQuery.isLoading && !hiresQuery.isPending);
 
@@ -234,6 +257,8 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
             previewImage={previewImage ?? null}
             hiResFailed={hiResFailed}
             thumb={thumb ?? null}
+            imgError={imgError}
+            onImgError={() => setImgError(true)}
             postUrl={postUrl}
             postPlatform={postPlatform}
           />
@@ -279,6 +304,11 @@ interface MediaBlockProps {
   previewImage: string | null;
   hiResFailed: boolean;
   thumb: string | null;
+  /** True once a child `<img>` has reported onError — switches the
+   * render to a text-only fallback. Parent resets this state when
+   * a different creative is opened. */
+  imgError: boolean;
+  onImgError: () => void;
   postUrl: string | null;
   postPlatform: "Facebook" | "Instagram" | null;
 }
@@ -299,9 +329,66 @@ function MediaBlock(props: MediaBlockProps) {
     previewImage,
     hiResFailed,
     thumb,
+    imgError,
+    onImgError,
     postUrl,
     postPlatform,
   } = props;
+
+  // Shared text-only fallback for "we tried, image didn't load,
+  // go see the real thing". Used in two places:
+  //   1. Front-stage post whose `<img>` reported onError — most
+  //      commonly a FB boosted-video post where FB's thumbnail_url
+  //      renders as a black first-frame or returns 403 on an
+  //      expired signed CDN URL.
+  //   2. Last-resort placeholder when the entire fallback chain
+  //      yielded no usable media at all.
+  const renderTextFallback = (message: string) => (
+    <div className="flex min-h-[240px] w-full flex-col items-center justify-center gap-3 rounded-lg border border-border bg-bg px-6 text-center">
+      <svg
+        width="32"
+        height="32"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="text-gray-300"
+        aria-hidden="true"
+      >
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <circle cx="8.5" cy="8.5" r="1.5" />
+        <polyline points="21 15 16 10 5 21" />
+      </svg>
+      <div className="text-[13px] leading-relaxed text-gray-500">{message}</div>
+      {postUrl && postPlatform && (
+        <a
+          href={postUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1 inline-flex items-center gap-1.5 rounded-pill border-[1.5px] border-orange bg-white px-4 py-1.5 text-[12px] font-semibold text-orange transition hover:bg-orange-bg active:scale-[0.98]"
+        >
+          在 {postPlatform} 查看原始貼文
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+        </a>
+      )}
+    </div>
+  );
 
   if (videoId) {
     if (videoQueryLoading) {
@@ -326,12 +413,16 @@ function MediaBlock(props: MediaBlockProps) {
         </video>
       );
     }
+    if (imgError) {
+      return renderTextFallback("無法載入預覽");
+    }
     return (
       <img
         src={videoPoster ?? ""}
         alt={creativeName}
         loading="lazy"
         decoding="async"
+        onError={onImgError}
         className="max-h-[70vh] w-full rounded-lg border border-border object-contain"
       />
     );
@@ -363,24 +454,39 @@ function MediaBlock(props: MediaBlockProps) {
     );
   }
 
-  // Front-stage post, both hi-res paths exhausted, but we still have
-  // the tiny 120px row icon. Render it filling the 520px modal,
-  // knowingly blurry, and overlay a dark scrim with a centered CTA
-  // that sends the user to the organic post for the real thing.
+  // Image load previously failed — skip straight to the text
+  // fallback instead of re-rendering the broken image. Without
+  // this, `<img onError>` would fire, we'd set state, then re-
+  // render the img tag pointing at the same URL, which would
+  // fire onError again in an endless loop on some browsers.
+  if (imgError && isFrontPost) {
+    return renderTextFallback(
+      postPlatform === "Facebook"
+        ? "這則廣告是前台貼文,預覽圖在此無法載入。點下方按鈕到 Facebook 查看原圖或影片。"
+        : "這則廣告是前台貼文,預覽圖在此無法載入。點下方按鈕到原始貼文查看。",
+    );
+  }
+
+  // Front-stage post, both hi-res paths exhausted, but we still
+  // have the tiny 120px row icon. Render it filling the modal
+  // with a soft warm-white bg (NOT black — broken images on a
+  // black background look totally broken) and a blur so the
+  // pixelation reads as intentional. The CTA overlay points the
+  // user to the original post for the real thing.
   if (hiResFailed && thumb && postUrl && postPlatform) {
     return (
-      <div className="relative w-full overflow-hidden rounded-lg border border-border bg-black">
+      <div className="relative w-full overflow-hidden rounded-lg border border-border bg-bg">
         <img
           src={thumb}
           alt={creativeName}
           loading="lazy"
           decoding="async"
+          onError={onImgError}
           // filter: blur softens the pixelation from stretching 120px
-          // to 520px so the overlay still looks intentional instead
-          // of broken.
+          // to 520px so the overlay still looks intentional.
           className="block max-h-[70vh] w-full object-contain blur-[1.5px]"
         />
-        <div className="absolute inset-0 flex items-center justify-center bg-black/45">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/35">
           <a
             href={postUrl}
             target="_blank"
@@ -416,6 +522,7 @@ function MediaBlock(props: MediaBlockProps) {
         alt={creativeName}
         loading="lazy"
         decoding="async"
+        onError={onImgError}
         className="max-h-[70vh] w-full rounded-lg border border-border object-contain"
       />
     );

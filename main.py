@@ -269,15 +269,61 @@ def _cache_invalidate(*, account_id: Optional[str] = None, entity_id: Optional[s
     return len(to_drop)
 
 
-# Per-method httpx timeouts. GETs drive the dashboard UX and should
-# fail fast (10s) so a slow FB account doesn't freeze the page.
-# Mutations (POSTs for status / budget / quick-launch) tolerate the
-# old 30s budget because FB's write path occasionally lags.
-_GET_TIMEOUT = 10.0
+# Per-method httpx timeouts.
+#
+# FAST — for single-entity lookups where a human is waiting (video
+# source, page info, creative hires thumbnail). Fails in 10s so a
+# slow response doesn't freeze the preview modal open.
+#
+# BULK — for the heavy fan-out endpoints (`/api/overview` hitting
+# 80 accounts in parallel, `/api/accounts` enumerating adaccounts).
+# FB's insights endpoint for a large account routinely takes 5-15s
+# under load; pair that with ~160 concurrent requests during a
+# cold page-load and the FB side starts throttling, which pushes
+# the slowest tail into the 10-20s range. 20s here keeps slow
+# accounts from being intermittently mislabeled as "errored".
+#
+# POST — mutations tolerate the old 30s budget because FB's write
+# path occasionally lags.
+_GET_TIMEOUT_FAST = 10.0
+_GET_TIMEOUT_BULK = 20.0
 _POST_TIMEOUT = 30.0
 
+# How many times to retry a transient FB failure before surfacing
+# the error to the client. 1 extra attempt doubles the latency
+# ceiling in the worst case but hugely improves success rate for
+# the "sometimes works, sometimes doesn't" category of errors
+# (429 rate-limited, 5xx upstream blip, connection reset, timeout).
+_FB_MAX_RETRIES = 1
+_FB_RETRY_DELAY_S = 0.5
 
-async def _fb_request(method: str, path: str, params: Optional[dict] = None, data_payload: Optional[dict] = None) -> dict:
+
+def _is_transient_fb_error(exc: HTTPException) -> bool:
+    """Heuristic for "worth retrying once" FB failures.
+
+    We retry on:
+      - 429  rate-limited
+      - 500  upstream internal error
+      - 502  bad gateway (our own "can't reach FB" wrapper code)
+      - 503  service unavailable
+      - 504  gateway timeout (includes the httpx TimeoutException wrap)
+
+    We do NOT retry on 400 — that's usually a real FB API rejection
+    (bad field, permission denied, unknown objective) that won't
+    get better on a retry and would just double the wait for the
+    user. Same for 401 (token expired) and 404 (entity gone).
+    """
+    return exc.status_code in (429, 500, 502, 503, 504)
+
+
+async def _fb_request(
+    method: str,
+    path: str,
+    params: Optional[dict] = None,
+    data_payload: Optional[dict] = None,
+    *,
+    slow_ok: bool = False,
+) -> dict:
     """Send a request to FB Graph API and convert ALL failure modes to HTTPException
     with a JSON body so the frontend can always parse and display the error.
 
@@ -290,6 +336,13 @@ async def _fb_request(method: str, path: str, params: Optional[dict] = None, dat
     per-key lock and re-read the cache once it's populated. This
     prevents N×N stampede on `/api/accounts` and `/api/overview`
     when users open multiple tabs at once.
+
+    ``slow_ok=True`` switches to the bulk 20s timeout — used by
+    heavy fan-out call sites (``_fetch_account_insights``,
+    ``_fetch_campaigns_for_account``) where FB's upstream latency
+    routinely exceeds 10s during cold-load bursts. Single-entity
+    lookups (video source, page info, hires thumbnail) leave the
+    default 10s to fail fast.
     """
     if params is None:
         params = {}
@@ -298,6 +351,8 @@ async def _fb_request(method: str, path: str, params: Optional[dict] = None, dat
     token = get_token()
     if not token:
         raise HTTPException(status_code=401, detail="Facebook access token not set. Please log in.")
+
+    get_timeout = _GET_TIMEOUT_BULK if slow_ok else _GET_TIMEOUT_FAST
 
     # Cache lookup for GET only (POSTs are mutations, never cached)
     cache_key: Optional[str] = None
@@ -318,13 +373,53 @@ async def _fb_request(method: str, path: str, params: Optional[dict] = None, dat
             cached = _cache_get(cache_key)
             if cached is not None:
                 return cached
-            return await _fb_fetch_and_cache(
-                method, path, params, data_payload, token, cache_key
+            return await _fb_fetch_with_retry(
+                method, path, params, data_payload, token, cache_key, get_timeout
             )
 
-    return await _fb_fetch_and_cache(
-        method, path, params, data_payload, token, cache_key
+    return await _fb_fetch_with_retry(
+        method, path, params, data_payload, token, cache_key, get_timeout
     )
+
+
+async def _fb_fetch_with_retry(
+    method: str,
+    path: str,
+    params: dict,
+    data_payload: dict,
+    token: str,
+    cache_key: Optional[str],
+    get_timeout: float,
+) -> dict:
+    """Wrap :func:`_fb_fetch_and_cache` with a single retry on
+    transient upstream errors (429 / 5xx / network timeout / connect
+    reset). Dashboard fan-out endpoints routinely see 1-2% of calls
+    blip on the FB side; retrying after a 500ms backoff recovers
+    almost all of them and turns the "sometimes works, sometimes
+    doesn't" complaint into something that just works.
+
+    The retry is BEST-EFFORT: if the second attempt also fails we
+    surface the LATER error so callers see the most recent state.
+    """
+    last_exc: Optional[HTTPException] = None
+    for attempt in range(_FB_MAX_RETRIES + 1):
+        try:
+            return await _fb_fetch_and_cache(
+                method, path, params, data_payload, token, cache_key, get_timeout
+            )
+        except HTTPException as e:
+            last_exc = e
+            if attempt >= _FB_MAX_RETRIES or not _is_transient_fb_error(e):
+                raise
+            print(
+                f"[fb] transient {e.status_code} on {path} "
+                f"(attempt {attempt + 1}/{_FB_MAX_RETRIES + 1}): {e.detail}",
+                flush=True,
+            )
+            await asyncio.sleep(_FB_RETRY_DELAY_S)
+    # Unreachable: the loop either returns or raises, but mypy / lint
+    # likes an explicit exit.
+    raise last_exc if last_exc else HTTPException(status_code=500, detail="fb retry exhausted")
 
 
 async def _fb_fetch_and_cache(
@@ -334,6 +429,7 @@ async def _fb_fetch_and_cache(
     data_payload: dict,
     token: str,
     cache_key: Optional[str],
+    get_timeout: float = _GET_TIMEOUT_FAST,
 ) -> dict:
     """Inner FB call — issues the actual httpx request, handles the
     usual error pathways, and writes the result to the cache when
@@ -343,7 +439,7 @@ async def _fb_fetch_and_cache(
     try:
         if method == "GET":
             params = {"access_token": token, **params}
-            r = await _http_client.get(url, params=params, timeout=_GET_TIMEOUT)
+            r = await _http_client.get(url, params=params, timeout=get_timeout)
         else:
             data_payload = {"access_token": token, **data_payload}
             r = await _http_client.post(url, data=data_payload, timeout=_POST_TIMEOUT)
@@ -373,8 +469,8 @@ async def _fb_fetch_and_cache(
     return body
 
 
-async def fb_get(path: str, params: Optional[dict] = None) -> dict:
-    return await _fb_request("GET", path, params=params)
+async def fb_get(path: str, params: Optional[dict] = None, *, slow_ok: bool = False) -> dict:
+    return await _fb_request("GET", path, params=params, slow_ok=slow_ok)
 
 
 async def fb_post(
@@ -436,27 +532,71 @@ async def fb_get_paginated(path: str, params: Optional[dict] = None) -> List[dic
 async def _fb_get_paginated_fetch(
     path: str, params: dict, token: str, cache_key: str
 ) -> List[dict]:
+    """Walk FB paging.next until exhausted. Per-page GETs use the
+    **bulk** timeout (20s) because this function backs the heavy
+    `/api/accounts` and `/api/accounts/{id}/campaigns` endpoints
+    where slow FB responses were intermittently tripping the
+    tighter 10s budget. Each page is also retried once on
+    transient (5xx / 429 / timeout / connection) failures.
+    """
     items: List[dict] = []
     next_url: Optional[str] = f"{BASE_URL}/{path}"
     page_params = {"access_token": token, **params}
     while next_url:
-        try:
-            r = await _http_client.get(next_url, params=page_params, timeout=_GET_TIMEOUT)
-        except httpx.TimeoutException as e:
-            raise HTTPException(status_code=504, detail=f"Facebook API timeout: {e}")
-        except httpx.RequestError as e:
-            raise HTTPException(status_code=502, detail=f"Cannot reach Facebook API: {type(e).__name__}: {e}")
-        try:
-            data = r.json()
-        except Exception:
-            snippet = (r.text or "")[:300]
-            raise HTTPException(status_code=502, detail=f"Facebook API returned non-JSON (HTTP {r.status_code}): {snippet}")
-        if isinstance(data, dict) and "error" in data:
-            err = data["error"] if isinstance(data["error"], dict) else {}
-            msg = err.get("message", "Facebook API error")
-            code = err.get("code")
-            detail = f"{msg} [code={code}]" if code else msg
-            raise HTTPException(status_code=400, detail=detail)
+        data: Optional[dict] = None
+        last_exc: Optional[HTTPException] = None
+        for attempt in range(_FB_MAX_RETRIES + 1):
+            try:
+                r = await _http_client.get(
+                    next_url, params=page_params, timeout=_GET_TIMEOUT_BULK
+                )
+            except httpx.TimeoutException as e:
+                last_exc = HTTPException(status_code=504, detail=f"Facebook API timeout: {e}")
+            except httpx.RequestError as e:
+                last_exc = HTTPException(
+                    status_code=502,
+                    detail=f"Cannot reach Facebook API: {type(e).__name__}: {e}",
+                )
+            else:
+                try:
+                    data = r.json()
+                except Exception:
+                    snippet = (r.text or "")[:300]
+                    last_exc = HTTPException(
+                        status_code=502,
+                        detail=f"Facebook API returned non-JSON (HTTP {r.status_code}): {snippet}",
+                    )
+                    data = None
+                if data is not None and isinstance(data, dict) and "error" in data:
+                    err = data["error"] if isinstance(data["error"], dict) else {}
+                    msg = err.get("message", "Facebook API error")
+                    code = err.get("code")
+                    # Code 4 / 17 / 32 / 613 are FB rate-limit codes — treat
+                    # as transient so we retry once.
+                    transient_fb_codes = {4, 17, 32, 613}
+                    http_status = 429 if code in transient_fb_codes else 400
+                    last_exc = HTTPException(
+                        status_code=http_status,
+                        detail=f"{msg} [code={code}]" if code else msg,
+                    )
+                    data = None
+            if data is not None:
+                last_exc = None
+                break  # success, stop retrying
+            # Decide whether to retry this failure
+            if last_exc is None or not _is_transient_fb_error(last_exc):
+                break
+            if attempt >= _FB_MAX_RETRIES:
+                break
+            print(
+                f"[fb paged] transient {last_exc.status_code} on {path} "
+                f"(attempt {attempt + 1}/{_FB_MAX_RETRIES + 1}): {last_exc.detail}",
+                flush=True,
+            )
+            await asyncio.sleep(_FB_RETRY_DELAY_S)
+        if last_exc is not None:
+            raise last_exc
+        assert data is not None
         items.extend(data.get("data", []))
         next_url = data.get("paging", {}).get("next")
         page_params = {}  # next_url already contains all params
@@ -998,6 +1138,12 @@ async def _fetch_account_insights(
     (``{"data": [...], "paging": {...}}``) so callers can pluck the
     first entry or keep the full shape. Shared by the per-account
     route and the batch ``/api/overview`` endpoint.
+
+    ``slow_ok=True`` because FB's insights endpoint for a large
+    account is one of the slowest fan-out paths in the dashboard:
+    under parallel load during a cold page-load it routinely
+    takes 10-15s before returning, which was pushing the old 10s
+    GET timeout into "sometimes works, sometimes doesn't" territory.
     """
     params = {
         "fields": "spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions",
@@ -1006,7 +1152,7 @@ async def _fetch_account_insights(
         params["time_range"] = time_range
     else:
         params["date_preset"] = date_preset
-    return await fb_get(f"{account_id}/insights", params)
+    return await fb_get(f"{account_id}/insights", params, slow_ok=True)
 
 
 @app.get("/api/accounts/{account_id}/insights")
