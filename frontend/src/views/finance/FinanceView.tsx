@@ -161,71 +161,74 @@ export function FinanceView() {
           />
         </div>
 
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-white px-3 py-2.5 md:gap-2.5 md:px-5">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.currentTarget.value)}
-              placeholder="搜尋活動名稱..."
-              className="h-10 min-w-[140px] flex-1 rounded-lg border-[1.5px] border-border px-3 text-[13px] outline-none focus:border-orange md:h-8 md:px-2.5"
-            />
-            <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-gray-500">
+        <div className="flex flex-1 flex-col overflow-hidden p-3 md:p-4">
+          {/* Rounded card wrap — same pattern as the Dashboard
+              tree: transparent body bg so the area below the last
+              row (when the table is shorter than the card) shows
+              the page warm-white through the card border instead
+              of a stark white block. Toolbar inside carries its
+              own bg-white so the top band still reads as a header. */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-t-2xl border-b border-border bg-white px-3 py-2.5 md:gap-2.5 md:px-5">
               <input
-                type="checkbox"
-                className="custom-cb"
-                checked={hideZero}
-                onChange={(e) => setHideZero(e.currentTarget.checked)}
+                value={search}
+                onChange={(e) => setSearch(e.currentTarget.value)}
+                placeholder="搜尋活動名稱..."
+                className="h-10 min-w-[140px] flex-1 rounded-lg border-[1.5px] border-border px-3 text-[13px] outline-none focus:border-orange md:h-8 md:px-2.5"
               />
-              有花費
-            </label>
-            <div className="flex items-center gap-1">
-              <span className="whitespace-nowrap text-xs text-gray-500">月%</span>
-              <input
-                type="number"
-                value={defaultMarkup}
-                min={0}
-                max={100}
-                step={0.5}
-                onChange={(e) => {
-                  const v = Number.parseFloat(e.currentTarget.value);
-                  if (!Number.isNaN(v)) setDefaultMarkup(v);
-                }}
-                className="h-10 w-[58px] rounded-lg border-[1.5px] border-border px-1 text-center text-[13px] md:h-8 md:w-[54px]"
-              />
+              <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-gray-500">
+                <input
+                  type="checkbox"
+                  className="custom-cb"
+                  checked={hideZero}
+                  onChange={(e) => setHideZero(e.currentTarget.checked)}
+                />
+                有花費
+              </label>
+              <div className="flex items-center gap-1">
+                <span className="whitespace-nowrap text-xs text-gray-500">月%</span>
+                <input
+                  type="number"
+                  value={defaultMarkup}
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  onChange={(e) => {
+                    const v = Number.parseFloat(e.currentTarget.value);
+                    if (!Number.isNaN(v)) setDefaultMarkup(v);
+                  }}
+                  className="h-10 w-[58px] rounded-lg border-[1.5px] border-border px-1 text-center text-[13px] md:h-8 md:w-[54px]"
+                />
+              </div>
             </div>
-          </div>
 
-          {Object.keys(overview.errors).length > 0 && (
-            <div className="border-b border-red-bg bg-red-bg/40 px-4 py-2.5 text-[12px] text-red">
-              <div className="font-semibold">部分帳戶載入失敗：</div>
-              {Object.entries(overview.errors).map(([acctId, msg]) => {
-                const name = visible.find((a) => a.id === acctId)?.name ?? acctId;
-                return (
-                  <div key={acctId} className="mt-0.5 break-all">
-                    <span className="font-medium">{name}</span>: {msg}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {/* Explicit bg-bg on the scroll container so the area
-              BELOW the last row of the finance table (when the
-              table is shorter than the viewport) shows the warm-
-              white page bg instead of a stark white block. Matches
-              the Dashboard tree card's transparent-bg trick. */}
-          <div className="min-h-0 flex-1 overflow-auto bg-bg">
-            {visible.length === 0 ? (
-              <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
-            ) : overview.isLoading ? (
-              <LoadingState title="載入財務資料中..." />
-            ) : (
-              <FinanceTable
-                campaigns={tableCampaigns}
-                multiAcct={selectedId === null}
-                search={search}
-                hideZero={hideZero}
-              />
+            {Object.keys(overview.errors).length > 0 && (
+              <div className="border-b border-red-bg bg-red-bg/40 px-4 py-2.5 text-[12px] text-red">
+                <div className="font-semibold">部分帳戶載入失敗：</div>
+                {Object.entries(overview.errors).map(([acctId, msg]) => {
+                  const name = visible.find((a) => a.id === acctId)?.name ?? acctId;
+                  return (
+                    <div key={acctId} className="mt-0.5 break-all">
+                      <span className="font-medium">{name}</span>: {msg}
+                    </div>
+                  );
+                })}
+              </div>
             )}
+            <div className="min-h-0 flex-1 overflow-auto">
+              {visible.length === 0 ? (
+                <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
+              ) : overview.isLoading ? (
+                <LoadingState title="載入財務資料中..." />
+              ) : (
+                <FinanceTable
+                  campaigns={tableCampaigns}
+                  multiAcct={selectedId === null}
+                  search={search}
+                  hideZero={hideZero}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
