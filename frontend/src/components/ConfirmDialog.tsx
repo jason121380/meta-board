@@ -79,6 +79,12 @@ export function ConfirmDialogHost() {
         if (!v) _close(false);
       }}
       width={320}
+      // No X close button in the header — the 取消 button is the
+      // explicit cancel affordance, and the modal still dismisses
+      // on Esc + backdrop tap. Hiding the header row also means
+      // the body content (title + icon + message + buttons) is
+      // truly vertically centered inside the modal box.
+      hideClose
     >
       <div className="flex flex-col items-center text-center">
         <h3 className="mb-3 text-[15px] font-bold text-ink md:text-base">{title}</h3>

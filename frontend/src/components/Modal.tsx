@@ -23,6 +23,13 @@ export interface ModalProps {
    * call-to-action that belongs to the entire modal (e.g. the
    * creative preview modal's "view original post" link). */
   titleAction?: ReactNode;
+  /** When true, omit the X close button AND the entire sticky
+   * header row (assuming there's also no title / subtitle / action).
+   * Used by the centered confirmation dialog so the body content
+   * is visually balanced top-to-bottom — having an X close at the
+   * top would push everything downward.  Backdrop tap and Esc
+   * still close the dialog. */
+  hideClose?: boolean;
   children?: ReactNode;
   footer?: ReactNode;
   width?: number | string;
@@ -35,11 +42,16 @@ export function Modal({
   title,
   subtitle,
   titleAction,
+  hideClose,
   children,
   footer,
   width = 360,
   className,
 }: ModalProps) {
+  // Skip the entire sticky header row when there's nothing to show
+  // in it. Radix still requires a Dialog.Title for a11y, so we
+  // render one in sr-only form alongside the body.
+  const showHeader = title || subtitle || titleAction || !hideClose;
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -66,60 +78,76 @@ export function Modal({
             className,
           )}
         >
-          {/* Sticky header — title on the left, always-visible close X
-              on the right. Stays pinned to the top of the scrollable
-              area when body content is taller than the viewport, so
-              the X never scrolls away. Without this, tall preview
-              modals (e.g. 3rd-level ad creative with long body text)
-              trapped mobile users because the backdrop-tap gesture
-              isn't obvious and there was no reachable close. */}
-          <div className="sticky top-0 z-10 flex items-center gap-2 bg-white px-5 pt-5 md:px-6 md:pt-6">
-            <div className="min-w-0 flex-1">
-              {title ? (
-                <Dialog.Title className="mb-1 text-[15px] font-bold text-ink md:text-base">
-                  {title}
-                </Dialog.Title>
-              ) : (
-                // Radix Dialog requires Dialog.Title for a11y — if
-                // the caller didn't pass a visible title, we still
-                // render one in sr-only form so the screen-reader
-                // announcement works and Radix stays quiet.
-                <Dialog.Title className="sr-only">對話視窗</Dialog.Title>
-              )}
-              {/* Always render a Description so Radix's a11y warning
-                  stays quiet. When no subtitle is supplied, the
-                  description is sr-only and just echoes the title
-                  for screen readers. */}
-              {subtitle ? (
-                <Dialog.Description className="text-xs text-gray-500">
-                  {subtitle}
-                </Dialog.Description>
-              ) : (
-                <Dialog.Description className="sr-only">{title ?? "對話視窗"}</Dialog.Description>
+          {/* Radix Dialog REQUIRES Dialog.Title and Dialog.Description
+              for a11y, even when we don't render them visibly. The
+              sr-only fallbacks here keep screen-reader announcements
+              correct in both header-on and header-hidden modes. */}
+          {!showHeader && (
+            <>
+              <Dialog.Title className="sr-only">對話視窗</Dialog.Title>
+              <Dialog.Description className="sr-only">對話視窗</Dialog.Description>
+            </>
+          )}
+          {/* Sticky header — title on the left, optional title-action
+              + close X on the right. Stays pinned to the top of the
+              scrollable area when body content is taller than the
+              viewport. Skipped entirely when `hideClose` is set and
+              there's no title / subtitle / action to render — this
+              is what the centered ConfirmDialog uses so the body
+              content is balanced top-to-bottom. */}
+          {showHeader && (
+            <div className="sticky top-0 z-10 flex items-center gap-2 bg-white px-5 pt-5 md:px-6 md:pt-6">
+              <div className="min-w-0 flex-1">
+                {title ? (
+                  <Dialog.Title className="mb-1 text-[15px] font-bold text-ink md:text-base">
+                    {title}
+                  </Dialog.Title>
+                ) : (
+                  <Dialog.Title className="sr-only">對話視窗</Dialog.Title>
+                )}
+                {subtitle ? (
+                  <Dialog.Description className="text-xs text-gray-500">
+                    {subtitle}
+                  </Dialog.Description>
+                ) : (
+                  <Dialog.Description className="sr-only">{title ?? "對話視窗"}</Dialog.Description>
+                )}
+              </div>
+              {titleAction && <div className="shrink-0">{titleAction}</div>}
+              {!hideClose && (
+                <Dialog.Close
+                  aria-label="關閉"
+                  className="-mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-bg hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange/40 md:-mr-3"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </Dialog.Close>
               )}
             </div>
-            {titleAction && <div className="shrink-0">{titleAction}</div>}
-            <Dialog.Close
-              aria-label="關閉"
-              className="-mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-bg hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange/40 md:-mr-3"
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </Dialog.Close>
-          </div>
-          <div className="px-5 pb-5 pt-4 md:px-6 md:pb-6">
+          )}
+          <div
+            className={cn(
+              "px-5 pb-5 md:px-6 md:pb-6",
+              // When the header is rendered, the body sits below it
+              // and only needs a small top gap. When the header is
+              // hidden, the body uses the full top padding so the
+              // first row of content has equal breathing room top
+              // and bottom.
+              showHeader ? "pt-4" : "pt-5 md:pt-6",
+            )}
+          >
             {children}
             {footer && <div className="mt-4 flex justify-end gap-2">{footer}</div>}
           </div>

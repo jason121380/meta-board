@@ -183,13 +183,23 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
           })
         )}
         {visible.length > 0 && (
+          // Totals row — matches the Dashboard tree's totals row
+          // visually: same border-t-2 + bg-bg, same px-3.5 py-2.5
+          // padding (≈ 32px row height), same 13px bold ink. Only
+          // the 花費+% cell keeps the orange tint to flag it as
+          // the "marked-up" computed column.
           <tr className="border-t-2 border-border-strong bg-bg">
-            <td colSpan={multiAcct ? 4 : 3} className="px-3 py-1 text-[13px] font-bold text-ink">
+            <td
+              colSpan={multiAcct ? 4 : 3}
+              className="px-3.5 py-2.5 text-[13px] font-bold text-ink"
+            >
               合計
             </td>
-            <td className="px-3 py-1 text-[13px] font-bold tabular-nums">${fM(spendSum)}</td>
+            <td className="px-3.5 py-2.5 text-[13px] font-bold tabular-nums text-ink">
+              ${fM(spendSum)}
+            </td>
             <td />
-            <td className="px-3 py-1 text-right text-[13px] font-bold tabular-nums text-orange">
+            <td className="px-3.5 py-2.5 text-right text-[13px] font-bold tabular-nums text-orange">
               ${fM(plusSum)}
             </td>
             <td />
