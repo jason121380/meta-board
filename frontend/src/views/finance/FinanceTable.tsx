@@ -110,7 +110,11 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
               <tr
                 key={camp.id}
                 className={cn(
-                  "border-b border-border",
+                  // Explicit bg-white on data rows so the scroll
+                  // container's transparent bg (set up by FinanceView
+                  // for the card wrap trick) doesn't bleed through
+                  // and make rows look warm-white.
+                  "border-b border-border bg-white",
                   isPinned && "border-l-[3px] border-l-orange bg-orange-bg",
                 )}
               >
