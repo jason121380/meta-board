@@ -31,7 +31,23 @@ import {
 const FB_APP_ID = "2780372365654462";
 const FB_API_VERSION = "v21.0";
 const FB_LOCALE = "zh_TW";
-const FB_SCOPES = "ads_read,ads_management,business_management";
+// Scopes requested at FB Login time.
+//
+// - ads_read / ads_management: read campaigns + insights + creatives,
+//   toggle status, update budgets. The core dashboard surface.
+// - business_management: read the `business` field on /me/adaccounts
+//   (needed for the FB Ads Manager deep-link URLs).
+// - pages_read_engagement: OPTIONAL — grants read access to page post
+//   content (full_picture, attachments.media.source). If the token
+//   actually receives this scope (app admins/devs get it
+//   automatically in dev mode; production users get it only after
+//   FB App Review), the `/api/posts/{id}/media` fallback for FB
+//   front-stage posts starts returning real CDN URLs, and users see
+//   sharp preview images instead of the "can't load preview" text
+//   fallback. When the scope is silently dropped by FB (app not
+//   reviewed + user has no app role), everything keeps working via
+//   the 600px creative-edge hires thumbnail + text-fallback path.
+const FB_SCOPES = "ads_read,ads_management,business_management,pages_read_engagement";
 
 declare global {
   interface Window {

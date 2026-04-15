@@ -13,9 +13,20 @@
 - API Version: `v21.0`
 - Token type: Long-lived user token (60 days), stored in `.env` as fallback
 - Runtime token: stored in `_runtime_token` (set via FB Login, overrides .env)
-- Required scopes: `ads_read`, `ads_management`, `business_management`
-- Note: `business` field on ad accounts requires `business_management` scope. The `.env` token may lack this — user re-logs via FB Login to get updated scopes.
-- **NOT included**: `pages_read_engagement` — which is why `/api/posts/{id}/media` and `/api/pages/{id}/info` almost always fail on front-stage posts. See the fallback chain in `CreativePreviewModal`.
+- Requested scopes (from `FB_SCOPES` in FbAuthProvider.tsx):
+  - `ads_read`, `ads_management` — read campaigns / insights / creatives, toggle status, edit budget
+  - `business_management` — read the `business` field on `/me/adaccounts` (needed for Ads Manager deep-link URLs)
+  - `pages_read_engagement` — **added 2026-04-15**. Optional; grants read access to page post content (`full_picture`, `attachments.media.source`). See the "Page post scope behavior matrix" below for what it does to `/api/posts/{id}/media` and `/api/pages/{id}/info`.
+
+### Page post scope behavior matrix
+
+| Who is logging in | FB grants the scope? | `/api/posts/{id}/media` works? | Result in CreativePreviewModal |
+|---|---|---|---|
+| App admin / dev / tester (app role assigned in FB dev portal) | **Yes** — dev mode grants unreviewed scopes to app roles | Yes — returns real post `full_picture` / video source | Sharp post image / playable video in the preview modal |
+| Regular production user (no app role), before FB App Review | No — FB silently drops unreviewed scopes | No — returns `{image_url: null, error: "..."}` | Falls back to the 600px hires creative thumbnail, then to text-only fallback with "view original post" CTA |
+| Regular production user, after FB App Review | Yes | Yes | Sharp post media |
+
+This means the scope is **safe to request even without review** — FB's behavior is to drop unknown/unreviewed scopes silently during login, not to fail. The app's existing fallback chain keeps working.
 
 ## Ad Accounts
 
