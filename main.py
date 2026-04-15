@@ -808,15 +808,19 @@ async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Opti
     oss_expanded = (
         "object_story_spec{video_data,link_data,photo_data,template_data}"
     )
+    # Note: ``creative{id,...}`` — we explicitly request the creative
+    # id so the frontend can hit /api/creatives/{id}/hires-thumbnail
+    # as a 600px fallback when /api/posts/{post_id}/media fails
+    # (typically when the token lacks pages_read_engagement).
     attempts = [
         # Tier 1: everything — image_url for sharp still preview,
         # expanded object_story_spec so we can classify inline vs
         # front-stage, plus the two permalink fields.
-        f"id,name,status,creative{{thumbnail_url,image_url,{oss_expanded},effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
+        f"id,name,status,creative{{id,thumbnail_url,image_url,{oss_expanded},effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
         # Tier 2: drop object_story_spec (some accounts reject it).
-        f"id,name,status,creative{{thumbnail_url,image_url,effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
+        f"id,name,status,creative{{id,thumbnail_url,image_url,effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
         # Tier 3: drop image_url.
-        f"id,name,status,creative{{thumbnail_url,effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
+        f"id,name,status,creative{{id,thumbnail_url,effective_object_story_id,instagram_permalink_url,title,body}},{ins}",
         f"id,name,status,{ins}",
         "id,name,status",
     ]
@@ -884,9 +888,14 @@ async def get_post_media(post_id: str):
       - ``attachments[0].media.source`` — playable video source
         (same kind of URL the /{video_id} edge would return)
 
-    Errors are swallowed into a ``{image_url: null, video_source: null}``
-    shape so a single unreachable post never blocks the modal from
-    rendering whatever it can (name, body, thumbnail fallback).
+    Errors are propagated back to the client as the ``error`` field
+    so the frontend can tell the user what went wrong (typically
+    "Insufficient permissions" — the default FB Login scopes don't
+    include ``pages_read_engagement``, which is required to read
+    arbitrary Page post content). The frontend then gracefully
+    falls back to the 600px creative thumbnail path and, if even
+    that fails, to a blurred thumbnail with a "view original post"
+    call-to-action.
     """
     try:
         data = await fb_get(
@@ -898,8 +907,12 @@ async def get_post_media(post_id: str):
                 )
             },
         )
-    except HTTPException:
-        return {"image_url": None, "video_source": None}
+    except HTTPException as exc:
+        # Pass the FB / Graph error detail back to the client so the
+        # modal can decide what to fall back to and (optionally) show
+        # a diagnostic. DON'T 500 the endpoint — a failed post fetch
+        # is expected behavior when the token lacks pages_read_engagement.
+        return {"image_url": None, "video_source": None, "error": str(exc.detail)}
 
     image_url: Optional[str] = None
     video_source: Optional[str] = None
@@ -930,7 +943,45 @@ async def get_post_media(post_id: str):
         if isinstance(fp, str) and fp:
             image_url = fp
 
-    return {"image_url": image_url, "video_source": video_source}
+    return {"image_url": image_url, "video_source": video_source, "error": None}
+
+
+@app.get("/api/creatives/{creative_id}/hires-thumbnail")
+async def get_creative_hires_thumbnail(creative_id: str, size: int = 600):
+    """Return a larger-dimension server-rendered thumbnail for a single
+    ``AdCreative`` via the FB-documented ``thumbnail_width`` /
+    ``thumbnail_height`` params.
+
+    These params are honored when you hit the creative edge directly
+    (``/{creative_id}``) but NOT when you request ``thumbnail_url``
+    through field expansion on the ad edge (that's why
+    ``main.py:get_ads`` only gets a compressed ~120px icon).
+
+    This endpoint is the graceful-degradation fallback for the
+    preview modal when ``get_post_media`` fails (e.g. token lacks
+    ``pages_read_engagement`` so we can't read the underlying post).
+    The 600px version is **still a server-side preview**, not the
+    original CDN source — so it can still look soft on large
+    displays — but it's ~25× larger than the 120px row icon and
+    usually looks fine at modal scale.
+
+    ``size`` clamps to the 120..1080 range to keep pathological
+    callers from hammering FB with enormous renders.
+    """
+    clamped = max(120, min(1080, int(size)))
+    try:
+        data = await fb_get(
+            creative_id,
+            {
+                "fields": "thumbnail_url",
+                "thumbnail_width": str(clamped),
+                "thumbnail_height": str(clamped),
+            },
+        )
+    except HTTPException as exc:
+        return {"thumbnail_url": None, "error": str(exc.detail)}
+    url = data.get("thumbnail_url") if isinstance(data, dict) else None
+    return {"thumbnail_url": url if isinstance(url, str) and url else None, "error": None}
 
 
 @app.get("/api/pages/{page_id}/info")
@@ -943,22 +994,27 @@ async def get_page_info(page_id: str):
     when the modal opens and the creative has an
     ``effective_object_story_id`` to extract the page id from.
 
-    Returns ``{"name": str | None, "picture_url": str | None}``.
-    Errors are swallowed into null values so a single unreachable
-    page never blocks the preview from rendering the image and body
-    text that we DO have.
+    Returns ``{"name": str | None, "picture_url": str | None, "error": str | None}``.
+    Errors are passed through to the client as the ``error`` field
+    (not raised as HTTP errors) so a single unreachable page never
+    blocks the preview from rendering the image and body text that
+    we DO have. Most commonly the error is "insufficient
+    permissions" — the default FB Login scopes
+    (``ads_read,ads_management,business_management``) don't include
+    ``pages_read_engagement`` which is what Graph requires to read
+    arbitrary Page metadata.
     """
     try:
         data = await fb_get(page_id, {"fields": "name,picture.width(80).height(80)"})
-    except HTTPException:
-        return {"name": None, "picture_url": None}
+    except HTTPException as exc:
+        return {"name": None, "picture_url": None, "error": str(exc.detail)}
     picture = data.get("picture")
     picture_url = None
     if isinstance(picture, dict):
         inner = picture.get("data")
         if isinstance(inner, dict):
             picture_url = inner.get("url")
-    return {"name": data.get("name"), "picture_url": picture_url}
+    return {"name": data.get("name"), "picture_url": picture_url, "error": None}
 
 
 @app.post("/api/ads/{ad_id}/status")

@@ -240,6 +240,16 @@ export const api = {
       request<FbBaseEntity>("POST", `/api/ads/${creativeId}/status`, {
         query: { status },
       }),
+    /** Request a larger-dimension server-rendered thumbnail for a
+     * single AdCreative. Used as a graceful fallback for the preview
+     * modal when the post-media path fails (typically due to missing
+     * pages_read_engagement on the user token). Typical size: 600px. */
+    hiresThumbnail: (creativeId: string, size = 600) =>
+      request<{ thumbnail_url: string | null; error: string | null }>(
+        "GET",
+        `/api/creatives/${creativeId}/hires-thumbnail`,
+        { query: { size: String(size) } },
+      ),
   },
 
   videos: {
@@ -252,24 +262,35 @@ export const api = {
   pages: {
     /** Fetch a FB Page's display name + profile picture URL. Used
      * by the creative preview modal to render a FB-post-style header
-     * row. Only called lazily when a preview modal opens. */
+     * row. Only called lazily when a preview modal opens.
+     *
+     * The backend returns ``error`` (not null on failure) so the
+     * frontend can surface e.g. "insufficient permissions" instead
+     * of silently showing a blank Page name. */
     info: (pageId: string) =>
-      request<{ name: string | null; picture_url: string | null }>(
-        "GET",
-        `/api/pages/${pageId}/info`,
-      ),
+      request<{
+        name: string | null;
+        picture_url: string | null;
+        error: string | null;
+      }>("GET", `/api/pages/${pageId}/info`),
   },
 
   posts: {
     /** Fetch the full-resolution image / video source from a FB page
      * post. Used by the creative preview modal for "front-stage" ads
      * that reuse an existing organic post — in that case the creative
-     * endpoint only returns a blurry thumbnail and no video handle. */
+     * endpoint only returns a blurry thumbnail and no video handle.
+     *
+     * The backend returns ``error`` (non-null when the fetch fails,
+     * e.g. missing pages_read_engagement) so the frontend can fall
+     * back to the hires thumbnail path and, ultimately, to a blurred
+     * thumbnail with a "view original" call-to-action. */
     media: (postId: string) =>
-      request<{ image_url: string | null; video_source: string | null }>(
-        "GET",
-        `/api/posts/${postId}/media`,
-      ),
+      request<{
+        image_url: string | null;
+        video_source: string | null;
+        error: string | null;
+      }>("GET", `/api/posts/${postId}/media`),
   },
 
   overview: {
