@@ -12,6 +12,7 @@ import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
 import { useUiStore } from "@/stores/uiStore";
 import type { FbCampaign } from "@/types/fb";
+import { memo } from "react";
 import { AdsetRow } from "./AdsetRow";
 import type { BudgetModalTarget } from "./BudgetModal";
 
@@ -31,8 +32,15 @@ export interface CampaignRowProps {
  * Budget column shows either daily_budget or lifetime_budget; if
  * neither is set we display a hint that the budget lives on the
  * adset level (matches legacy `budgetStr(camp, true)`).
+ *
+ * `React.memo`-wrapped at the bottom of this file. The parent
+ * `TreeTable` passes a stable `onOpenBudget` (wrapped in
+ * `useCallback` inside `DashboardView`), and `campaign` itself is
+ * the same object reference across renders while the cached
+ * overview data is unchanged — so the memo short-circuits row
+ * re-renders during sort / filter / unrelated expansion.
  */
-export function CampaignRow({
+function CampaignRowInner({
   campaign,
   index,
   multiAcct,
@@ -152,6 +160,8 @@ export function CampaignRow({
     </>
   );
 }
+
+export const CampaignRow = memo(CampaignRowInner);
 
 function CampaignAdsets({
   query,

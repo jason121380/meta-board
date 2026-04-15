@@ -1,6 +1,5 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
-import { useMultiAccountCampaigns } from "@/api/hooks/useMultiAccountCampaigns";
-import { useMultiAccountInsights } from "@/api/hooks/useMultiAccountInsights";
+import { useMultiAccountOverview } from "@/api/hooks/useMultiAccountOverview";
 import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
@@ -14,12 +13,21 @@ import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useMemo, useState } from "react";
 import { AccountPanel } from "./AccountPanel";
-import { BudgetModal, type BudgetModalTarget } from "./BudgetModal";
-import { ComparisonTable } from "./ComparisonTable";
+import type { BudgetModalTarget } from "./BudgetModal";
 import { StatsGrid } from "./StatsGrid";
 import { TreeTable } from "./TreeTable";
+
+// Heavier on-demand chunks: BudgetModal is only shown when the user
+// clicks the 預算 pill (maybe 5% of sessions). ComparisonTable only
+// renders when the 素材比較 checkbox is on (maybe 2% of sessions).
+// Lazy-loading them lets the Dashboard first-paint ship with a
+// smaller main-view chunk.
+const BudgetModal = lazy(() => import("./BudgetModal").then((m) => ({ default: m.BudgetModal })));
+const ComparisonTable = lazy(() =>
+  import("./ComparisonTable").then((m) => ({ default: m.ComparisonTable })),
+);
 
 /**
  * Dashboard view — the most complex view in the app. Composes:
@@ -27,7 +35,8 @@ import { TreeTable } from "./TreeTable";
  *   - <Topbar/>        (title + DatePicker + activeOnly toggle + refresh)
  *   - <StatsGrid/>     (12 KPI stats for the active account(s))
  *   - <TreeTable/>     (3-level campaign → adset → creative table)
- *   - <BudgetModal/>   (edit daily budget for a campaign or adset)
+ *   - <BudgetModal/>   (edit daily budget — lazy-loaded)
+ *   - <ComparisonTable/> (flat creative view — lazy-loaded)
  *
  * State sources:
  *   - useAccountsStore → which accounts are visible (Settings) and
@@ -35,12 +44,15 @@ import { TreeTable } from "./TreeTable";
  *   - useFiltersStore  → dashboard date config + "only with spend" toggle
  *   - useUiStore       → tree expand/collapse + sort (inside TreeTable)
  *
- * Server data:
- *   - useAccounts()              → list of FbAccount
- *   - useMultiAccountInsights()  → KPI stats
- *   - useMultiAccountCampaigns() → tree data (includes archived +
- *                                   archived-stripped fallback, per
- *                                   FastAPI main.py behavior)
+ * Server data: single batched `/api/overview` call via
+ * `useMultiAccountOverview`. Previously Dashboard fired
+ * `useMultiAccountInsights` + `useMultiAccountCampaigns` (2×N
+ * parallel queries — bottlenecked on the browser's 6-connection
+ * HTTP/1.1 limit). Moving to the overview endpoint consolidates
+ * to one request per visible-account set, matching Analytics /
+ * Alerts / Finance so all four views share the same cache entry
+ * when the account set + date are identical (tab-switching is
+ * instant).
  */
 export function DashboardView() {
   const queryClient = useQueryClient();
@@ -64,12 +76,8 @@ export function DashboardView() {
   const activeOnly = useFiltersStore((s) => s.activeOnly);
   const setActiveOnly = useFiltersStore((s) => s.setActiveOnly);
 
-  // Server data
-  const insights = useMultiAccountInsights(
-    activeAccounts.map((a) => a.id),
-    date,
-  );
-  const campaignsQuery = useMultiAccountCampaigns(activeAccounts, date, {
+  // Server data — single batched overview request
+  const overview = useMultiAccountOverview(activeAccounts, date, {
     includeArchived: true,
   });
 
@@ -78,19 +86,28 @@ export function DashboardView() {
   const [compareMode, setCompareMode] = useState(false);
   const [budgetTarget, setBudgetTarget] = useState<BudgetModalTarget | null>(null);
 
-  // Refresh → invalidate the cached queries for the selected accounts
+  // Stable handler for BudgetModal — passed down to every
+  // CampaignRow / AdsetRow so React.memo equality actually holds.
+  // Without useCallback, every parent render creates a new function
+  // reference and breaks the memo. See CampaignRow for the memo
+  // contract.
+  const openBudget = useCallback((target: BudgetModalTarget) => {
+    setBudgetTarget(target);
+  }, []);
+
+  // Refresh → invalidate the overview + per-adset creatives (other
+  // view caches share the overview key so they re-populate on demand)
   const onRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["campaigns"] });
-    queryClient.invalidateQueries({ queryKey: ["insights"] });
+    queryClient.invalidateQueries({ queryKey: ["overview"] });
     queryClient.invalidateQueries({ queryKey: ["adsets"] });
     queryClient.invalidateQueries({ queryKey: ["creatives"] });
   };
 
   // Filter campaigns by "only with spend" + account-scope
   const filteredCampaigns = useMemo(() => {
-    if (!activeOnly) return campaignsQuery.campaigns;
-    return campaignsQuery.campaigns.filter((c) => Number(getIns(c).spend) > 0);
-  }, [campaignsQuery.campaigns, activeOnly]);
+    if (!activeOnly) return overview.campaigns;
+    return overview.campaigns.filter((c) => Number(getIns(c).spend) > 0);
+  }, [overview.campaigns, activeOnly]);
 
   const multiAcct = activeAccounts.length > 1;
 
@@ -152,10 +169,7 @@ export function DashboardView() {
           <span className="hidden md:inline">
             <TopbarSeparator />
           </span>
-          <RefreshButton
-            isFetching={campaignsQuery.isFetching || insights.isFetching}
-            onClick={onRefresh}
-          />
+          <RefreshButton isFetching={overview.isFetching} onClick={onRefresh} />
         </div>
       </Topbar>
 
@@ -188,8 +202,8 @@ export function DashboardView() {
           {!statsCollapsed && (
             <StatsGrid
               accounts={activeAccounts}
-              insights={insights.data}
-              isLoading={insights.isLoading}
+              insights={overview.insights}
+              isLoading={overview.isLoading}
             />
           )}
 
@@ -229,13 +243,13 @@ export function DashboardView() {
                 有花費
               </label>
               <span className="whitespace-nowrap text-xs text-gray-500">
-                {campaignsQuery.isLoading ? "…" : `${filteredCampaigns.length} 個活動`}
+                {overview.isLoading ? "…" : `${filteredCampaigns.length} 個活動`}
               </span>
             </div>
-            {Object.keys(campaignsQuery.errors).length > 0 && (
+            {Object.keys(overview.errors).length > 0 && (
               <div className="border-b border-red-bg bg-red-bg/40 px-4 py-2.5 text-[12px] text-red">
                 <div className="font-semibold">部分帳戶載入失敗：</div>
-                {Object.entries(campaignsQuery.errors).map(([acctId, msg]) => {
+                {Object.entries(overview.errors).map(([acctId, msg]) => {
                   const name = activeAccounts.find((a) => a.id === acctId)?.name ?? acctId;
                   return (
                     <div key={acctId} className="mt-0.5 break-all">
@@ -248,20 +262,22 @@ export function DashboardView() {
             <div className="min-h-0 flex-1 overflow-auto">
               {activeAccounts.length === 0 ? (
                 <EmptyState>從左側選擇廣告帳戶</EmptyState>
-              ) : campaignsQuery.isLoading ? (
+              ) : overview.isLoading ? (
                 <LoadingState
                   title="載入行銷活動中..."
-                  loaded={campaignsQuery.loadedCount}
-                  total={campaignsQuery.totalCount}
+                  loaded={overview.loadedCount}
+                  total={overview.totalCount}
                 />
               ) : compareMode ? (
-                <ComparisonTable multiAcct={multiAcct} date={date} searchTerm={searchTerm} />
+                <Suspense fallback={<LoadingState title="載入比較檢視..." />}>
+                  <ComparisonTable multiAcct={multiAcct} date={date} searchTerm={searchTerm} />
+                </Suspense>
               ) : (
                 <TreeTable
                   campaigns={filteredCampaigns}
                   multiAcct={multiAcct}
                   date={date}
-                  onOpenBudget={setBudgetTarget}
+                  onOpenBudget={openBudget}
                   searchTerm={searchTerm}
                 />
               )}
@@ -270,11 +286,15 @@ export function DashboardView() {
         </div>
       </div>
 
-      <BudgetModal
-        open={!!budgetTarget}
-        target={budgetTarget}
-        onClose={() => setBudgetTarget(null)}
-      />
+      {budgetTarget !== null && (
+        <Suspense fallback={null}>
+          <BudgetModal
+            open={!!budgetTarget}
+            target={budgetTarget}
+            onClose={() => setBudgetTarget(null)}
+          />
+        </Suspense>
+      )}
     </>
   );
 }

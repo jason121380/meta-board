@@ -10,6 +10,7 @@ import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
 import { useUiStore } from "@/stores/uiStore";
 import type { FbAdset } from "@/types/fb";
+import { memo } from "react";
 import type { BudgetModalTarget } from "./BudgetModal";
 import { CreativeRow } from "./CreativeRow";
 
@@ -28,8 +29,13 @@ export interface AdsetRowProps {
  * call `useCreatives(adsetId, date, true)` which fires the lazy
  * query. React rules-of-hooks are respected because each AdsetRow is
  * its own component with a stable hook order.
+ *
+ * `React.memo`-wrapped at the bottom — the parent `CampaignRow`
+ * passes an `onOpenBudget` handler that's itself stabilised via
+ * `useCallback` in `DashboardView`, and the `adset` object stays
+ * identity-stable across renders from the React Query cache.
  */
-export function AdsetRow({ adset, multiAcct, colCount, date, onOpenBudget }: AdsetRowProps) {
+function AdsetRowInner({ adset, multiAcct, colCount, date, onOpenBudget }: AdsetRowProps) {
   const expanded = useUiStore((s) => s.expandedAdsets.includes(adset.id));
   const toggleAdset = useUiStore((s) => s.toggleAdset);
   const creativesQuery = useCreatives(adset.id, date, expanded);
@@ -117,6 +123,8 @@ export function AdsetRow({ adset, multiAcct, colCount, date, onOpenBudget }: Ads
     </>
   );
 }
+
+export const AdsetRow = memo(AdsetRowInner);
 
 function AdsetCreatives({
   query,

@@ -1,7 +1,8 @@
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
 from typing import Any, Optional, List
 import asyncio
@@ -46,6 +47,10 @@ DIST_DIR = Path(__file__).parent / "dist"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _http_client, _db_pool
+    # Per-request overrides in _fb_fetch_and_cache set the real
+    # timeout (10s for GET, 30s for POST). This client-level value
+    # is just a safety ceiling for any code path that slips through
+    # without an explicit override.
     _http_client = httpx.AsyncClient(timeout=30)
     # Connect to PostgreSQL if configured
     if DATABASE_URL:
@@ -79,6 +84,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Gzip EVERY response >500 bytes for clients that send Accept-Encoding:
+# gzip. The legacy dashboard.html is ~212KB uncompressed but only ~60KB
+# gzipped, and every FB API JSON response compresses roughly 4-5×.
+# level=6 is the httpx / nginx default — best size/CPU balance.
+app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
+
 # Serve legacy static files (PWA manifest, service worker, icons) — used
 # only when the React build dist/ is not present (transitional fallback).
 if STATIC_DIR.exists():
@@ -92,6 +103,37 @@ _REACT_ASSETS_PRESENT = (DIST_DIR / "assets").exists()
 
 if _REACT_ASSETS_PRESENT:
     app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")
+
+
+# ── Startup-cached HTML / PWA assets ────────────────────────────────
+#
+# Previously `_react_index()` / `_legacy_index()` called `.read_text()`
+# on every single GET to `/` and to the SPA catch-all. The SPA
+# catch-all fires on EVERY browser hard-refresh of a React route
+# (/dashboard, /analytics, …), so this was a real hotpath: disk read
+# on every tab reload × N users. Plus the sw.js / manifest endpoints
+# did the same thing per request.
+#
+# Now we read everything exactly once at import time into module-
+# level bytes. Responses are served straight from memory. A redeploy
+# restarts the Python process and picks up fresh bytes automatically.
+def _read_bytes(path: Path) -> Optional[bytes]:
+    try:
+        return path.read_bytes() if path.exists() else None
+    except OSError:
+        return None
+
+
+_REACT_INDEX_HTML: Optional[bytes] = _read_bytes(DIST_DIR / "index.html")
+_LEGACY_INDEX_HTML: Optional[bytes] = _read_bytes(DASHBOARD_HTML)
+
+_SW_JS: Optional[bytes] = _read_bytes(DIST_DIR / "sw.js") or _read_bytes(STATIC_DIR / "sw.js")
+
+_MANIFEST_JSON: Optional[bytes] = (
+    _read_bytes(DIST_DIR / "manifest.webmanifest")
+    or _read_bytes(DIST_DIR / "manifest.json")
+    or _read_bytes(STATIC_DIR / "manifest.json")
+)
 
 # Loud startup banner so Zeabur logs show at-a-glance whether the
 # React build was found. If you see "[startup] React build: MISSING"
@@ -115,10 +157,17 @@ print(
 # Cache scope is per-token: the key includes a hash of the access token
 # so different users (or token rotations) never see each other's data.
 import hashlib
+import re
 import time
 
 _CACHE_TTL_SECONDS = 60.0
 _fb_cache: dict[str, tuple[float, Any]] = {}
+# Per-key request locks — when N concurrent requests miss the same
+# cache key, the first one holds the lock and actually fans out to
+# FB, while the rest await the lock and hit the now-populated cache
+# on their retry. This prevents a cache stampede on /api/accounts and
+# /api/overview, which every tab fires on first load.
+_fb_cache_locks: dict[str, asyncio.Lock] = {}
 
 
 def _cache_key(token: str, path: str, params: dict, *, kind: str = "single") -> str:
@@ -157,52 +206,104 @@ def _cache_put(key: str, data: Any) -> None:
     _fb_cache[key] = (time.monotonic(), data)
 
 
+def _cache_lock(key: str) -> asyncio.Lock:
+    """Return the asyncio.Lock guarding ``key``, creating it on first
+    miss. Locks are kept in a parallel dict so the cache itself stays
+    a plain value map. Locks are cheap (~200 bytes each) and are
+    evicted alongside their entries when the LRU prunes.
+    """
+    lock = _fb_cache_locks.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _fb_cache_locks[key] = lock
+    return lock
+
+
 def _cache_clear() -> None:
     """Wipe the entire in-memory cache. Used as the safety-net
     invalidation when a more granular hint isn't available.
     """
     _fb_cache.clear()
+    _fb_cache_locks.clear()
+
+
+# Cache key format is ``token::kind::path::params`` — we only want to
+# match the path segment, not the token hash or param string. Path
+# segments are slash-delimited and can contain the entity id in the
+# middle. This pattern extracts the path so we can do a proper
+# tokenised match instead of a naive substring scan (which matches
+# act_123 against act_1234 — the prefix-boundary bug).
+_CACHE_KEY_PATH_RE = re.compile(r"^[^:]+::[^:]+::([^:]+)::")
+
+
+def _key_path(key: str) -> str:
+    m = _CACHE_KEY_PATH_RE.match(key)
+    return m.group(1) if m else key
+
+
+def _path_references_id(path: str, fb_id: str) -> bool:
+    """Does ``path`` contain ``fb_id`` as a whole segment?
+
+    Cache keys encode the FB Graph path like ``act_123/campaigns``.
+    Splitting on '/' and checking equality avoids the classic
+    ``"act_123" in "act_1234/campaigns"`` false positive.
+    """
+    if not fb_id:
+        return False
+    for segment in path.split("/"):
+        if segment == fb_id:
+            return True
+    return False
 
 
 def _cache_invalidate(*, account_id: Optional[str] = None, entity_id: Optional[str] = None) -> int:
     """Drop cache entries that could be affected by a mutation.
 
-    The cache key format is ``token::kind::path::params`` (see
-    :func:`_cache_key`). We do a substring scan because the path
-    encodes the FB Graph node id (``act_X/campaigns``,
-    ``camp_id/adsets``, etc.).
-
     Hints are merged with OR semantics:
       - ``account_id="act_X"`` clears every entry whose path
         references account X (campaigns, adsets, ads, insights).
-      - ``entity_id="123"`` clears every entry whose path is
-        exactly ``123``, plus any list whose parent is 123 (e.g.
-        ``123/adsets``).
+        Normalised so ``act_123`` and ``123`` both match.
+      - ``entity_id="123"`` clears every entry whose path contains
+        ``123`` as a whole segment (so ``123/adsets`` matches but
+        ``1234/adsets`` does NOT — fixes the prefix-boundary bug).
 
-    Returns the number of entries dropped (useful for diagnostics).
-    Falls back to a full clear if neither hint is provided.
+    Returns the number of entries dropped. Falls back to a full
+    clear if neither hint is provided.
     """
     if account_id is None and entity_id is None:
         before = len(_fb_cache)
-        _fb_cache.clear()
+        _cache_clear()
         return before
 
-    needles: list[str] = []
+    # Build a set of ids to check per-segment equality against, with
+    # both ``act_X`` and bare-``X`` forms where applicable.
+    ids: list[str] = []
     if account_id:
-        # The account id can appear with or without `act_` prefix in
-        # the path. Match both to be safe.
-        needles.append(account_id)
+        ids.append(account_id)
         if account_id.startswith("act_"):
-            needles.append(account_id[4:])
+            ids.append(account_id[4:])
         else:
-            needles.append(f"act_{account_id}")
+            ids.append(f"act_{account_id}")
     if entity_id:
-        needles.append(entity_id)
+        ids.append(entity_id)
 
-    to_drop = [k for k in _fb_cache if any(n in k for n in needles)]
+    to_drop: list[str] = []
+    for k in _fb_cache:
+        path = _key_path(k)
+        if any(_path_references_id(path, i) for i in ids):
+            to_drop.append(k)
     for k in to_drop:
         _fb_cache.pop(k, None)
+        _fb_cache_locks.pop(k, None)
     return len(to_drop)
+
+
+# Per-method httpx timeouts. GETs drive the dashboard UX and should
+# fail fast (10s) so a slow FB account doesn't freeze the page.
+# Mutations (POSTs for status / budget / quick-launch) tolerate the
+# old 30s budget because FB's write path occasionally lags.
+_GET_TIMEOUT = 10.0
+_POST_TIMEOUT = 30.0
 
 
 async def _fb_request(method: str, path: str, params: Optional[dict] = None, data_payload: Optional[dict] = None) -> dict:
@@ -212,6 +313,12 @@ async def _fb_request(method: str, path: str, params: Optional[dict] = None, dat
     GET responses are cached in-memory for 60 seconds (per token + path +
     params) so repeat calls within the TTL window return instantly. POSTs
     are never cached (they are mutations).
+
+    Concurrent GETs for the same cache key are coalesced: only the
+    first request actually hits FB, all other waiters block on the
+    per-key lock and re-read the cache once it's populated. This
+    prevents N×N stampede on `/api/accounts` and `/api/overview`
+    when users open multiple tabs at once.
     """
     if params is None:
         params = {}
@@ -229,14 +336,46 @@ async def _fb_request(method: str, path: str, params: Optional[dict] = None, dat
         if cached is not None:
             return cached
 
+    # Serialise concurrent misses on the same key so we only pay the
+    # FB round-trip once per window. The cache re-check INSIDE the
+    # lock is important: the first holder puts the result into the
+    # cache, later waiters enter the lock, see the cached entry, and
+    # return immediately without a second FB call.
+    if cache_key is not None:
+        lock = _cache_lock(cache_key)
+        async with lock:
+            cached = _cache_get(cache_key)
+            if cached is not None:
+                return cached
+            return await _fb_fetch_and_cache(
+                method, path, params, data_payload, token, cache_key
+            )
+
+    return await _fb_fetch_and_cache(
+        method, path, params, data_payload, token, cache_key
+    )
+
+
+async def _fb_fetch_and_cache(
+    method: str,
+    path: str,
+    params: dict,
+    data_payload: dict,
+    token: str,
+    cache_key: Optional[str],
+) -> dict:
+    """Inner FB call — issues the actual httpx request, handles the
+    usual error pathways, and writes the result to the cache when
+    ``cache_key`` is provided.
+    """
     url = f"{BASE_URL}/{path}"
     try:
         if method == "GET":
             params = {"access_token": token, **params}
-            r = await _http_client.get(url, params=params)
+            r = await _http_client.get(url, params=params, timeout=_GET_TIMEOUT)
         else:
             data_payload = {"access_token": token, **data_payload}
-            r = await _http_client.post(url, data=data_payload)
+            r = await _http_client.post(url, data=data_payload, timeout=_POST_TIMEOUT)
     except httpx.TimeoutException as e:
         raise HTTPException(status_code=504, detail=f"Facebook API timeout: {e}")
     except httpx.RequestError as e:
@@ -298,6 +437,9 @@ async def fb_get_paginated(path: str, params: Optional[dict] = None) -> List[dic
     + initial params). Subsequent calls within the TTL window return without
     hitting Facebook at all — a major speedup for the heavy
     /api/accounts and /api/accounts/{id}/campaigns endpoints.
+
+    Uses the same per-key stampede lock as :func:`_fb_request` so a
+    burst of concurrent cache misses only pays for one FB call.
     """
     if params is None:
         params = {}
@@ -310,12 +452,25 @@ async def fb_get_paginated(path: str, params: Optional[dict] = None) -> List[dic
     if cached is not None:
         return cached  # already a List[dict]
 
+    lock = _cache_lock(cache_key)
+    async with lock:
+        # Re-check after acquiring — a concurrent waiter may have
+        # populated the cache while we were blocked.
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
+        return await _fb_get_paginated_fetch(path, params, token, cache_key)
+
+
+async def _fb_get_paginated_fetch(
+    path: str, params: dict, token: str, cache_key: str
+) -> List[dict]:
     items: List[dict] = []
     next_url: Optional[str] = f"{BASE_URL}/{path}"
     page_params = {"access_token": token, **params}
     while next_url:
         try:
-            r = await _http_client.get(next_url, params=page_params)
+            r = await _http_client.get(next_url, params=page_params, timeout=_GET_TIMEOUT)
         except httpx.TimeoutException as e:
             raise HTTPException(status_code=504, detail=f"Facebook API timeout: {e}")
         except httpx.RequestError as e:
@@ -347,23 +502,24 @@ def _insights_clause(fields: str, date_preset: str = "last_30d", time_range: Opt
 
 # ── Pages ───────────────────────────────────────────────────────────
 
-def _react_index() -> Optional[str]:
-    """Return the built React app's index.html if available, else None."""
-    idx = DIST_DIR / "index.html"
-    if idx.exists():
-        return idx.read_text(encoding="utf-8")
-    return None
+def _index_bytes() -> bytes:
+    """Pick the right pre-cached index HTML for the root route.
 
-
-def _legacy_index() -> str:
-    """Return the hand-written dashboard.html as the fallback index."""
-    return DASHBOARD_HTML.read_text(encoding="utf-8")
+    React build takes priority; legacy dashboard.html is the fallback
+    when `dist/index.html` doesn't exist (transitional deploys). Both
+    are read into memory at module import time, so this never touches
+    disk at request time.
+    """
+    if _REACT_INDEX_HTML is not None:
+        return _REACT_INDEX_HTML
+    if _LEGACY_INDEX_HTML is not None:
+        return _LEGACY_INDEX_HTML
+    return b"<!doctype html><title>LURE Meta Platform</title><body>build missing</body>"
 
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    react = _react_index()
-    return react if react is not None else _legacy_index()
+    return Response(content=_index_bytes(), media_type="text/html; charset=utf-8")
 
 
 @app.get("/api/_status")
@@ -389,7 +545,8 @@ async def legacy_dashboard():
     """Always serve the old dashboard.html, even if the React build exists.
     Kept until Phase 10 cutover for side-by-side visual regression testing.
     """
-    return _legacy_index()
+    body = _LEGACY_INDEX_HTML or _index_bytes()
+    return Response(content=body, media_type="text/html; charset=utf-8")
 
 
 @app.get("/sw.js")
@@ -397,15 +554,12 @@ async def service_worker():
     """Serve service worker from root scope.
 
     Vite PWA emits sw.js into dist/ at build time; prefer that. Fall back
-    to the hand-written static/sw.js if no React build is present.
+    to the hand-written static/sw.js if no React build is present. The
+    chosen bytes are cached at module import so this route never touches
+    disk at request time.
     """
-    for candidate in (DIST_DIR / "sw.js", STATIC_DIR / "sw.js"):
-        if candidate.exists():
-            return HTMLResponse(
-                content=candidate.read_text(encoding="utf-8"),
-                media_type="application/javascript",
-            )
-    return HTMLResponse(content="// no service worker", media_type="application/javascript")
+    body = _SW_JS if _SW_JS is not None else b"// no service worker"
+    return Response(content=body, media_type="application/javascript")
 
 
 @app.get("/manifest.json")
@@ -413,18 +567,13 @@ async def manifest():
     """Serve PWA manifest from root.
 
     Vite PWA writes manifest.webmanifest into dist/; fall back to
-    static/manifest.json during transition.
+    static/manifest.json during transition. Cached at startup.
     """
-    for candidate in (
-        DIST_DIR / "manifest.webmanifest",
-        DIST_DIR / "manifest.json",
-        STATIC_DIR / "manifest.json",
-    ):
-        if candidate.exists():
-            return HTMLResponse(
-                content=candidate.read_text(encoding="utf-8"),
-                media_type="application/manifest+json",
-            )
+    if _MANIFEST_JSON is not None:
+        return Response(
+            content=_MANIFEST_JSON,
+            media_type="application/manifest+json",
+        )
     return JSONResponse(content={})
 
 
@@ -494,7 +643,7 @@ async def quick_launch_campaign(payload: CampaignCreate):
 async def get_accounts():
     accounts = await fb_get_paginated("me/adaccounts", {
         "fields": "id,name,account_status,currency,timezone_name,business",
-        "limit": "100",
+        "limit": "500",
     })
     return {"data": accounts}
 
@@ -530,12 +679,12 @@ async def _fetch_campaigns_for_account(
 
     attempts: list[tuple[str, dict]] = []
     if include_archived:
-        attempts.append(("insights+archived", {"fields": full_fields, "limit": "100", **archived_filter}))
-    attempts.append(("insights", {"fields": full_fields, "limit": "100"}))
+        attempts.append(("insights+archived", {"fields": full_fields, "limit": "500", **archived_filter}))
+    attempts.append(("insights", {"fields": full_fields, "limit": "500"}))
     if include_archived:
-        attempts.append(("no-insights+archived", {"fields": no_ins_fields, "limit": "100", **archived_filter}))
-    attempts.append(("no-insights", {"fields": no_ins_fields, "limit": "100"}))
-    attempts.append(("minimal", {"fields": "id,name,status", "limit": "100"}))
+        attempts.append(("no-insights+archived", {"fields": no_ins_fields, "limit": "500", **archived_filter}))
+    attempts.append(("no-insights", {"fields": no_ins_fields, "limit": "500"}))
+    attempts.append(("minimal", {"fields": "id,name,status", "limit": "500"}))
 
     last_error: Optional[HTTPException] = None
     for tier, params in attempts:
@@ -600,13 +749,13 @@ async def get_adsets(campaign_id: str, date_preset: str = "last_30d", time_range
     try:
         data = await fb_get(f"{campaign_id}/adsets", {
             "fields": f"id,name,status,daily_budget,lifetime_budget,{ins}",
-            "limit": "100"
+            "limit": "500"
         })
     except Exception:
         # Fallback without insights if date query fails
         data = await fb_get(f"{campaign_id}/adsets", {
             "fields": "id,name,status,daily_budget,lifetime_budget",
-            "limit": "100"
+            "limit": "500"
         })
     return data
 
@@ -673,7 +822,7 @@ async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Opti
     ]
     for fields in attempts:
         try:
-            params = {"fields": fields, "limit": "100"}
+            params = {"fields": fields, "limit": "500"}
             if "thumbnail_url" in fields:
                 # 120px is 4× DPR for the 30×30 row icon displayed in
                 # the Dashboard tree. Preview modal uses image_url
@@ -1035,8 +1184,8 @@ async def ai_chat(req: ChatRequest):
 async def spa_fallback(full_path: str):
     if full_path.startswith(("api/", "static/", "assets/")):
         raise HTTPException(status_code=404, detail="Not found")
-    react = _react_index()
-    return react if react is not None else _legacy_index()
+    # Served from module-level cached bytes — no disk read per request.
+    return Response(content=_index_bytes(), media_type="text/html; charset=utf-8")
 
 
 if __name__ == "__main__":

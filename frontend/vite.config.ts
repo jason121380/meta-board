@@ -77,7 +77,13 @@ export default defineConfig({
   build: {
     outDir: "../dist",
     emptyOutDir: true,
-    sourcemap: true,
+    // No sourcemaps in the production build. Vite emits ~3MB of
+    // .js.map files on top of the ~700KB of real JS, which balloons
+    // the Docker image (and the Zeabur cold-start fetch) for zero
+    // production benefit — sourcemaps are a devtools-only feature
+    // and devs can re-run `pnpm build` locally with a temp flag to
+    // get them back when needed. Set VITE_SOURCEMAP=1 to opt back in.
+    sourcemap: process.env.VITE_SOURCEMAP === "1",
     target: "es2022",
     rollupOptions: {
       output: {
@@ -85,13 +91,10 @@ export default defineConfig({
           react: ["react", "react-dom", "react-router-dom"],
           charts: ["chart.js", "react-chartjs-2", "chartjs-plugin-datalabels"],
           query: ["@tanstack/react-query"],
-          ui: [
-            "@radix-ui/react-dialog",
-            "@radix-ui/react-dropdown-menu",
-            "@radix-ui/react-popover",
-            "@radix-ui/react-select",
-            "@radix-ui/react-tooltip",
-          ],
+          // Only the two Radix packages we actually import live in
+          // this chunk. Unused radix deps were removed from
+          // package.json entirely in the 2026-04-15 slim pass.
+          ui: ["@radix-ui/react-dialog", "@radix-ui/react-popover"],
         },
       },
     },

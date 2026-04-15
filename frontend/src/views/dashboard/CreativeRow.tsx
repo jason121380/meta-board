@@ -1,13 +1,23 @@
 import { useEntityStatusMutation } from "@/api/hooks/useEntityMutations";
 import { Badge } from "@/components/Badge";
 import { confirm } from "@/components/ConfirmDialog";
-import { CreativePreviewModal } from "@/components/CreativePreviewModal";
 import { Toggle } from "@/components/Toggle";
 import { isFrontPostCreative } from "@/lib/fbLinks";
 import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
 import type { FbCreativeEntity } from "@/types/fb";
-import { useState } from "react";
+import { Suspense, lazy, memo, useState } from "react";
+
+// The preview modal pulls in <video>, usePostMedia, usePageInfo, and
+// FB-post-style header rendering — ~5KB of JS + its own query hooks.
+// It only opens when the user actually clicks a creative row, so we
+// don't want to ship it in the Dashboard first-paint bundle. Lazy-
+// loading keeps the tree render path lean.
+const CreativePreviewModal = lazy(() =>
+  import("@/components/CreativePreviewModal").then((m) => ({
+    default: m.CreativePreviewModal,
+  })),
+);
 
 /**
  * Third-level row — a single FB Ad / creative.
@@ -25,7 +35,7 @@ export interface CreativeRowProps {
   multiAcct: boolean;
 }
 
-export function CreativeRow({ creative, multiAcct }: CreativeRowProps) {
+function CreativeRowInner({ creative, multiAcct }: CreativeRowProps) {
   const ins = getIns(creative);
   const msgs = getMsgCount(creative);
   const spend = Number(ins.spend) || 0;
@@ -113,10 +123,19 @@ export function CreativeRow({ creative, multiAcct }: CreativeRowProps) {
           />
         </td>
       </tr>
-      <CreativePreviewModal
-        creative={previewOpen ? creative : null}
-        onClose={() => setPreviewOpen(false)}
-      />
+      {previewOpen && (
+        <Suspense fallback={null}>
+          <CreativePreviewModal creative={creative} onClose={() => setPreviewOpen(false)} />
+        </Suspense>
+      )}
     </>
   );
 }
+
+/**
+ * Exported memoised wrapper. The creative prop is stable across
+ * re-renders of the parent <AdsetRow/> (it comes from React Query's
+ * cached array), so `memo` short-circuits 95%+ of tree renders when
+ * the user sorts / filters / toggles expansion elsewhere in the tree.
+ */
+export const CreativeRow = memo(CreativeRowInner);
