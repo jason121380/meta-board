@@ -106,7 +106,10 @@ interface StatProps {
 
 function Stat({ label, value, loading }: StatProps) {
   return (
-    <div className="shrink-0 rounded-lg border border-border bg-white px-2 py-1 md:shrink md:px-3 md:py-2">
+    <div
+      className="shrink-0 rounded-lg border border-border bg-white px-2 py-1 md:shrink md:px-3 md:py-2"
+      style={{ scrollSnapAlign: "start" }}
+    >
       <div className="text-[9px] font-semibold uppercase tracking-[0.4px] text-gray-300 md:text-[10px]">
         {label}
       </div>
@@ -128,7 +131,14 @@ export function StatsGrid({ accounts, insights, isLoading }: StatsGridProps) {
   // 1280 - 220 sidebar = 1060px (12 × 88 = 1056), leaving the table
   // below 80%+ of the vertical space.
   return (
-    <div className="flex shrink-0 gap-1.5 overflow-x-auto bg-bg px-2 py-1.5 md:grid md:grid-cols-[repeat(auto-fit,minmax(92px,1fr))] md:gap-2 md:overflow-visible md:p-3 md:pb-0">
+    <div
+      className="flex shrink-0 gap-1.5 overflow-x-auto bg-bg px-2 py-1.5 md:grid md:grid-cols-[repeat(auto-fit,minmax(92px,1fr))] md:gap-2 md:overflow-visible md:p-3 md:pb-0"
+      style={{
+        /* iOS momentum scroll + snap-to-card so swiping feels native */
+        WebkitOverflowScrolling: "touch",
+        scrollSnapType: "x proximity",
+      }}
+    >
       <Stat label="花費" value={empty ? "—" : fM(totals.spend)} loading={isLoading && !empty} />
       <Stat
         label="曝光"

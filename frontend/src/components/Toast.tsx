@@ -1,4 +1,5 @@
 import { cn } from "@/lib/cn";
+import { hapticSuccess, hapticWarning } from "@/lib/haptic";
 import { useEffect } from "react";
 import { create } from "zustand";
 
@@ -39,6 +40,8 @@ const useToastStore = create<ToastState>((set) => ({
 
 /** Imperative API. Called from anywhere — no hook needed. */
 export function toast(message: string, variant: ToastVariant = "success", duration = 2500): void {
+  if (variant === "success") hapticSuccess();
+  else if (variant === "error") hapticWarning();
   useToastStore.getState().show(message, variant, duration);
 }
 

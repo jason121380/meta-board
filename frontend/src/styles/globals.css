@@ -366,6 +366,41 @@
     padding: 14px 12px 12px;
     border-radius: 12px;
   }
+
+  /* ── Bottom tab bar ──────────────────────────────────────── */
+  /* Hide the hamburger button when the bottom tab bar is present —
+     the tab bar IS the primary nav on mobile. The hamburger was only
+     needed when the sidebar was the only mobile nav. */
+  .shell-hamburger {
+    display: none !important;
+  }
+}
+
+/* iOS-style bottom sheet modal — show a drag handle at the top
+   so the user knows the sheet is swipeable / dismissible. The
+   handle is a 36x5px pill centered at the top of the modal.
+   Only visible on mobile (the modal is a centered card on desktop). */
+@media (max-width: 768px) {
+  .modal-sheet::before {
+    content: "";
+    display: block;
+    width: 36px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--border-strong);
+    margin: 8px auto 0;
+  }
+}
+
+/* Hidden scrollbars on mobile — iOS-native apps don't show
+   scrollbar tracks. The content remains scrollable via touch. */
+@media (max-width: 768px) {
+  * {
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* ── Extra-small phones (≤480px) ─────────────────────────── */

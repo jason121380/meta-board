@@ -1,3 +1,4 @@
+import { hapticWarning } from "@/lib/haptic";
 import { create } from "zustand";
 import { Button } from "./Button";
 import { Modal } from "./Modal";
@@ -34,6 +35,7 @@ const useConfirm = create<ConfirmState>((set, get) => ({
   resolve: null,
   ask: (message, opts = {}) =>
     new Promise<boolean>((resolve) => {
+      hapticWarning();
       set({
         open: true,
         message,

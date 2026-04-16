@@ -16,9 +16,9 @@ export function LoginView() {
   const { status, login, error } = useFbAuth();
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-stretch justify-center bg-[#F2F2F2]">
-      {/* Left brand panel with animated blobs */}
-      <div className="relative flex flex-1 flex-col items-start justify-end overflow-hidden bg-[#1C1410] px-[60px] py-14">
+    <div className="fixed inset-0 z-[9999] flex flex-col items-stretch justify-center bg-[#F2F2F2] md:flex-row">
+      {/* Left brand panel — hidden on mobile, shown on desktop */}
+      <div className="relative hidden flex-1 flex-col items-start justify-end overflow-hidden bg-[#1C1410] px-[60px] py-14 md:flex">
         <Blob
           className="-left-20 -top-24 h-[420px] w-[420px]"
           gradient="radial-gradient(circle, #FF6B2C 0%, #FF3D00 60%, transparent 100%)"
@@ -54,7 +54,13 @@ export function LoginView() {
           made `w-full` push the blue login button edge-to-edge ("太
           寬爆版"). `px-14 py-14` = 56px of padding on every side,
           which leaves ~328px for the button inside a 440px card. */}
-      <div className="flex w-[440px] shrink-0 flex-col items-center justify-center bg-white px-14 py-14 text-center">
+      {/* Right login card — full width on mobile, fixed 440px on desktop.
+          Safe-area padding ensures the card clears the notch / home
+          indicator on iPhones in landscape. */}
+      <div
+        className="flex w-full shrink-0 flex-1 flex-col items-center justify-center bg-white px-8 py-10 text-center md:w-[440px] md:flex-initial md:px-14 md:py-14"
+        style={{ paddingBottom: "max(40px, env(safe-area-inset-bottom))" }}
+      >
         <div className="mb-1 text-[22px] font-extrabold tracking-[-0.3px] text-ink">
           METADASH <span className="text-orange">by LURE</span>
         </div>
