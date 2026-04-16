@@ -760,6 +760,7 @@ async def _fetch_campaigns_for_account(
     date_preset: str,
     time_range: Optional[str],
     include_archived: bool,
+    lite: bool = False,
 ) -> List[dict]:
     """Core campaign-fetch logic with FB-side progressive fallback.
 
@@ -768,6 +769,12 @@ async def _fetch_campaigns_for_account(
     ``/api/overview`` endpoint without duplication. Returns the raw
     campaign list; the caller wraps it into whatever envelope shape
     it needs.
+
+    When ``lite=True``, skips the insights field expansion entirely
+    and only fetches campaign metadata (name, status, budget). This
+    is much faster (~1-2s vs ~5-15s) and is used for the two-phase
+    loading pattern: show campaign rows immediately, then backfill
+    insights from the full request.
 
     Raises ``HTTPException`` if every tier fails so callers can
     decide whether to surface the error or swallow it for a
@@ -781,6 +788,13 @@ async def _fetch_campaigns_for_account(
     full_fields = f"id,name,status,objective,daily_budget,lifetime_budget,{ins}"
     no_ins_fields = "id,name,status,objective,daily_budget,lifetime_budget"
     archived_filter = {"effective_status": '["ACTIVE","PAUSED","ARCHIVED","DELETED"]'}
+
+    # Lite mode: skip insights entirely for fast first-paint.
+    if lite:
+        params: dict = {"fields": no_ins_fields, "limit": "500"}
+        if include_archived:
+            params.update(archived_filter)
+        return await fb_get_paginated(f"{account_id}/campaigns", params)
 
     attempts: list[tuple[str, dict]] = []
     if include_archived:
@@ -1172,6 +1186,7 @@ async def get_overview(
     date_preset: str = "last_30d",
     time_range: Optional[str] = None,
     include_archived: bool = False,
+    lite: bool = False,
 ):
     """Batch multi-account overview endpoint.
 
@@ -1211,10 +1226,23 @@ async def get_overview(
         """Campaigns + insights for one account in parallel. Sub-fetch
         failures are captured as an ``error`` string so the outer
         gather always resolves cleanly.
+
+        In ``lite`` mode, only campaign metadata is fetched (no insights)
+        so the frontend can show campaign rows within ~1-2s. The full
+        data follows from a parallel non-lite request.
         """
         camps_task = asyncio.create_task(
-            _fetch_campaigns_for_account(aid, date_preset, time_range, include_archived)
+            _fetch_campaigns_for_account(aid, date_preset, time_range, include_archived, lite=lite)
         )
+        if lite:
+            # Lite mode: skip the insights call entirely for speed.
+            try:
+                camps = await camps_task
+            except (HTTPException, Exception) as e:
+                detail = e.detail if isinstance(e, HTTPException) else str(e)
+                return aid, {"campaigns": [], "insights": None, "error": f"campaigns: {detail}"}
+            return aid, {"campaigns": camps, "insights": None, "error": None}
+
         ins_task = asyncio.create_task(
             _fetch_account_insights(aid, date_preset, time_range)
         )
