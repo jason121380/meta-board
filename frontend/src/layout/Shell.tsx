@@ -1,3 +1,4 @@
+import { BottomTabBar } from "@/components/BottomTabBar";
 import { DataPreloader, didPreload } from "@/components/DataPreloader";
 import { EmptyAccountsPrompt } from "@/components/EmptyAccountsPrompt";
 import { useCallback, useEffect, useState } from "react";
@@ -60,14 +61,15 @@ export function Shell() {
           onClick={closeOnBackdrop}
         />
       )}
-      <main className="shell-main ml-[220px] flex h-[100dvh] flex-1 flex-col overflow-hidden bg-bg">
-        {/* Mobile hamburger lives at the top of main so it renders
-            inside every view's topbar area; actual button is rendered
-            by Topbar via the MobileToggleContext below. */}
+      {/* pb-[60px] on mobile reserves space for the fixed bottom tab
+          bar so the last table row / card isn't hidden behind it.
+          On desktop (md:) the bottom padding is removed. */}
+      <main className="shell-main ml-[220px] flex h-[100dvh] flex-1 flex-col overflow-hidden bg-bg pb-[60px] md:pb-0">
         <MobileToggleContext.Provider value={() => setMobileOpen((v) => !v)}>
           {preloadDone && <Outlet />}
         </MobileToggleContext.Provider>
       </main>
+      {preloadDone && <BottomTabBar />}
       {preloadDone && <EmptyAccountsPrompt />}
       <DataPreloader onComplete={onPreloadComplete} />
     </div>

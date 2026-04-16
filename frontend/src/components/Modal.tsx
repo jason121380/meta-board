@@ -57,24 +57,32 @@ export function Modal({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[900] bg-black/40 backdrop-blur-[1px] animate-fade-in" />
         <Dialog.Content
-          style={{
-            width,
-            maxWidth: "calc(100vw - 24px)",
-            maxHeight: "calc(100vh - 48px)",
-          }}
-          // Centering pattern: position fixed + inset:0 + margin:auto
-          // distributes remaining space equally on every side, so the
-          // dialog is perfectly centered regardless of any transformed
-          // ancestors that would have broken `left-1/2 -translate-x-1/2`.
-          // h-fit prevents the dialog from stretching to viewport height.
+          style={
+            {
+              // CSS custom property consumed by the md: breakpoint rule
+              // in globals.css (`.modal-sheet { @media (min-width:768px)
+              // { width: var(--modal-w) } }`). On mobile the sheet is
+              // full-width so this variable is unused.
+              "--modal-w": typeof width === "number" ? `${width}px` : width,
+              maxWidth: "calc(100vw - 24px)",
+              maxHeight: "calc(100vh - 48px)",
+            } as React.CSSProperties
+          }
+          // Mobile (<768px): iOS-style bottom sheet — pinned to
+          // bottom of screen, full-width, rounded top corners only,
+          // slides up via the `slideUp` keyframe.
           //
-          // Padding is applied to inner sections instead of the Content
-          // root so the sticky close header can bleed to the edges and
-          // still sit on top of scrolled body content.
+          // Desktop (≥768px): centered card — overrides mobile
+          // positioning back to the classic centered-modal layout.
           className={cn(
-            "fixed inset-0 z-[901] m-auto h-fit",
-            "overflow-y-auto rounded-2xl bg-white p-0 shadow-md",
-            "focus:outline-none animate-fade-in",
+            // Mobile default: bottom sheet
+            "modal-sheet fixed inset-x-0 bottom-0 z-[901] w-full",
+            "max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white p-0 shadow-md",
+            "focus:outline-none",
+            "animate-[slideUp_0.3s_cubic-bezier(0.32,0.72,0,1)]",
+            // Desktop override: centered card
+            "md:inset-0 md:bottom-auto md:m-auto md:h-fit md:w-[var(--modal-w)] md:rounded-2xl",
+            "md:animate-fade-in",
             className,
           )}
         >
