@@ -118,7 +118,7 @@ export function AlertCard({
           </label>
         )}
       </div>
-      <div className="flex-1 overflow-x-auto">
+      <div className="flex-1 overflow-auto">
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-border bg-bg">
@@ -220,7 +220,7 @@ function SortHeader({
     <th
       onClick={() => onToggle(sortKey)}
       className={cn(
-        "cursor-pointer select-none whitespace-nowrap px-2.5 py-2 text-[11px] font-bold",
+        "sticky top-0 z-[1] cursor-pointer select-none whitespace-nowrap px-2.5 py-2 text-[11px] font-bold",
         right ? "text-right" : "text-left",
         active ? "text-orange" : "text-gray-500",
       )}
