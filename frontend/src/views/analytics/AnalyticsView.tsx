@@ -40,6 +40,24 @@ import { VBarDistChart } from "./charts/VBarDistChart";
 
 const ORANGE = "#FF6B2C";
 
+// Chart color palettes — module-level constants so they keep stable
+// references across renders. Previously defined inside AnalyticsBody,
+// which created new array refs every render and forced all 14 Chart.js
+// instances to destroy + re-create their canvases unnecessarily.
+const PALETTE_CTR = ["#FFB899", "#FF9A62", ORANGE, "#2E7D32", "#1B5E20"];
+const PALETTE_COST = ["#1B5E20", "#2E7D32", ORANGE, "#FF9A62", "#FF6B2C"];
+const PALETTE_SPEND = ["#E0E0E0", "#FFB899", "#FF9A62", ORANGE, "#CC4400"];
+const PALETTE_DOUGHNUT = [
+  "#1B5E20",
+  "#2E7D32",
+  "#388E3C",
+  "#43A047",
+  ORANGE,
+  "#FF9A62",
+  "#FF6B2C",
+  "#CC4400",
+];
+
 export function AnalyticsView() {
   const queryClient = useQueryClient();
 
@@ -100,20 +118,6 @@ interface AnalyticsBodyProps {
 }
 
 function AnalyticsBody({ data, visible, periodLabel }: AnalyticsBodyProps) {
-  const PALETTE_CTR = ["#FFB899", "#FF9A62", ORANGE, "#2E7D32", "#1B5E20"];
-  const PALETTE_COST = ["#1B5E20", "#2E7D32", ORANGE, "#FF9A62", "#FF6B2C"];
-  const PALETTE_SPEND = ["#E0E0E0", "#FFB899", "#FF9A62", ORANGE, "#CC4400"];
-  const PALETTE_DOUGHNUT = [
-    "#1B5E20",
-    "#2E7D32",
-    "#388E3C",
-    "#43A047",
-    ORANGE,
-    "#FF9A62",
-    "#FF6B2C",
-    "#CC4400",
-  ];
-
   return (
     <>
       <AnalyticsKpisRow kpis={data.kpis} accountCount={visible.length} periodLabel={periodLabel} />

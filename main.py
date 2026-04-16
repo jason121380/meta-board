@@ -27,6 +27,13 @@ _runtime_token: Optional[str] = None
 # Shared httpx client (created in lifespan)
 _http_client: Optional[httpx.AsyncClient] = None
 
+# Limit concurrent outbound FB API calls to avoid hitting Facebook's
+# per-app rate limit (~200 concurrent). 40 slots ≈ 20 accounts in
+# parallel (2 calls each: campaigns + insights), safely under the cap.
+# Without this, a cold /api/overview for 80 accounts fans out 160+
+# simultaneous requests and routinely triggers 429 rate-limiting.
+_fb_semaphore: asyncio.Semaphore = asyncio.Semaphore(40)
+
 
 def get_token() -> str:
     return _runtime_token or _ACCESS_TOKEN or ""
@@ -45,7 +52,10 @@ async def lifespan(app: FastAPI):
     # timeout (10s for GET, 30s for POST). This client-level value
     # is just a safety ceiling for any code path that slips through
     # without an explicit override.
-    _http_client = httpx.AsyncClient(timeout=30)
+    _http_client = httpx.AsyncClient(
+        timeout=30,
+        limits=httpx.Limits(max_connections=200, max_keepalive_connections=40),
+    )
     yield
     await _http_client.aclose()
     _http_client = None
@@ -162,6 +172,7 @@ def _cache_get(key: str) -> Any:
     inserted_at, data = entry
     if (time.monotonic() - inserted_at) > _CACHE_TTL_SECONDS:
         _fb_cache.pop(key, None)
+        _fb_cache_locks.pop(key, None)
         return None
     return data
 
@@ -174,6 +185,7 @@ def _cache_put(key: str, data: Any) -> None:
         oldest = sorted(_fb_cache.items(), key=lambda kv: kv[1][0])[:100]
         for k, _ in oldest:
             _fb_cache.pop(k, None)
+            _fb_cache_locks.pop(k, None)
     _fb_cache[key] = (time.monotonic(), data)
 
 
@@ -436,18 +448,19 @@ async def _fb_fetch_and_cache(
     ``cache_key`` is provided.
     """
     url = f"{BASE_URL}/{path}"
-    try:
-        if method == "GET":
-            params = {"access_token": token, **params}
-            r = await _http_client.get(url, params=params, timeout=get_timeout)
-        else:
-            data_payload = {"access_token": token, **data_payload}
-            r = await _http_client.post(url, data=data_payload, timeout=_POST_TIMEOUT)
-    except httpx.TimeoutException as e:
-        raise HTTPException(status_code=504, detail=f"Facebook API timeout: {e}")
-    except httpx.RequestError as e:
-        # Includes ConnectError, ProxyError, NetworkError, etc.
-        raise HTTPException(status_code=502, detail=f"Cannot reach Facebook API: {type(e).__name__}: {e}")
+    async with _fb_semaphore:
+        try:
+            if method == "GET":
+                params = {"access_token": token, **params}
+                r = await _http_client.get(url, params=params, timeout=get_timeout)
+            else:
+                data_payload = {"access_token": token, **data_payload}
+                r = await _http_client.post(url, data=data_payload, timeout=_POST_TIMEOUT)
+        except httpx.TimeoutException as e:
+            raise HTTPException(status_code=504, detail=f"Facebook API timeout: {e}")
+        except httpx.RequestError as e:
+            # Includes ConnectError, ProxyError, NetworkError, etc.
+            raise HTTPException(status_code=502, detail=f"Cannot reach Facebook API: {type(e).__name__}: {e}")
     # Try to parse JSON response
     try:
         body = r.json()
@@ -547,9 +560,10 @@ async def _fb_get_paginated_fetch(
         last_exc: Optional[HTTPException] = None
         for attempt in range(_FB_MAX_RETRIES + 1):
             try:
-                r = await _http_client.get(
-                    next_url, params=page_params, timeout=_GET_TIMEOUT_BULK
-                )
+                async with _fb_semaphore:
+                    r = await _http_client.get(
+                        next_url, params=page_params, timeout=_GET_TIMEOUT_BULK
+                    )
             except httpx.TimeoutException as e:
                 last_exc = HTTPException(status_code=504, detail=f"Facebook API timeout: {e}")
             except httpx.RequestError as e:

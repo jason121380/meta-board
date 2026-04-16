@@ -228,7 +228,7 @@ export function DashboardView() {
             <StatsGrid
               accounts={activeAccounts}
               insights={overview.insights}
-              isLoading={overview.isLoading}
+              isLoading={overview.isLoading || overview.insightsPending}
             />
           )}
 
