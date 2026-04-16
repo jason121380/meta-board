@@ -867,9 +867,9 @@ async def update_campaign_status(campaign_id: str, status: str = Query(...)):
 @app.post("/api/campaigns/{campaign_id}/budget")
 async def update_campaign_budget(campaign_id: str, daily_budget: int = Query(None), lifetime_budget: int = Query(None)):
     payload = {}
-    if daily_budget:
+    if daily_budget is not None:
         payload["daily_budget"] = str(daily_budget)
-    if lifetime_budget:
+    if lifetime_budget is not None:
         payload["lifetime_budget"] = str(lifetime_budget)
     return await fb_post(campaign_id, payload, invalidate_entity=campaign_id)
 
@@ -884,7 +884,7 @@ async def get_adsets(campaign_id: str, date_preset: str = "last_30d", time_range
             "fields": f"id,name,status,daily_budget,lifetime_budget,{ins}",
             "limit": "500"
         })
-    except Exception:
+    except HTTPException:
         # Fallback without insights if date query fails
         data = await fb_get(f"{campaign_id}/adsets", {
             "fields": "id,name,status,daily_budget,lifetime_budget",
@@ -901,7 +901,7 @@ async def update_adset_status(adset_id: str, status: str = Query(...)):
 @app.post("/api/adsets/{adset_id}/budget")
 async def update_adset_budget(adset_id: str, daily_budget: int = Query(None)):
     payload = {}
-    if daily_budget:
+    if daily_budget is not None:
         payload["daily_budget"] = str(daily_budget)
     return await fb_post(adset_id, payload, invalidate_entity=adset_id)
 
@@ -1349,14 +1349,35 @@ async def ai_chat(req: ChatRequest):
         }
     }
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-    r = await _http_client.post(url, json=payload)
-    data = r.json()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+    try:
+        r = await _http_client.post(
+            url, json=payload,
+            headers={"x-goog-api-key": GEMINI_API_KEY},
+            timeout=_POST_TIMEOUT,
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Gemini API timeout")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Cannot reach Gemini API: {e}")
+
+    try:
+        data = r.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail=f"Gemini returned non-JSON (HTTP {r.status_code})")
 
     if "error" in data:
         raise HTTPException(status_code=400, detail=data["error"].get("message", "Gemini error"))
 
-    text = data["candidates"][0]["content"]["parts"][0]["text"]
+    candidates = data.get("candidates") or []
+    if not candidates:
+        raise HTTPException(status_code=502, detail="Gemini returned no candidates")
+    text = (
+        candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        if isinstance(candidates[0], dict) else ""
+    )
+    if not text:
+        raise HTTPException(status_code=502, detail="Gemini returned empty response")
     return {"reply": text}
 
 

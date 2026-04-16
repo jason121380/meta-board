@@ -34,10 +34,12 @@ export function useEntityStatusMutation() {
       return api.creatives.setStatus(input.id, input.status);
     },
     onSuccess: (_data, input) => {
-      // Invalidate the relevant slice of the cache. We could try to be
-      // surgical and only invalidate the exact affected row, but the
-      // legacy dashboard just re-fetches everything on mutation, and
-      // the user rarely toggles status more than once every few seconds.
+      // Invalidate BOTH the per-entity cache keys AND the batch
+      // overview keys. Dashboard, Alerts, Finance, and Analytics all
+      // fetch data via useMultiAccountOverview (keyed on "overview" /
+      // "overview-lite"), so invalidating only ["campaigns"] would
+      // leave the batch cache stale — the user would see the old
+      // status/budget until a manual refresh.
       if (input.kind === "campaign") {
         qc.invalidateQueries({ queryKey: ["campaigns"] });
       } else if (input.kind === "adset") {
@@ -45,6 +47,8 @@ export function useEntityStatusMutation() {
       } else {
         qc.invalidateQueries({ queryKey: ["creatives"] });
       }
+      qc.invalidateQueries({ queryKey: ["overview"] });
+      qc.invalidateQueries({ queryKey: ["overview-lite"] });
     },
   });
 }
@@ -70,6 +74,8 @@ export function useEntityBudgetMutation() {
       } else {
         qc.invalidateQueries({ queryKey: ["adsets"] });
       }
+      qc.invalidateQueries({ queryKey: ["overview"] });
+      qc.invalidateQueries({ queryKey: ["overview-lite"] });
     },
   });
 }

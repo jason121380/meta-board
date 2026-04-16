@@ -160,7 +160,9 @@ export function computeAcctMsgCost(campaigns: FbCampaign[], visible: FbAccount[]
     if (cs.length === 0) continue;
     const totalSp = cs.reduce((s, c) => s + spendOf(c), 0);
     const totalM = cs.reduce((s, c) => s + getMsgCount(c), 0);
-    out.push({ name: shortAcctName(acc.name), value: Math.round(totalSp / totalM) });
+    if (totalM > 0) {
+      out.push({ name: shortAcctName(acc.name), value: Math.round(totalSp / totalM) });
+    }
   }
   return out.sort((a, b) => a.value - b.value);
 }

@@ -155,7 +155,17 @@ export function buildFinanceCsv(input: CsvExportInput): string {
     records.push(cells);
   });
   return records
-    .map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+    .map((row) =>
+      row
+        .map((v) => {
+          const s = String(v).replace(/"/g, '""');
+          // Prefix formula-trigger characters so Excel/Sheets don't
+          // interpret campaign names as formulas (injection prevention).
+          const safe = /^[=+@\-]/.test(s) ? `'${s}` : s;
+          return `"${safe}"`;
+        })
+        .join(","),
+    )
     .join("\n");
 }
 
