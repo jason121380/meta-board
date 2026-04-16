@@ -222,7 +222,7 @@ export function DashboardView() {
           />
         </div>
 
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
           {!statsCollapsed && (
             <StatsGrid
               accounts={activeAccounts}
@@ -231,13 +231,12 @@ export function DashboardView() {
             />
           )}
 
-          {/* Tree card: transparent bg so the area below the last
-              row (when the table is shorter than the card) shows the
-              page background instead of a stark white block. Header
-              row carries its own bg-white so the top band still
-              reads as a card header. Table rows already paint their
-              own backgrounds from globals.css. */}
-          <div className="m-3 flex flex-1 flex-col overflow-hidden rounded-2xl border border-border md:m-4">
+          {/* Tree card: content-sized so the card ends right after
+              the last row — no blank space below 合計. The parent
+              div scrolls the whole column (StatsGrid + card) as one
+              unit; table headers stay pinned via sticky positioning
+              inside the scrollable ancestor. */}
+          <div className="m-3 flex flex-col overflow-hidden rounded-2xl border border-border md:m-4">
             <div className="flex shrink-0 flex-wrap items-center gap-2.5 rounded-t-2xl border-b border-border bg-white px-3 py-2.5 md:px-4 md:py-3">
               <input
                 value={searchTerm}
@@ -283,7 +282,7 @@ export function DashboardView() {
                 })}
               </div>
             )}
-            <div className="min-h-0 flex-1 overflow-auto">
+            <div>
               {activeAccounts.length === 0 ? (
                 <EmptyState>從左側選擇廣告帳戶</EmptyState>
               ) : overview.isLoading ? (
