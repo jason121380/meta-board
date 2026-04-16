@@ -1,3 +1,4 @@
+import { DataPreloader } from "@/components/DataPreloader";
 import { EmptyAccountsPrompt } from "@/components/EmptyAccountsPrompt";
 import { useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
@@ -67,6 +68,7 @@ export function Shell() {
           at most once per page load when the user has FB accounts but
           hasn't picked any in Settings yet. */}
       <EmptyAccountsPrompt />
+      <DataPreloader />
     </div>
   );
 }
