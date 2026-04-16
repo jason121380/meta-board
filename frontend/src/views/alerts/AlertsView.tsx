@@ -74,7 +74,7 @@ export function AlertsView() {
         </div>
       </Topbar>
 
-      <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
+      <div className="flex min-h-0 flex-1 md:flex-row">
         {/* Desktop sidebar (≥768px) */}
         <div className="hidden md:flex">
           <AlertAccountPanel
