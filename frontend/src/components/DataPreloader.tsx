@@ -164,16 +164,28 @@ export function DataPreloader({ onComplete }: { onComplete: () => void }) {
         <Spinner size={36} />
         <div className="text-[15px] font-bold text-ink">更新數據中</div>
         <div className="flex w-full flex-col items-center gap-2">
-          <div className="text-[13px] font-semibold tabular-nums text-orange">{pct}%</div>
+          {pct > 0 && (
+            <div className="text-[13px] font-semibold tabular-nums text-orange">{pct}%</div>
+          )}
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
-            <div
-              className="h-full bg-orange transition-[width] duration-500 ease-out"
-              style={{ width: `${pct}%` }}
-            />
+            {pct > 0 ? (
+              <div
+                className="h-full bg-orange transition-[width] duration-500 ease-out"
+                style={{ width: `${pct}%` }}
+              />
+            ) : (
+              /* Indeterminate: a sliding highlight that bounces back
+                 and forth so the user sees activity while the first
+                 batch is still in flight (pct stuck at 0%). */
+              <div
+                className="h-full w-1/3 rounded-full bg-orange"
+                style={{ animation: "indeterminate 1.4s ease-in-out infinite" }}
+              />
+            )}
           </div>
           {progress.total > 0 && (
             <div className="text-[11px] text-gray-500">
-              {progress.loaded} / {progress.total} 個帳戶
+              正在載入 {progress.total} 個帳戶的資料...
             </div>
           )}
         </div>

@@ -94,7 +94,7 @@ export function AnalyticsView() {
         </div>
       </Topbar>
 
-      <div className="flex-1 overflow-y-auto p-3 md:p-6">
+      <div className="flex-1 p-3 md:p-6">
         {!overview.isLoading && Object.keys(overview.errors).length > 0 && (
           <div className="mb-3 rounded-lg border border-red-bg bg-red-bg/40 px-4 py-2.5 text-[12px] text-red">
             <div className="font-semibold">部分帳戶載入失敗：</div>
