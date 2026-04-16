@@ -137,13 +137,13 @@ function CampaignRowInner({
               }}
             />
             <Button
-              variant="ghost"
               size="sm"
+              className="border-0 text-gray-500 hover:text-orange"
               onClick={() =>
                 onOpenBudget({ kind: "campaign", id: campaign.id, name: campaign.name })
               }
             >
-              預算
+              調整預算
             </Button>
           </div>
         </td>

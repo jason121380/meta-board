@@ -108,11 +108,11 @@ function AdsetRowInner({ adset, multiAcct, colCount, date, onOpenBudget }: Adset
               }}
             />
             <Button
-              variant="ghost"
               size="sm"
+              className="border-0 text-gray-500 hover:text-orange"
               onClick={() => onOpenBudget({ kind: "adset", id: adset.id, name: adset.name })}
             >
-              預算
+              調整預算
             </Button>
           </div>
         </td>
