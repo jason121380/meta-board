@@ -23,6 +23,10 @@
   html,
   body {
     height: 100%;
+    /* Prevent pinch-to-zoom on iOS Safari. The viewport meta tag's
+       user-scalable=no is ignored since iOS 10. touch-action on the
+       root element is the reliable alternative for PWA apps. */
+    touch-action: pan-x pan-y;
   }
 
   body {

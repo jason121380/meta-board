@@ -154,9 +154,26 @@ export function DataPreloader({ onComplete }: { onComplete: () => void }) {
     if (done) onComplete();
   }, [done, onComplete]);
 
-  if (done) return null;
+  // Smooth progress — blend real batch progress with a time-based
+  // curve so the bar moves continuously instead of jumping 0→77→100.
+  // The real progress (loaded/total) anchors the floor; the time
+  // curve fills in the gaps between batch completions.
+  const realPct = progress.total > 0 ? (progress.loaded / progress.total) * 100 : 0;
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (done) return;
+    const start = performance.now();
+    const id = setInterval(() => setElapsed(performance.now() - start), 80);
+    return () => clearInterval(id);
+  }, [done]);
+  // Time curve: asymptotic 0→90% over ~15s (tau = 5000ms).
+  // Never exceeds 90% so the bar doesn't lie about being done.
+  const timePct = Math.min(90, (1 - Math.exp(-elapsed / 5000)) * 90);
+  // Display = max(real, time) — real progress always wins when it
+  // jumps ahead (batch completes), time fills the gaps in between.
+  const pct = Math.round(Math.max(realPct, timePct));
 
-  const pct = progress.total > 0 ? Math.round((progress.loaded / progress.total) * 100) : 0;
+  if (done) return null;
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/80 backdrop-blur-sm">
@@ -164,28 +181,18 @@ export function DataPreloader({ onComplete }: { onComplete: () => void }) {
         <Spinner size={36} />
         <div className="text-[15px] font-bold text-ink">更新數據中</div>
         <div className="flex w-full flex-col items-center gap-2">
-          {pct > 0 && (
-            <div className="text-[13px] font-semibold tabular-nums text-orange">{pct}%</div>
-          )}
+          <div className="text-[13px] font-semibold tabular-nums text-orange">{pct}%</div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
-            {pct > 0 ? (
-              <div
-                className="h-full bg-orange transition-[width] duration-500 ease-out"
-                style={{ width: `${pct}%` }}
-              />
-            ) : (
-              /* Indeterminate: a sliding highlight that bounces back
-                 and forth so the user sees activity while the first
-                 batch is still in flight (pct stuck at 0%). */
-              <div
-                className="h-full w-1/3 rounded-full bg-orange"
-                style={{ animation: "indeterminate 1.4s ease-in-out infinite" }}
-              />
-            )}
+            <div
+              className="h-full bg-orange transition-[width] duration-300 ease-out"
+              style={{ width: `${pct}%` }}
+            />
           </div>
           {progress.total > 0 && (
             <div className="text-[11px] text-gray-500">
-              正在載入 {progress.total} 個帳戶的資料...
+              {progress.loaded > 0
+                ? `已完成 ${progress.loaded} / ${progress.total} 個帳戶`
+                : `正在連線 Facebook，共 ${progress.total} 個帳戶`}
             </div>
           )}
         </div>
