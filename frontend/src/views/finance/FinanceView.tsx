@@ -199,7 +199,7 @@ export function FinanceView() {
               </div>
             </div>
 
-            {Object.keys(overview.errors).length > 0 && (
+            {!overview.isLoading && Object.keys(overview.errors).length > 0 && (
               <div className="border-b border-red-bg bg-red-bg/40 px-4 py-2.5 text-[12px] text-red">
                 <div className="font-semibold">部分帳戶載入失敗：</div>
                 {Object.entries(overview.errors).map(([acctId, msg]) => {
