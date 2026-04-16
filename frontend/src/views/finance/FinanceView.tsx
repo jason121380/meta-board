@@ -161,11 +161,10 @@ export function FinanceView() {
           />
         </div>
 
-        <div className="flex flex-1 flex-col overflow-hidden px-3 pt-3 md:px-4 md:pt-4">
-          {/* Rounded card wrap — flex-1 fills the viewport. Only top
-              corners rounded + top/side borders so blank space below
-              the last row blends into the page background. */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border">
+        <div className="flex-1 overflow-y-auto px-3 pt-3 md:px-4 md:pt-4">
+          {/* Rounded card wrap — sized to content. The parent column
+              scrolls as one unit so no blank space below the last row. */}
+          <div className="mb-3 flex flex-col overflow-hidden rounded-2xl border border-border md:mb-4">
             <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-t-2xl border-b border-border bg-white px-3 py-2.5 md:gap-2.5 md:px-5">
               <input
                 value={search}
@@ -212,7 +211,7 @@ export function FinanceView() {
                 })}
               </div>
             )}
-            <div className="min-h-0 flex-1 overflow-auto">
+            <div>
               {visible.length === 0 ? (
                 <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
               ) : overview.isLoading ? (

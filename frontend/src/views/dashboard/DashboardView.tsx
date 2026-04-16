@@ -223,7 +223,7 @@ export function DashboardView() {
           />
         </div>
 
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
           {!statsCollapsed && (
             <StatsGrid
               accounts={activeAccounts}
@@ -232,12 +232,11 @@ export function DashboardView() {
             />
           )}
 
-          {/* Tree card: flex-1 fills the viewport. Only top corners
-              are rounded and only top + side borders are drawn — the
-              card has NO bottom border so blank space below 合計
-              blends into the page background instead of looking like
-              an empty box. The inner scroll div handles table overflow. */}
-          <div className="mx-3 mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border md:mx-4 md:mt-4">
+          {/* Tree card — sized to content. The entire right column
+              scrolls as one unit (overflow-y-auto on parent), so the
+              card only occupies the height its table rows need. No
+              more blank space below the last row. */}
+          <div className="mx-3 mb-3 mt-3 flex flex-col overflow-hidden rounded-2xl border border-border md:mx-4 md:mb-4 md:mt-4">
             <div className="flex shrink-0 flex-wrap items-center gap-2.5 border-b border-border bg-white px-3 py-2.5 first:rounded-t-2xl md:px-4 md:py-3">
               <input
                 value={searchTerm}
@@ -290,7 +289,7 @@ export function DashboardView() {
                 })}
               </div>
             )}
-            <div className="min-h-0 flex-1 overflow-auto">
+            <div>
               {activeAccounts.length === 0 ? (
                 <EmptyState>從左側選擇廣告帳戶</EmptyState>
               ) : overview.isLoading ? (
