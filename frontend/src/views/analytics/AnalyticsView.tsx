@@ -11,7 +11,7 @@ import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
 import type { FbAccount } from "@/types/fb";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnalyticsKpisRow } from "./AnalyticsKpis";
 import { ChartCard } from "./ChartCard";
 import { type AnalyticsData, computeAnalyticsData } from "./analyticsData";
@@ -39,6 +39,24 @@ import { VBarDistChart } from "./charts/VBarDistChart";
  */
 
 const ORANGE = "#FF6B2C";
+
+// Chart color palettes — module-level constants so they keep stable
+// references across renders. Previously defined inside AnalyticsBody,
+// which created new array refs every render and forced all 14 Chart.js
+// instances to destroy + re-create their canvases unnecessarily.
+const PALETTE_CTR = ["#FFB899", "#FF9A62", ORANGE, "#2E7D32", "#1B5E20"];
+const PALETTE_COST = ["#1B5E20", "#2E7D32", ORANGE, "#FF9A62", "#FF6B2C"];
+const PALETTE_SPEND = ["#E0E0E0", "#FFB899", "#FF9A62", ORANGE, "#CC4400"];
+const PALETTE_DOUGHNUT = [
+  "#1B5E20",
+  "#2E7D32",
+  "#388E3C",
+  "#43A047",
+  ORANGE,
+  "#FF9A62",
+  "#FF6B2C",
+  "#CC4400",
+];
 
 export function AnalyticsView() {
   const queryClient = useQueryClient();
@@ -93,6 +111,54 @@ export function AnalyticsView() {
   );
 }
 
+/**
+ * Lazy chart wrapper — uses IntersectionObserver to defer rendering
+ * of below-fold charts. The first 3 charts (visible in the initial
+ * viewport) use plain `<ChartCard>`; the remaining 11 use this wrapper
+ * so Chart.js only initialises when the card scrolls into view.
+ *
+ * `rootMargin: "200px"` starts rendering ~200px before the card enters
+ * the viewport so the chart is ready by the time the user scrolls to it.
+ */
+function LazyChartCard({
+  title,
+  emptyMessage,
+  children,
+  height = 220,
+}: {
+  title: string;
+  emptyMessage?: string | null;
+  children: React.ReactNode;
+  height?: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref}>
+      <ChartCard title={title} emptyMessage={emptyMessage} height={height}>
+        {visible ? children : null}
+      </ChartCard>
+    </div>
+  );
+}
+
 interface AnalyticsBodyProps {
   data: AnalyticsData;
   visible: FbAccount[];
@@ -100,20 +166,6 @@ interface AnalyticsBodyProps {
 }
 
 function AnalyticsBody({ data, visible, periodLabel }: AnalyticsBodyProps) {
-  const PALETTE_CTR = ["#FFB899", "#FF9A62", ORANGE, "#2E7D32", "#1B5E20"];
-  const PALETTE_COST = ["#1B5E20", "#2E7D32", ORANGE, "#FF9A62", "#FF6B2C"];
-  const PALETTE_SPEND = ["#E0E0E0", "#FFB899", "#FF9A62", ORANGE, "#CC4400"];
-  const PALETTE_DOUGHNUT = [
-    "#1B5E20",
-    "#2E7D32",
-    "#388E3C",
-    "#43A047",
-    ORANGE,
-    "#FF9A62",
-    "#FF6B2C",
-    "#CC4400",
-  ];
-
   return (
     <>
       <AnalyticsKpisRow kpis={data.kpis} accountCount={visible.length} periodLabel={periodLabel} />
@@ -162,7 +214,7 @@ function AnalyticsBody({ data, visible, periodLabel }: AnalyticsBodyProps) {
         </ChartCard>
 
         {/* 4. Scatter */}
-        <ChartCard
+        <LazyChartCard
           title={data.scatterIsMsgCost ? "花費 vs 私訊成本（各活動）" : "花費 vs CTR（各活動）"}
           emptyMessage={data.scatter.length === 0 ? "無散點資料" : null}
         >
@@ -171,10 +223,10 @@ function AnalyticsBody({ data, visible, periodLabel }: AnalyticsBodyProps) {
             isMsgCost={data.scatterIsMsgCost}
             formatMoney={fM}
           />
-        </ChartCard>
+        </LazyChartCard>
 
         {/* 5. Msg cost distribution */}
-        <ChartCard
+        <LazyChartCard
           title="私訊成本分布"
           emptyMessage={data.msgCostDist.values.every((v) => v === 0) ? "無私訊成本數據" : null}
         >
@@ -183,10 +235,10 @@ function AnalyticsBody({ data, visible, periodLabel }: AnalyticsBodyProps) {
             values={data.msgCostDist.values}
             colors={PALETTE_COST}
           />
-        </ChartCard>
+        </LazyChartCard>
 
         {/* 6. Top 10 msg */}
-        <ChartCard
+        <LazyChartCard
           title="私訊數 Top 10 活動"
           emptyMessage={data.topMsg.length === 0 ? "無私訊數據" : null}
         >
@@ -198,10 +250,10 @@ function AnalyticsBody({ data, visible, periodLabel }: AnalyticsBodyProps) {
             formatTick={(v) => fM(v)}
             padRight={45}
           />
-        </ChartCard>
+        </LazyChartCard>
 
         {/* 7. Best CPM (lowest msg cost) */}
-        <ChartCard
+        <LazyChartCard
           title="最低私訊成本 Top 10 活動"
           emptyMessage={data.bestCpm.length === 0 ? "無私訊數據" : null}
         >
@@ -213,10 +265,10 @@ function AnalyticsBody({ data, visible, periodLabel }: AnalyticsBodyProps) {
             formatTick={(v) => `$${fM(v)}`}
             padRight={55}
           />
-        </ChartCard>
+        </LazyChartCard>
 
         {/* 8. Account msg cost */}
-        <ChartCard
+        <LazyChartCard
           title="各帳戶平均私訊成本"
           emptyMessage={data.acctMsgCost.length === 0 ? "無私訊數據" : null}
         >
@@ -228,10 +280,10 @@ function AnalyticsBody({ data, visible, periodLabel }: AnalyticsBodyProps) {
             formatTick={(v) => `$${fM(v)}`}
             padRight={55}
           />
-        </ChartCard>
+        </LazyChartCard>
 
         {/* 9. Account CTR */}
-        <ChartCard
+        <LazyChartCard
           title="各帳戶 CTR 比較"
           emptyMessage={data.acctCtr.length === 0 ? "無數據" : null}
         >
@@ -243,28 +295,28 @@ function AnalyticsBody({ data, visible, periodLabel }: AnalyticsBodyProps) {
             formatTick={(v) => `${v}%`}
             padRight={40}
           />
-        </ChartCard>
+        </LazyChartCard>
 
         {/* 10. CPC distribution */}
-        <ChartCard title="CPC 分布區間">
+        <LazyChartCard title="CPC 分布區間">
           <VBarDistChart
             labels={data.cpcDist.labels}
             values={data.cpcDist.values}
             colors={PALETTE_COST}
           />
-        </ChartCard>
+        </LazyChartCard>
 
         {/* 11. Spend distribution */}
-        <ChartCard title="花費規模分布（各活動）">
+        <LazyChartCard title="花費規模分布（各活動）">
           <VBarDistChart
             labels={data.spendDist.labels}
             values={data.spendDist.values}
             colors={PALETTE_SPEND}
           />
-        </ChartCard>
+        </LazyChartCard>
 
         {/* 12. Msg ratio doughnut */}
-        <ChartCard title="有 / 無私訊活動比例">
+        <LazyChartCard title="有 / 無私訊活動比例">
           <DoughnutChartCard
             labels={["有私訊數據", "無私訊數據"]}
             data={[data.msgRatio.withMsg, data.msgRatio.withoutMsg]}
@@ -273,10 +325,10 @@ function AnalyticsBody({ data, visible, periodLabel }: AnalyticsBodyProps) {
             cutout="60%"
             formatTooltip={(label, value) => `${label}: ${value} 個`}
           />
-        </ChartCard>
+        </LazyChartCard>
 
         {/* 13. Msg share by account */}
-        <ChartCard
+        <LazyChartCard
           title="私訊數佔比（各帳戶）"
           emptyMessage={data.msgShare.length === 0 ? "無私訊數據" : null}
         >
@@ -288,10 +340,10 @@ function AnalyticsBody({ data, visible, periodLabel }: AnalyticsBodyProps) {
             cutout="55%"
             formatTooltip={(label, value) => `${label}: ${fM(value)} 則`}
           />
-        </ChartCard>
+        </LazyChartCard>
 
         {/* 14. Msg ROI */}
-        <ChartCard
+        <LazyChartCard
           title="高私訊效益活動 Top 10（私訊/千元花費）"
           emptyMessage={data.msgRoi.length === 0 ? "無私訊數據" : null}
         >
@@ -303,7 +355,7 @@ function AnalyticsBody({ data, visible, periodLabel }: AnalyticsBodyProps) {
             formatTick={(v) => `${v} 則`}
             padRight={50}
           />
-        </ChartCard>
+        </LazyChartCard>
       </div>
     </>
   );

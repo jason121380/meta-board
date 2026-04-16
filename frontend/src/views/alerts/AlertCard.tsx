@@ -1,6 +1,6 @@
 import { cn } from "@/lib/cn";
 import { fF, fM } from "@/lib/format";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   type AlertCardKey,
   type AlertEntry,
@@ -140,59 +140,14 @@ export function AlertCard({
                 </td>
               </tr>
             ) : (
-              rows.map((entry) => {
-                const link = fbCampaignLink(
-                  entry,
-                  businessIdForCampaign(entry.campaign._accountId),
-                );
-                return (
-                  <tr key={entry.campaign.id} className="border-b border-border">
-                    <td className="max-w-[220px] px-3 py-3 text-left text-[13px] md:px-2.5 md:py-2 md:text-xs">
-                      <div className="flex items-center">
-                        <span className="flex-1 truncate font-semibold" title={entry.campaign.name}>
-                          {entry.campaign.name}
-                        </span>
-                        {link && (
-                          <a
-                            href={link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="ml-2 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-300 no-underline hover:bg-orange-bg hover:text-orange active:bg-orange-bg active:text-orange md:ml-1.5"
-                            title="在 Facebook 廣告管理員開啟"
-                            aria-label={`在 Facebook 廣告管理員開啟 ${entry.campaign.name}`}
-                          >
-                            {/* Same SVG as <FbCampaignLink/> in the
-                                dashboard tree — box-with-arrow
-                                external link glyph, not the ↗ text
-                                glyph, so the icon is visually
-                                consistent across views. */}
-                            <svg
-                              width="13"
-                              height="13"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              aria-hidden="true"
-                            >
-                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                              <polyline points="15 3 21 3 21 9" />
-                              <line x1="10" y1="14" x2="21" y2="3" />
-                            </svg>
-                            <span className="sr-only">在 Facebook 廣告管理員開啟</span>
-                          </a>
-                        )}
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-3 text-right text-[13px] md:px-2.5 md:py-2 md:text-xs">
-                      {metric.render(entry)}
-                    </td>
-                  </tr>
-                );
-              })
+              rows.map((entry) => (
+                <AlertCardRow
+                  key={entry.campaign.id}
+                  entry={entry}
+                  metric={metric}
+                  businessId={businessIdForCampaign(entry.campaign._accountId)}
+                />
+              ))
             )}
           </tbody>
         </table>
@@ -230,3 +185,59 @@ function SortHeader({
     </th>
   );
 }
+
+type MetricConfig = (typeof METRIC_BY_KEY)[keyof typeof METRIC_BY_KEY];
+
+const AlertCardRow = memo(function AlertCardRow({
+  entry,
+  metric,
+  businessId,
+}: {
+  entry: AlertEntry;
+  metric: MetricConfig;
+  businessId: string | undefined;
+}) {
+  const link = fbCampaignLink(entry, businessId);
+  return (
+    <tr className="border-b border-border">
+      <td className="max-w-[220px] px-3 py-3 text-left text-[13px] md:px-2.5 md:py-2 md:text-xs">
+        <div className="flex items-center">
+          <span className="flex-1 truncate font-semibold" title={entry.campaign.name}>
+            {entry.campaign.name}
+          </span>
+          {link && (
+            <a
+              href={link}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="ml-2 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-300 no-underline hover:bg-orange-bg hover:text-orange active:bg-orange-bg active:text-orange md:ml-1.5"
+              title="在 Facebook 廣告管理員開啟"
+              aria-label={`在 Facebook 廣告管理員開啟 ${entry.campaign.name}`}
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+              <span className="sr-only">在 Facebook 廣告管理員開啟</span>
+            </a>
+          )}
+        </div>
+      </td>
+      <td className="whitespace-nowrap px-3 py-3 text-right text-[13px] md:px-2.5 md:py-2 md:text-xs">
+        {metric.render(entry)}
+      </td>
+    </tr>
+  );
+});

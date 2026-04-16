@@ -36,6 +36,10 @@ export interface MultiAccountOverviewResult {
   isLoading: boolean;
   isFetching: boolean;
   isError: boolean;
+  /** True while full data (with insights) has not yet resolved. When
+   * lite data is available but insights are still pending, StatsGrid
+   * should show shimmer placeholders instead of "$0" values. */
+  insightsPending: boolean;
   loadedCount: number;
   totalCount: number;
 }
@@ -120,6 +124,7 @@ export function useMultiAccountOverview(
     isLoading,
     isFetching: fullQuery.isFetching,
     isError: fullQuery.isError && liteQuery.isError,
+    insightsPending: !fullQuery.isSuccess,
     loadedCount: isLoading ? 0 : accounts.length,
     totalCount: accounts.length,
   };

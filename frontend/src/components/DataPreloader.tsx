@@ -28,7 +28,7 @@ import { useEffect, useRef, useState } from "react";
  * get instant cache hits on first render.
  */
 
-const BATCH_SIZE = 5;
+const BATCH_SIZE = 10;
 
 /** Module-level flag so the preloader only runs once per page load.
  * React Strict Mode double-mount won't retrigger it.
@@ -85,9 +85,11 @@ export function DataPreloader({ onComplete }: { onComplete: () => void }) {
     > = {};
     let loadedCount = 0;
 
-    // Process batches concurrently (2 at a time to avoid overwhelming
-    // the backend / FB rate limits with 80+ simultaneous requests).
-    const MAX_CONCURRENT_BATCHES = 2;
+    // Process batches concurrently. The backend semaphore (40 slots)
+    // limits actual FB API calls, so we can safely run 4 batches of
+    // 10 accounts in parallel. For 80 accounts: 8 batches ÷ 4
+    // concurrent = 2 rounds × ~6s ≈ 12s (down from ~35s at 2×5).
+    const MAX_CONCURRENT_BATCHES = 4;
 
     const processBatch = async (batch: typeof accounts) => {
       const ids = batch.map((a) => a.id);
