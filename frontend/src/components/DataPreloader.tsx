@@ -31,15 +31,16 @@ import { useEffect, useRef, useState } from "react";
 const BATCH_SIZE = 5;
 
 /** Module-level flag so the preloader only runs once per page load.
- * React Strict Mode double-mount won't retrigger it. */
-let didPreload = false;
+ * React Strict Mode double-mount won't retrigger it.
+ * Exported so Shell can read the initial value for its state. */
+export let didPreload = false;
 
 interface Progress {
   loaded: number;
   total: number;
 }
 
-export function DataPreloader() {
+export function DataPreloader({ onComplete }: { onComplete: () => void }) {
   const queryClient = useQueryClient();
   const accountsQuery = useAccounts();
   const allAccounts = accountsQuery.data ?? [];
@@ -143,8 +144,14 @@ export function DataPreloader() {
     void runAllBatches();
   }, [done, accountsQuery.isLoading, visibleAccounts, date, queryClient]);
 
-  // Don't render the overlay once preloading is complete or if there
-  // are no accounts to preload.
+  // Notify the parent (Shell) that preloading finished so it can
+  // mount <Outlet/>. Without this gate, views fire their own queries
+  // while the preloader is still in flight, producing transient error
+  // banners behind the overlay.
+  useEffect(() => {
+    if (done) onComplete();
+  }, [done, onComplete]);
+
   if (done) return null;
 
   const pct = progress.total > 0 ? Math.round((progress.loaded / progress.total) * 100) : 0;
