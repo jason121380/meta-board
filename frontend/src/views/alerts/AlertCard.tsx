@@ -95,7 +95,7 @@ export function AlertCard({
   };
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-white">
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-white">
       <div
         className="flex items-center gap-2 border-b border-border px-4 py-3"
         style={{ background: "var(--orange-bg)" }}
