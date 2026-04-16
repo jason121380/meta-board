@@ -1,4 +1,4 @@
-import { DataPreloader } from "@/components/DataPreloader";
+import { DataPreloader, didPreload } from "@/components/DataPreloader";
 import { EmptyAccountsPrompt } from "@/components/EmptyAccountsPrompt";
 import { useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
@@ -24,6 +24,11 @@ import { Sidebar } from "./Sidebar";
  */
 export function Shell() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Views (<Outlet/>) are NOT rendered until preloading finishes.
+  // This prevents views from firing their own queries (which race
+  // with the preloader and produce transient error banners).
+  const [preloadDone, setPreloadDone] = useState(didPreload);
+  const onPreloadComplete = useCallback(() => setPreloadDone(true), []);
   const { pathname } = useLocation();
 
   // Close the sidebar whenever the route changes — avoids the
@@ -60,15 +65,11 @@ export function Shell() {
             inside every view's topbar area; actual button is rendered
             by Topbar via the MobileToggleContext below. */}
         <MobileToggleContext.Provider value={() => setMobileOpen((v) => !v)}>
-          <Outlet />
+          {preloadDone && <Outlet />}
         </MobileToggleContext.Provider>
       </main>
-      {/* Mounted inside the router layout so its `useNavigate()` works
-          and it sees the same QueryClient context as the views. Fires
-          at most once per page load when the user has FB accounts but
-          hasn't picked any in Settings yet. */}
-      <EmptyAccountsPrompt />
-      <DataPreloader />
+      {preloadDone && <EmptyAccountsPrompt />}
+      <DataPreloader onComplete={onPreloadComplete} />
     </div>
   );
 }
