@@ -1292,9 +1292,22 @@ async def get_overview(
             "error": "; ".join(error_parts) if error_parts else None,
         }
 
-    # Outer gather — N accounts concurrent. fetch_one catches its own
-    # exceptions so return_exceptions isn't needed here.
-    results = await asyncio.gather(*[_fetch_one(aid) for aid in account_ids])
+    # Outer gather — N accounts concurrent. Each _fetch_one is wrapped
+    # in a 30-second timeout so one slow account (e.g. stuck in the
+    # 5-tier campaign fallback chain) can't hold up the entire batch.
+    # Timed-out accounts get an error entry; faster accounts still
+    # return data normally.
+    async def _fetch_one_bounded(aid: str):
+        try:
+            return await asyncio.wait_for(_fetch_one(aid), timeout=30.0)
+        except asyncio.TimeoutError:
+            return aid, {
+                "campaigns": [],
+                "insights": None,
+                "error": "timeout: account took more than 30s",
+            }
+
+    results = await asyncio.gather(*[_fetch_one_bounded(aid) for aid in account_ids])
     return {"data": dict(results)}
 
 
