@@ -142,20 +142,20 @@ export function FinanceView() {
         </div>
       </Topbar>
 
+      {/* Mobile account picker — pinned below Topbar */}
+      <div className="shrink-0 border-b border-border md:hidden">
+        <MobileAccountPicker
+          accounts={visible}
+          selectedId={selectedId}
+          onSelect={(id) => setFinSelectedAcctIds(id ? [id] : [])}
+        />
+      </div>
+
       <div className="flex min-h-0 flex-1 md:flex-row">
         {/* Desktop sidebar (≥768px) */}
         <div className="hidden md:flex">
           <FinanceAccountPanel
             rows={accountRows}
-            selectedId={selectedId}
-            onSelect={(id) => setFinSelectedAcctIds(id ? [id] : [])}
-          />
-        </div>
-
-        {/* Mobile picker (<768px) — opens a modal */}
-        <div className="border-b border-border md:hidden">
-          <MobileAccountPicker
-            accounts={visible}
             selectedId={selectedId}
             onSelect={(id) => setFinSelectedAcctIds(id ? [id] : [])}
           />

@@ -198,6 +198,22 @@ export function DashboardView() {
         </div>
       </Topbar>
 
+      {/* Mobile account picker — pinned right below Topbar so it's
+          the first thing the user sees. Hidden on desktop where the
+          AccountPanel sidebar handles selection. */}
+      <div className="shrink-0 border-b border-border md:hidden">
+        <MobileAccountPicker
+          accounts={visibleAccounts}
+          selectedId={activeAccountId}
+          onSelect={(id) => {
+            if (id === null) return;
+            const acc = visibleAccounts.find((a) => a.id === id);
+            if (acc) setActiveIds([acc.id]);
+          }}
+          includeAllOption={false}
+        />
+      </div>
+
       <div className="flex min-h-0 flex-1 md:flex-row">
         {/* Desktop sidebar (≥768px) */}
         <div className="hidden md:flex">
@@ -206,20 +222,6 @@ export function DashboardView() {
             activeAccountId={activeAccountId}
             isLoading={accountsQuery.isLoading}
             onSelect={(account) => setActiveIds([account.id])}
-          />
-        </div>
-
-        {/* Mobile picker (<768px) — opens a modal */}
-        <div className="border-b border-border md:hidden">
-          <MobileAccountPicker
-            accounts={visibleAccounts}
-            selectedId={activeAccountId}
-            onSelect={(id) => {
-              if (id === null) return;
-              const acc = visibleAccounts.find((a) => a.id === id);
-              if (acc) setActiveIds([acc.id]);
-            }}
-            includeAllOption={false}
           />
         </div>
 
