@@ -7,7 +7,7 @@ import { Topbar } from "@/layout/Topbar";
 import { accountStatusColor, accountStatusLabel } from "@/lib/accountStatus";
 import { cn } from "@/lib/cn";
 import { useAccountsStore } from "@/stores/accountsStore";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   countChecked,
@@ -44,6 +44,19 @@ export function SettingsView() {
   );
   const [search, setSearch] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  // Auto-select the first BM group when the list loads and nothing
+  // is selected yet — same pattern as Dashboard's auto-select.
+  // Without this, a first-time user redirected from
+  // EmptyAccountsPrompt sees the empty "點選企業管理平台" state
+  // and has to manually click a BM group before they can check any
+  // accounts.
+  useEffect(() => {
+    if (activeBmKey !== null) return;
+    if (groups.length === 0) return;
+    const first = groups[0];
+    if (first) setActiveBmKey(first.key);
+  }, [activeBmKey, groups]);
 
   const activeGroup = groups.find((g) => g.key === activeBmKey) ?? null;
 
