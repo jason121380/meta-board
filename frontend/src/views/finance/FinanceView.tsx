@@ -161,7 +161,7 @@ export function FinanceView() {
           />
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 pt-3 md:px-4 md:pt-4">
+        <div className="flex-1 px-3 pt-3 md:px-4 md:pt-4">
           {/* Rounded card wrap — sized to content. The parent column
               scrolls as one unit so no blank space below the last row. */}
           <div className="mb-3 flex flex-col overflow-hidden rounded-2xl border border-border md:mb-4">
