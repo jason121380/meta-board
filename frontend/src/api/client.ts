@@ -298,7 +298,11 @@ export const api = {
      * backend request. Bypasses the browser's 6-connection-per-origin
      * HTTP/1.1 limit that was the real bottleneck on Analytics /
      * Alerts / Finance first-load. */
-    batch: (accountIds: string[], date: DateConfig, opts?: { includeArchived?: boolean }) =>
+    batch: (
+      accountIds: string[],
+      date: DateConfig,
+      opts?: { includeArchived?: boolean; lite?: boolean },
+    ) =>
       request<{
         data: Record<
           string,
@@ -313,6 +317,7 @@ export const api = {
           ids: accountIds.join(","),
           ...dateParams(date),
           include_archived: opts?.includeArchived ? "true" : undefined,
+          lite: opts?.lite ? "true" : undefined,
         },
       }),
   },

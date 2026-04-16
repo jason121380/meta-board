@@ -135,6 +135,7 @@ export function DashboardView() {
 
   const multiAcct = activeAccounts.length > 1;
 
+  const setTreeSort = useUiStore((s) => s.setTreeSort);
   const statsCollapsed = useUiStore((s) => s.statsCollapsed);
   const toggleStatsCollapsed = useUiStore((s) => s.toggleStatsCollapsed);
 
@@ -222,7 +223,7 @@ export function DashboardView() {
           />
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex flex-1 flex-col overflow-hidden">
           {!statsCollapsed && (
             <StatsGrid
               accounts={activeAccounts}
@@ -231,12 +232,12 @@ export function DashboardView() {
             />
           )}
 
-          {/* Tree card: content-sized so the card ends right after
-              the last row — no blank space below 合計. The parent
-              div scrolls the whole column (StatsGrid + card) as one
-              unit; table headers stay pinned via sticky positioning
-              inside the scrollable ancestor. */}
-          <div className="m-3 flex flex-col overflow-hidden rounded-2xl border border-border md:m-4">
+          {/* Tree card: flex-1 fills the viewport. Only top corners
+              are rounded and only top + side borders are drawn — the
+              card has NO bottom border so blank space below 合計
+              blends into the page background instead of looking like
+              an empty box. The inner scroll div handles table overflow. */}
+          <div className="mx-3 mt-3 flex flex-1 flex-col overflow-hidden rounded-t-2xl border-x border-t border-border md:mx-4 md:mt-4">
             <div className="flex shrink-0 flex-wrap items-center gap-2.5 rounded-t-2xl border-b border-border bg-white px-3 py-2.5 md:px-4 md:py-3">
               <input
                 value={searchTerm}
@@ -252,7 +253,14 @@ export function DashboardView() {
                   type="checkbox"
                   className="custom-cb"
                   checked={compareMode}
-                  onChange={(e) => setCompareMode(e.currentTarget.checked)}
+                  onChange={(e) => {
+                    const on = e.currentTarget.checked;
+                    setCompareMode(on);
+                    // Reset sort when entering comparison mode so the
+                    // default CTR-desc kicks in (ComparisonTable's
+                    // effectiveSort fallback).
+                    if (on) setTreeSort(null);
+                  }}
                 />
                 素材比較
               </label>
@@ -282,7 +290,7 @@ export function DashboardView() {
                 })}
               </div>
             )}
-            <div>
+            <div className="min-h-0 flex-1 overflow-auto">
               {activeAccounts.length === 0 ? (
                 <EmptyState>從左側選擇廣告帳戶</EmptyState>
               ) : overview.isLoading ? (
