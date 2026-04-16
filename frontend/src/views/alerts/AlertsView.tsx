@@ -74,21 +74,21 @@ export function AlertsView() {
         </div>
       </Topbar>
 
+      {/* Mobile account picker — pinned below Topbar */}
+      <div className="shrink-0 border-b border-border md:hidden">
+        <MobileAccountPicker
+          accounts={visibleAll}
+          selectedId={selectedAcctId}
+          onSelect={setSelectedAcctId}
+        />
+      </div>
+
       <div className="flex min-h-0 flex-1 md:flex-row">
         {/* Desktop sidebar (≥768px) */}
         <div className="hidden md:flex">
           <AlertAccountPanel
             accounts={visibleAll}
             selectedAccountId={selectedAcctId}
-            onSelect={setSelectedAcctId}
-          />
-        </div>
-
-        {/* Mobile picker (<768px) — single tap target opens a modal */}
-        <div className="border-b border-border md:hidden">
-          <MobileAccountPicker
-            accounts={visibleAll}
-            selectedId={selectedAcctId}
             onSelect={setSelectedAcctId}
           />
         </div>
