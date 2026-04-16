@@ -46,7 +46,7 @@ export function AlertsView() {
   // for every account was already in the "all accounts" cache entry.
   // Fetching once for the full set and filtering CLIENT-SIDE below
   // makes per-account switching instant.
-  const overview = useMultiAccountOverview(visibleAll, date);
+  const overview = useMultiAccountOverview(visibleAll, date, { includeArchived: true });
 
   const scopedCampaigns = useMemo(() => {
     if (selectedAcctId === null) return overview.campaigns;
@@ -94,6 +94,19 @@ export function AlertsView() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 md:p-5">
+          {Object.keys(overview.errors).length > 0 && (
+            <div className="mb-3 rounded-lg border border-red-bg bg-red-bg/40 px-4 py-2.5 text-[12px] text-red">
+              <div className="font-semibold">部分帳戶載入失敗：</div>
+              {Object.entries(overview.errors).map(([acctId, msg]) => {
+                const name = visibleAll.find((a) => a.id === acctId)?.name ?? acctId;
+                return (
+                  <div key={acctId} className="mt-0.5 break-all">
+                    <span className="font-medium">{name}</span>: {msg}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {visibleAll.length === 0 ? (
             <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
           ) : overview.isLoading ? (

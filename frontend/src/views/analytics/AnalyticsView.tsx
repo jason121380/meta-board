@@ -71,7 +71,7 @@ export function AnalyticsView() {
   // Single batch request for campaigns + per-account insights —
   // replaces the old `useMultiAccountCampaigns` + `useMultiAccountInsights`
   // pair so we only hit the backend once instead of 2 × N times.
-  const overview = useMultiAccountOverview(visible, date);
+  const overview = useMultiAccountOverview(visible, date, { includeArchived: true });
 
   const data = useMemo(
     () => computeAnalyticsData(overview.campaigns, overview.insights, visible),
@@ -95,6 +95,19 @@ export function AnalyticsView() {
       </Topbar>
 
       <div className="flex-1 overflow-y-auto p-3 md:p-6">
+        {Object.keys(overview.errors).length > 0 && (
+          <div className="mb-3 rounded-lg border border-red-bg bg-red-bg/40 px-4 py-2.5 text-[12px] text-red">
+            <div className="font-semibold">部分帳戶載入失敗：</div>
+            {Object.entries(overview.errors).map(([acctId, msg]) => {
+              const name = visible.find((a) => a.id === acctId)?.name ?? acctId;
+              return (
+                <div key={acctId} className="mt-0.5 break-all">
+                  <span className="font-medium">{name}</span>: {msg}
+                </div>
+              );
+            })}
+          </div>
+        )}
         {visible.length === 0 ? (
           <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
         ) : isLoading ? (

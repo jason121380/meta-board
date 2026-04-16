@@ -124,7 +124,7 @@ export function useMultiAccountOverview(
     isLoading,
     isFetching: fullQuery.isFetching,
     isError: fullQuery.isError && liteQuery.isError,
-    insightsPending: !fullQuery.isSuccess,
+    insightsPending: !fullQuery.isSuccess && !fullQuery.isError,
     loadedCount: isLoading ? 0 : accounts.length,
     totalCount: accounts.length,
   };
