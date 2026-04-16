@@ -165,7 +165,7 @@ export function FinanceView() {
           {/* Rounded card wrap — flex-1 fills the viewport. Only top
               corners rounded + top/side borders so blank space below
               the last row blends into the page background. */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-2xl border-x border-t border-border">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border">
             <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-t-2xl border-b border-border bg-white px-3 py-2.5 md:gap-2.5 md:px-5">
               <input
                 value={search}
