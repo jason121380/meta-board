@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 
 /**
  * Budget edit dialog — open via `open` prop with a target entity.
- * Ported from dashboard.html `#budgetModal` + `openBudget()` +
+ * Ported from the original design `#budgetModal` + `openBudget()` +
  * `saveBudget()`.
  *
  * Flow:

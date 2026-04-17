@@ -2,7 +2,7 @@
  * Number / percentage / money / frequency formatters.
  *
  * These are literal ports of the global `fN`, `fM`, `fP`, `fF`, `escHtml`
- * helpers defined in dashboard.html around lines 1282–1286. The formatting
+ * helpers defined in the original design around lines 1282–1286. The formatting
  * is part of the UI contract — every stats row, tree cell, finance row,
  * and chart axis relies on these exact outputs. Any change here will
  * cause visible drift, so they must match the legacy output byte-for-byte.

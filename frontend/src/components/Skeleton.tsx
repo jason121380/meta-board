@@ -6,7 +6,7 @@ import type { CSSProperties } from "react";
  * tailwind.config.ts. Drop-in replacement for a real element, with
  * adjustable width / height / rounding.
  *
- * Pattern ported from dashboard.html `.skel` class so the visual is
+ * Pattern ported from the original template `.skel` class so the visual is
  * identical to the legacy skeleton placeholders.
  */
 export interface SkeletonProps {

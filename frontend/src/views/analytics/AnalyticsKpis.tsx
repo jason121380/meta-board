@@ -5,7 +5,7 @@ import type { AnalyticsKpis } from "./analyticsData";
  * Six-card KPI strip at the top of the Analytics view. Uses the
  * legacy `.ai-kpi-card` CSS classes from globals.css.
  *
- * Port of dashboard.html lines 2538–2543.
+ * Port of the original design lines 2538–2543.
  */
 
 export interface AnalyticsKpisProps {

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 /**
  * Empty-state placeholder — 60px padding, center-aligned, gray-300 text.
- * Ported from `.empty-state` in dashboard.html. Used when a list or
+ * Ported from `.empty-state` in the original design. Used when a list or
  * table has no content to render.
  */
 export interface EmptyStateProps {

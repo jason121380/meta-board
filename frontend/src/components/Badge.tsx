@@ -4,7 +4,7 @@ import type { FbEntityStatus } from "@/types/fb";
 /**
  * Status badge — pill-shaped 11px semi-bold label. Ported from
  * `.badge` / `.badge-active` / `.badge-paused` / `.badge-other`
- * CSS classes in dashboard.html. Uses the global classes from
+ * CSS classes in the original design. Uses the global classes from
  * globals.css so the color scheme is consistent across views.
  */
 

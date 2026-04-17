@@ -16,7 +16,7 @@ import { z } from "zod";
  * Step 2: fill in name / objective / daily budget / initial status.
  * Step 3: success screen with returned campaign id.
  *
- * Matches dashboard.html lines 1089–1163 layout and styling.
+ * Matches the original design lines 1089–1163 layout and styling.
  * Uses react-hook-form + zod for validation so the inputs get
  * live error messages without per-field state management.
  */

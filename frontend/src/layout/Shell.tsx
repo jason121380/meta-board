@@ -10,7 +10,7 @@ import { Sidebar } from "./Sidebar";
  * content on the right. The <Outlet/> renders whichever view the
  * current route matched.
  *
- * Layout ported from dashboard.html lines 56–62, with 100vh replaced
+ * Layout ported from the original template, with 100vh replaced
  * by 100dvh so mobile Safari's address bar doesn't push the bottom of
  * the view off-screen:
  *   .layout   { display: flex; height: 100dvh; overflow: hidden; }

@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 /**
  * DatePicker — trigger button + popover with 7 presets on the left and
  * a month calendar on the right. Ports the legacy `class DatePicker`
- * from dashboard.html lines 1306–1533.
+ * from the original design lines 1306–1533.
  *
  * Visual contract:
  * - Trigger: 36px height, 1.5px border, orange calendar icon, NO arrow

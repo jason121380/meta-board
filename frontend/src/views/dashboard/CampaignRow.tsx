@@ -27,7 +27,7 @@ export interface CampaignRowProps {
 
 /**
  * First-level row — a single FB campaign with lazy-loaded adsets
- * inside an expanded state. Matches dashboard.html lines 1971–2003.
+ * inside an expanded state. Matches the original design lines 1971–2003.
  *
  * Budget column shows either daily_budget or lifetime_budget; if
  * neither is set we display a hint that the budget lives on the

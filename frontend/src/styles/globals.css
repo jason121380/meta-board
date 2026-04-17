@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 /*
- * Global base styles — ported from dashboard.html.
+ * Global base styles — ported from the original template.
  * Anything in this file must remain visually identical to the legacy
  * build. Per-component styles go in component-specific files.
  */
@@ -23,6 +23,7 @@
   html,
   body {
     height: 100%;
+    overflow: hidden;
     /* Prevent pinch-to-zoom on iOS Safari. The viewport meta tag's
        user-scalable=no is ignored since iOS 10. touch-action on the
        root element is the reliable alternative for PWA apps. */
@@ -268,7 +269,7 @@
 /*
  * ── Mobile responsive overrides ──────────────────────────────
  *
- * Ported from dashboard.html @media (max-width: 768px) block.
+ * Ported from the original design @media (max-width: 768px) block.
  * Rather than re-declaring every Tailwind utility class, we target
  * the semantic anchors placed on key layout nodes:
  *   .shell-root    → outermost layout flex

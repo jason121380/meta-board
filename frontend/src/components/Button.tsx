@@ -4,7 +4,7 @@ import { type ButtonHTMLAttributes, forwardRef } from "react";
 
 /**
  * Button — ported from the `.btn` / `.btn-blue` / `.btn-ghost` /
- * `.btn-red` / `.btn-sm` classes in dashboard.html. Uses CVA so variants
+ * `.btn-red` / `.btn-sm` classes in the original design. Uses CVA so variants
  * compose cleanly and shadcn-style.
  *
  * Visual contract: these must match legacy dashboard buttons exactly

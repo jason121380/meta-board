@@ -12,7 +12,7 @@ import {
 
 /**
  * Facebook JS SDK provider — replaces the window-level `fbAsyncInit`
- * dance in dashboard.html with a React context. The SDK is loaded
+ * dance in the original design with a React context. The SDK is loaded
  * exactly once per page using a module-level flag (survives React 18
  * Strict Mode's double-mount behavior).
  *

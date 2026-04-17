@@ -1,6 +1,6 @@
 /**
  * Date picker core logic — pure functions extracted from the legacy
- * `DatePicker` class in dashboard.html (lines 1306–1533). Kept as pure
+ * `DatePicker` class in the original design (lines 1306–1533). Kept as pure
  * functions so the component stays simple and the logic is unit-testable
  * without rendering anything.
  *

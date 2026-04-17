@@ -10,7 +10,7 @@ import { useMemo } from "react";
  * are computed across accounts that HAVE the field (legacy behavior
  * — we don't down-weight for accounts where the field is missing).
  *
- * Ported from dashboard.html `loadOverviewStats()` (line 1837).
+ * Ported from the original design `loadOverviewStats()` (line 1837).
  */
 
 export interface StatsGridProps {

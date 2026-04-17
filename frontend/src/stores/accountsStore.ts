@@ -4,7 +4,7 @@ import { create } from "zustand";
 /**
  * Accounts store — tracks the user's saved/active/ordered account lists.
  *
- * Maps directly onto legacy dashboard.html global `let` state:
+ * Maps directly onto legacy the original design global `let` state:
  *   savedSelectedIds (line 1235) → selectedIds, persisted as
  *     `fb_selected_accounts`
  *   selectedAccounts  (line 1234) → activeIds, persisted as
@@ -32,7 +32,7 @@ export interface AccountsState {
 
   /** Utility: return the user's visible accounts (selectedIds) sorted
    * by `order` first, then alphabetically by name. Matches the legacy
-   * getVisibleAccounts() helper at dashboard.html line 1701. */
+   * getVisibleAccounts() helper at the original design line 1701. */
   visibleAccounts: (all: FbAccount[]) => FbAccount[];
 }
 

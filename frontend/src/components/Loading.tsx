@@ -4,7 +4,7 @@ import { Spinner } from "./Spinner";
 
 /**
  * Full-width loading state used inside view panels and tree containers.
- * Ported from the `.loading` block in dashboard.html — flex-center with
+ * Ported from the `.loading` block in the original design — flex-center with
  * 60px vertical padding, 10px gap, gray-300 text.
  */
 export interface LoadingProps {

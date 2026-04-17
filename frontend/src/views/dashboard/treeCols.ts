@@ -26,7 +26,7 @@ function statusRank(status: string | undefined): number {
  * comparator (which assumes numeric return from `sortKey`) still
  * works without refactoring to a Comparator<T>. We use the UTF-16
  * code units of the name so the ordering is deterministic and
- * locale-insensitive (matches legacy dashboard.html behavior). For
+ * locale-insensitive (matches legacy the original design behavior). For
  * proper zh-TW collation we'd switch to localeCompare, but that
  * requires touching the TreeTable sorter.
  */
@@ -44,7 +44,7 @@ function nameRank(name: string | undefined): number {
 
 /**
  * Column schema for the dashboard tree table. Ported from the
- * `cols` array defined inside `renderTree()` at dashboard.html line
+ * `cols` array defined inside `renderTree()` at the original design line
  * 1958. Multi-account mode inserts the "帳戶" column between name and
  * status.
  *

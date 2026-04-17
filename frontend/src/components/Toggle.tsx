@@ -3,7 +3,7 @@ import { type InputHTMLAttributes, forwardRef } from "react";
 
 /**
  * Toggle switch — 32×18 px, orange when checked. Uses the global
- * `.toggle` / `.slider` class pair from dashboard.html that's defined in
+ * `.toggle` / `.slider` class pair from the original design that's defined in
  * globals.css so visual behavior is identical to the legacy build.
  *
  * Mandated flow per CLAUDE.md: any status change must be preceded by a

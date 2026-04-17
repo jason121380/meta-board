@@ -21,7 +21,7 @@ import { computeAlertBuckets } from "./alertsData";
  * (私訊成本過高 / CPC 過高 / 頻次過高) with per-card sort and
  * keyword filter.
  *
- * Ported from dashboard.html lines 2874–3148 + view markup
+ * Ported from the original design lines 2874–3148 + view markup
  * at lines 1008–1030.
  */
 export function AlertsView() {

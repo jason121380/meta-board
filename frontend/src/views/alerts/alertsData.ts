@@ -3,7 +3,7 @@ import { getIns, getMsgCount } from "@/lib/insights";
 import type { FbCampaign } from "@/types/fb";
 
 /**
- * Pure alert rule evaluation. Ported from dashboard.html
+ * Pure alert rule evaluation. Ported from the original design
  * `loadAiAlerts()` lines 2993–3101. Each rule produces zero or more
  * alert entries that eventually land in one of three cards:
  *

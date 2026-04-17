@@ -15,7 +15,7 @@ import {
  * sortable metric column, and a list of rows. Three copies are
  * rendered side-by-side on the Alerts view.
  *
- * Ported from dashboard.html cardShell() + _renderAlertCardHead +
+ * Ported from the original design cardShell() + _renderAlertCardHead +
  * _renderAlertCardRows (lines 3120–3144).
  */
 

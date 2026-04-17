@@ -3,14 +3,14 @@ import * as Dialog from "@radix-ui/react-dialog";
 import type { ReactNode } from "react";
 
 /**
- * Modal — Radix Dialog primitive styled to match dashboard.html's
+ * Modal — Radix Dialog primitive styled to match the original design's
  * `.overlay` + `.modal` classes (white card, 12px radius, 24px padding,
  * 360px default width, md shadow, 900 z-index).
  *
  * Uses controlled `open` / `onOpenChange` API (shadcn-style). Content
  * is centered via fixed positioning. Clicking outside or pressing
  * Escape dismisses the dialog — matches current `overlay onclick`
- * behavior in dashboard.html.
+ * behavior in the original design.
  */
 
 export interface ModalProps {

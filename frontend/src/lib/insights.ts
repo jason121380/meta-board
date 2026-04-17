@@ -1,7 +1,7 @@
 import type { FbBaseEntity, FbInsights } from "@/types/fb";
 
 /**
- * Insights / action helpers — ported from dashboard.html.
+ * Insights / action helpers — ported from the original template.
  *
  * CLAUDE.md invariants enforced here:
  * - `getMsgCount` is the single source of truth for message counting.

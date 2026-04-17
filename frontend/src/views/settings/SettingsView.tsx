@@ -26,7 +26,7 @@ import {
  * kept in component state (`pendingChecked`) and only committed to
  * the store when the user clicks 儲存.
  *
- * Ported from dashboard.html lines 2296–2415.
+ * Ported from the original design lines 2296–2415.
  */
 export function SettingsView() {
   const navigate = useNavigate();

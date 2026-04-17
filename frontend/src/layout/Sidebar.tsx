@@ -8,7 +8,7 @@ import { NavLink } from "react-router-dom";
  * Left sidebar — 220px fixed, 60px logo header, nav items, user
  * dropdown at the bottom that opens upward.
  *
- * Layout and behavior ported from dashboard.html lines 801–843.
+ * Layout and behavior ported from the original template.
  * Five visible nav items: 儀表板 / 數據分析 / 警示列表 / 費用中心 / 設定.
  * (快速上架 route still exists for direct URL access but is hidden
  * from the sidebar nav per product decision 2026-04-14.)

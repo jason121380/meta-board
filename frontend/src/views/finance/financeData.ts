@@ -6,7 +6,7 @@ import type { FbAccount, FbCampaign, FbInsights } from "@/types/fb";
  * functions take campaigns/insights/state as inputs so they're
  * fully unit-testable.
  *
- * Ported from dashboard.html `renderFinanceTable()` and
+ * Ported from the original design `renderFinanceTable()` and
  * `renderFinanceAcctList()` lines 3260–3520.
  */
 

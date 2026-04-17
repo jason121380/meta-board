@@ -43,7 +43,7 @@ export const useFiltersStore = create<FiltersState>((set) => ({
 const K = { activeOnly: "filter_active_only" } as const;
 
 /** Hydrate from the legacy `filter_active_only` key. Default is true
- * — matches legacy dashboard.html line 1236. */
+ * — matches legacy the original design line 1236. */
 export function hydrateFiltersFromStorage(): void {
   try {
     const raw = localStorage.getItem(K.activeOnly);

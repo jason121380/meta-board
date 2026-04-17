@@ -72,7 +72,7 @@ function CreativeRowInner({ creative, multiAcct }: CreativeRowProps) {
           <div className="flex max-w-[240px] items-center gap-1.5 pl-[72px]">
             {thumb ? (
               // NOTE: do NOT wrap the URL in escHtml(). The legacy
-              // dashboard.html did so because it injected the <img> via
+              // the original design did so because it injected the <img> via
               // innerHTML, where the browser re-parses `&amp;` back to
               // `&`. In React JSX, `src={...}` is an attribute binding,
               // so escHtml would leave `&amp;` literally in the URL and
