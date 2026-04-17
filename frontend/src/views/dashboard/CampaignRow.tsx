@@ -2,7 +2,6 @@ import { useAccounts } from "@/api/hooks/useAccounts";
 import { useAdsets } from "@/api/hooks/useAdsets";
 import { useEntityStatusMutation } from "@/api/hooks/useEntityMutations";
 import { Badge } from "@/components/Badge";
-import { Button } from "@/components/Button";
 import { confirm } from "@/components/ConfirmDialog";
 import { FbCampaignLink } from "@/components/FbCampaignLink";
 import { Spinner } from "@/components/Spinner";
