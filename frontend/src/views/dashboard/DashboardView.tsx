@@ -214,7 +214,7 @@ export function DashboardView() {
 
 
 
-      <div className="flex items-start md:flex-row">
+      <div className="flex min-w-0 items-start md:flex-row">
         {/* Desktop sidebar (≥768px) */}
         <div className="hidden md:flex">
           <AccountPanel
