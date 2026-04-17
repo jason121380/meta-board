@@ -4,7 +4,6 @@ import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { RefreshButton } from "@/components/RefreshButton";
-import { toast } from "@/components/Toast";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { toLabel } from "@/lib/datePicker";
 import { fM } from "@/lib/format";
@@ -74,15 +73,6 @@ export function AnalyticsView() {
   // pair so we only hit the backend once instead of 2 × N times.
   const overview = useMultiAccountOverview(visible, date, { includeArchived: true });
 
-  const analyticsErrorKeys = Object.keys(overview.errors);
-  useEffect(() => {
-    if (overview.isLoading || analyticsErrorKeys.length === 0) return;
-    const names = analyticsErrorKeys
-      .map((id) => visible.find((a) => a.id === id)?.name ?? id)
-      .join("、");
-    toast(`部分帳戶載入失敗：${names}`, "error", 5000);
-  }, [overview.isLoading, analyticsErrorKeys.length, visible]);
-
   const data = useMemo(
     () => computeAnalyticsData(overview.campaigns, overview.insights, visible),
     [overview.campaigns, overview.insights, visible],
@@ -92,7 +82,7 @@ export function AnalyticsView() {
     queryClient.invalidateQueries({ queryKey: ["overview"] });
   };
 
-  const isLoading = overview.isLoading;
+  const isLoading = overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching);
 
   return (
     <>

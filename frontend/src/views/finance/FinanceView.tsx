@@ -7,7 +7,6 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { RefreshButton } from "@/components/RefreshButton";
-import { toast } from "@/components/Toast";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { toLabel } from "@/lib/datePicker";
 import { useAccountsStore } from "@/stores/accountsStore";
@@ -15,7 +14,7 @@ import { useFiltersStore } from "@/stores/filtersStore";
 import { useFinanceStore } from "@/stores/financeStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { FinanceAccountPanel } from "./FinanceAccountPanel";
 import { FinanceTable } from "./FinanceTable";
 import {
@@ -60,13 +59,6 @@ export function FinanceView() {
   // useMultiAccountInsights. include_archived: true because the
   // Finance table wants every status (matches legacy behavior).
   const overview = useMultiAccountOverview(visible, date, { includeArchived: true });
-
-  const finErrorKeys = Object.keys(overview.errors);
-  useEffect(() => {
-    if (overview.isLoading || finErrorKeys.length === 0) return;
-    const names = finErrorKeys.map((id) => visible.find((a) => a.id === id)?.name ?? id).join("、");
-    toast(`部分帳戶載入失敗：${names}`, "error", 5000);
-  }, [overview.isLoading, finErrorKeys.length, visible]);
 
   const selectedId = finSelectedAcctIds.length === 1 ? (finSelectedAcctIds[0] ?? null) : null;
 
@@ -159,7 +151,7 @@ export function FinanceView() {
         />
       </div>
 
-      <div className="flex md:flex-row">
+      <div className="flex items-start md:flex-row">
         {/* Desktop sidebar (≥768px) */}
         <div className="hidden md:flex">
           <FinanceAccountPanel
@@ -209,7 +201,7 @@ export function FinanceView() {
             <div>
               {visible.length === 0 ? (
                 <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
-              ) : overview.isLoading ? (
+              ) : overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching) ? (
                 <LoadingState title="載入財務資料中..." />
               ) : (
                 <FinanceTable
