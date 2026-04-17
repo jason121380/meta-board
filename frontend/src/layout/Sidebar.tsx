@@ -143,7 +143,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
     <aside
       data-mobile-open={mobileOpen ? "true" : "false"}
       className={cn(
-        "shell-sidebar fixed inset-y-0 left-0 z-[100] flex w-[220px] flex-col overflow-y-auto border-r border-border bg-white",
+        "shell-sidebar fixed inset-y-0 left-0 z-[100] flex w-[180px] flex-col overflow-y-auto border-r border-border bg-white",
       )}
       onClick={() => {
         // Tapping a link inside the sidebar triggers a route change

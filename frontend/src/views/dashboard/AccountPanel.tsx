@@ -26,6 +26,7 @@ export interface AccountPanelProps {
   activeAccountId: string | null;
   isLoading: boolean;
   onSelect: (account: FbAccount) => void;
+  getCampaignCount?: (accId: string, fallback?: number) => number | undefined;
 }
 
 export function AccountPanel({
@@ -33,6 +34,7 @@ export function AccountPanel({
   activeAccountId,
   isLoading,
   onSelect,
+  getCampaignCount,
 }: AccountPanelProps) {
   const collapsed = useUiStore((s) => s.acctSidebarCollapsed);
 
@@ -71,11 +73,16 @@ export function AccountPanel({
                 >
                   {acc.name}
                 </span>
-                {acc.campaign_count !== undefined && (
-                  <span className="text-[11px] font-medium text-gray-400 tabular-nums">
-                    {acc.campaign_count}
-                  </span>
-                )}
+                {(() => {
+                  const count = getCampaignCount
+                    ? getCampaignCount(acc.id, acc.campaign_count)
+                    : acc.campaign_count;
+                  return count !== undefined ? (
+                    <span className="text-[11px] font-medium text-gray-400 tabular-nums">
+                      {count}
+                    </span>
+                  ) : null;
+                })()}
               </button>
             );
           })

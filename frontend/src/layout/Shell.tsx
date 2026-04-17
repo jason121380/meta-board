@@ -64,7 +64,7 @@ export function Shell() {
       {/* pb-[60px] on mobile reserves space for the fixed bottom tab
           bar so the last table row / card isn't hidden behind it.
           On desktop (md:) the bottom padding is removed. */}
-      <main className="shell-main ml-[220px] flex h-[100dvh] flex-1 flex-col overflow-x-hidden overflow-y-auto bg-bg pb-[60px] md:pb-0">
+      <main className="shell-main ml-[180px] flex h-[100dvh] flex-1 flex-col overflow-x-hidden overflow-y-auto bg-bg pb-[60px] md:pb-0">
         <MobileToggleContext.Provider value={() => setMobileOpen((v) => !v)}>
           {preloadDone && <Outlet />}
         </MobileToggleContext.Provider>

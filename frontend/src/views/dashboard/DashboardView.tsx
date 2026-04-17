@@ -135,6 +135,26 @@ export function DashboardView() {
 
   const multiAcct = activeAccounts.length > 1;
 
+  // Per-account campaign count that respects the activeOnly filter.
+  // Falls back to campaign_count from the API (total) when data isn't loaded yet.
+  const filteredCountByAccount = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of filteredCampaigns) {
+      if (c._accountId) {
+        map.set(c._accountId, (map.get(c._accountId) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [filteredCampaigns]);
+
+  // Only use the computed count if we have loaded data for the active account;
+  // fall back to the API's campaign_count before any campaigns are fetched.
+  const getCampaignCount = (accId: string, fallback?: number) => {
+    if (overview.campaigns.length > 0 || overview.isLoading === false) {
+      return filteredCountByAccount.get(accId) ?? 0;
+    }
+    return fallback;
+  };
   const setTreeSort = useUiStore((s) => s.setTreeSort);
   const statsCollapsed = useUiStore((s) => s.statsCollapsed);
   const toggleStatsCollapsed = useUiStore((s) => s.toggleStatsCollapsed);
@@ -221,6 +241,7 @@ export function DashboardView() {
             accounts={visibleAccounts}
             activeAccountId={activeAccountId}
             isLoading={accountsQuery.isLoading}
+            getCampaignCount={getCampaignCount}
             onSelect={(account) => setActiveIds([account.id])}
           />
         </div>
