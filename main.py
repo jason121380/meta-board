@@ -761,9 +761,14 @@ async def quick_launch_campaign(payload: CampaignCreate):
 @app.get("/api/accounts")
 async def get_accounts():
     accounts = await fb_get_paginated("me/adaccounts", {
-        "fields": "id,name,account_status,currency,timezone_name,business",
+        "fields": "id,name,account_status,currency,timezone_name,business,campaigns.limit(0).summary(true)",
         "limit": "500",
     })
+    # Flatten the nested graph api summary into a simple integer for the frontend
+    for acc in accounts:
+        if "campaigns" in acc and "summary" in acc["campaigns"]:
+            acc["campaign_count"] = acc["campaigns"]["summary"].get("total_count", 0)
+            del acc["campaigns"]
     return {"data": accounts}
 
 

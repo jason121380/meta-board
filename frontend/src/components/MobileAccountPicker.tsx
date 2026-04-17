@@ -125,6 +125,7 @@ export function MobileAccountPicker({
               active={selectedId === a.id}
               dotState={accountDotState(a.account_status)}
               label={a.name}
+              count={a.campaign_count}
               onClick={() => handlePick(a.id)}
             />
           ))}
@@ -143,11 +144,13 @@ function PickerRow({
   active,
   dotState,
   label,
+  count,
   onClick,
 }: {
   active: boolean;
   dotState: "on" | "off";
   label: string;
+  count?: number;
   onClick: () => void;
 }) {
   return (
@@ -169,6 +172,11 @@ function PickerRow({
       >
         {label}
       </span>
+      {count !== undefined && (
+        <span className="text-[12px] font-medium text-gray-400 tabular-nums">
+          {count}
+        </span>
+      )}
       {active && (
         <span aria-hidden="true" className="text-base text-orange">
           ✓

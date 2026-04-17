@@ -71,6 +71,11 @@ export function AccountPanel({
                 >
                   {acc.name}
                 </span>
+                {acc.campaign_count !== undefined && (
+                  <span className="text-[11px] font-medium text-gray-400 tabular-nums">
+                    {acc.campaign_count}
+                  </span>
+                )}
               </button>
             );
           })
