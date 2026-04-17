@@ -38,21 +38,34 @@ export interface FinanceState {
   setShowNicknames: (v: boolean) => void;
 }
 
-// Debounced writers. 500ms is forgiving enough for typed-input latency
-// (markup %) without leaving data unpersisted for long if the user
-// navigates away quickly.
+// Typed-input writers (markup %) are debounced so we don't POST on
+// every keystroke. Click-driven writers (togglePin, setShowNicknames)
+// fire immediately so a quick refresh after a click never loses the
+// write.
 const postRowMarkups = debounce((m: Record<string, number>) => {
   void api.settings.setShared("finance_row_markups", m);
-}, 500);
-const postPinnedIds = debounce((ids: string[]) => {
-  void api.settings.setShared("finance_pinned_ids", ids);
 }, 500);
 const postDefaultMarkup = debounce((v: number) => {
   void api.settings.setShared("finance_default_markup", v);
 }, 500);
-const postShowNicknames = debounce((v: boolean) => {
+
+const postPinnedIds = (ids: string[]) => {
+  void api.settings.setShared("finance_pinned_ids", ids);
+};
+const postShowNicknames = (v: boolean) => {
   void api.settings.setShared("finance_show_nicknames", v);
-}, 500);
+};
+
+// Belt-and-suspenders for the debounced typed-input writers: if the
+// user navigates away mid-debounce, flush the pending write so the
+// server sees the latest value. `fetch` keepalive is honored by every
+// modern browser for sub-64KB request bodies, which applies to us.
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => {
+    postRowMarkups.flush();
+    postDefaultMarkup.flush();
+  });
+}
 
 export const useFinanceStore = create<FinanceState>((set) => ({
   rowMarkups: {},
