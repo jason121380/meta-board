@@ -28,7 +28,7 @@ export function AlertAccountPanel({
   if (collapsed) return null;
 
   return (
-    <aside className="flex w-[180px] shrink-0 flex-col overflow-y-auto border-r border-border bg-white">
+    <aside className="sticky top-0 flex h-[calc(100dvh-60px)] w-[180px] shrink-0 flex-col overflow-hidden border-r border-border bg-white">
       <div className="border-b border-border px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.5px] text-gray-300">
         廣告帳戶
       </div>

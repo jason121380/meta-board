@@ -29,7 +29,7 @@ export function FinanceAccountPanel({ rows, selectedId, onSelect }: FinanceAccou
   if (collapsed) return null;
 
   return (
-    <aside className="flex w-[360px] shrink-0 flex-col border-r border-border bg-bg">
+    <aside className="sticky top-0 flex h-[calc(100dvh-60px)] w-[360px] shrink-0 flex-col border-r border-border bg-bg">
       <div className="border-b border-border bg-white px-3 pb-2 pt-2.5">
         <h4 className="text-[11px] font-bold uppercase tracking-[0.6px] text-gray-300">廣告帳戶</h4>
       </div>
