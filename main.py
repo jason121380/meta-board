@@ -104,6 +104,35 @@ async def lifespan(app: FastAPI):
                     )
                     """
                 )
+                # Diagnostic — print every table in the public schema
+                # with its row count. Lets operators confirm at a
+                # glance after a redeploy that the tables are present
+                # AND that settings are actually landing.
+                rows = await conn.fetch(
+                    """
+                    SELECT c.relname AS tbl,
+                           COALESCE(s.n_live_tup, 0) AS approx_rows
+                    FROM pg_class c
+                    LEFT JOIN pg_stat_user_tables s ON s.relid = c.oid
+                    WHERE c.relkind = 'r'
+                      AND c.relnamespace = 'public'::regnamespace
+                    ORDER BY c.relname
+                    """
+                )
+                if rows:
+                    print(
+                        "[startup] DB tables: "
+                        + ", ".join(f"{r['tbl']}({r['approx_rows']})" for r in rows),
+                        flush=True,
+                    )
+                else:
+                    print("[startup] DB tables: (none)", flush=True)
+                # Exact counts for the three tables we own — these are
+                # fresh after CREATE TABLE even if pg_stat hasn't caught
+                # up with a recent INSERT yet.
+                for tbl in ("campaign_nicknames", "user_settings", "shared_settings"):
+                    n = await conn.fetchval(f"SELECT COUNT(*) FROM {tbl}")
+                    print(f"[startup] DB exact: {tbl} = {n} rows", flush=True)
             print("[startup] DB: OK (nicknames + settings tables ready)", flush=True)
         except Exception as exc:
             _db_pool = None
