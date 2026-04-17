@@ -172,6 +172,14 @@ export function DataPreloader({ onComplete }: { onComplete: () => void }) {
   // Display = max(real, time) — real progress always wins when it
   // jumps ahead (batch completes), time fills the gaps in between.
   const pct = Math.round(Math.max(realPct, timePct));
+  
+  // To keep the illusion intact, the accompanying text "(X / Y)" must
+  // smoothly match the fake percentage rather than staying frozen at
+  // the real loaded count.
+  const displayLoaded = Math.min(
+    progress.total,
+    Math.max(progress.loaded, Math.round((pct / 100) * progress.total))
+  );
 
   if (done) return null;
 
@@ -190,8 +198,8 @@ export function DataPreloader({ onComplete }: { onComplete: () => void }) {
           </div>
           {progress.total > 0 && (
             <div className="text-[11px] text-gray-500">
-              {progress.loaded > 0
-                ? `已完成 ${progress.loaded} / ${progress.total} 個帳戶`
+              {displayLoaded > 0
+                ? `已完成 ${displayLoaded} / ${progress.total} 個帳戶`
                 : `正在連線 Facebook，共 ${progress.total} 個帳戶`}
             </div>
           )}
