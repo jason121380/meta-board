@@ -142,6 +142,12 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   return (
     <aside
       data-mobile-open={mobileOpen ? "true" : "false"}
+      // iOS PWA safe-area: sidebar is `fixed inset-y-0`, so on
+      // standalone iOS the top of the sidebar lives under the
+      // status bar. Respecting safe-area-inset-top pushes the logo
+      // row below the clock/signal indicators when the drawer slides
+      // in on mobile. Desktop env() resolves to 0, so no change.
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
       className={cn(
         "shell-sidebar fixed inset-y-0 left-0 z-[100] flex w-[180px] flex-col overflow-y-auto border-r border-border bg-white",
       )}
