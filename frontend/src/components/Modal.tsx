@@ -75,7 +75,7 @@ export function Modal({
             "focus:outline-none",
             "animate-[slideUp_0.3s_cubic-bezier(0.32,0.72,0,1)]",
             // Desktop override: centered card with constrained size
-            "md:inset-0 md:bottom-auto md:m-auto md:h-fit md:max-h-[calc(100vh-48px)] md:max-w-[calc(100vw-24px)] md:w-[var(--modal-w)] md:rounded-2xl",
+            "md:inset-0 md:m-auto md:h-fit md:max-h-[calc(100vh-48px)] md:max-w-[calc(100vw-24px)] md:w-[var(--modal-w)] md:rounded-2xl",
             "md:animate-fade-in",
             className,
           )}

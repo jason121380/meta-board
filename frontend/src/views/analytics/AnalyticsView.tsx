@@ -4,6 +4,7 @@ import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { RefreshButton } from "@/components/RefreshButton";
+import { toast } from "@/components/Toast";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { toLabel } from "@/lib/datePicker";
 import { fM } from "@/lib/format";
@@ -73,6 +74,15 @@ export function AnalyticsView() {
   // pair so we only hit the backend once instead of 2 × N times.
   const overview = useMultiAccountOverview(visible, date, { includeArchived: true });
 
+  const analyticsErrorKeys = Object.keys(overview.errors);
+  useEffect(() => {
+    if (overview.isLoading || analyticsErrorKeys.length === 0) return;
+    const names = analyticsErrorKeys
+      .map((id) => visible.find((a) => a.id === id)?.name ?? id)
+      .join("、");
+    toast(`部分帳戶載入失敗：${names}`, "error", 5000);
+  }, [overview.isLoading, analyticsErrorKeys.length, visible]);
+
   const data = useMemo(
     () => computeAnalyticsData(overview.campaigns, overview.insights, visible),
     [overview.campaigns, overview.insights, visible],
@@ -95,19 +105,6 @@ export function AnalyticsView() {
       </Topbar>
 
       <div className="flex-1 p-3 md:p-6">
-        {!overview.isLoading && Object.keys(overview.errors).length > 0 && (
-          <div className="mb-3 rounded-lg border border-red-bg bg-red-bg/40 px-4 py-2.5 text-[12px] text-red">
-            <div className="font-semibold">部分帳戶載入失敗：</div>
-            {Object.entries(overview.errors).map(([acctId, msg]) => {
-              const name = visible.find((a) => a.id === acctId)?.name ?? acctId;
-              return (
-                <div key={acctId} className="mt-0.5 break-all">
-                  <span className="font-medium">{name}</span>: {msg}
-                </div>
-              );
-            })}
-          </div>
-        )}
         {visible.length === 0 ? (
           <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
         ) : isLoading ? (
