@@ -61,10 +61,12 @@ export function Shell() {
           onClick={closeOnBackdrop}
         />
       )}
-      {/* pb-[60px] on mobile reserves space for the fixed bottom tab
-          bar so the last table row / card isn't hidden behind it.
-          On desktop (md:) the bottom padding is removed. */}
-      <main className="shell-main ml-[180px] flex h-[100dvh] flex-1 flex-col overflow-x-hidden overflow-y-auto bg-bg pb-[60px] md:pb-0">
+      {/* Bottom padding = 60px (tab bar intrinsic height) + the iOS
+          home-indicator safe-area inset. Without the env() term the
+          tab bar visually eats ~22px of the last row on iPhones with
+          a home indicator. Desktop env() resolves to 0 and md:pb-0
+          wipes the floor-60 anyway. */}
+      <main className="shell-main ml-[180px] flex h-[100dvh] flex-1 flex-col overflow-x-hidden overflow-y-auto bg-bg pb-[calc(60px+env(safe-area-inset-bottom))] md:pb-0">
         <MobileToggleContext.Provider value={() => setMobileOpen((v) => !v)}>
           {preloadDone && <Outlet />}
         </MobileToggleContext.Provider>
