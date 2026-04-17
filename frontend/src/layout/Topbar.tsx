@@ -26,6 +26,12 @@ export function Topbar({ title, titleAction, children, className }: TopbarProps)
   const toggle = useMobileSidebarToggle();
   return (
     <div
+      // PWA safe-area: on iOS standalone, viewport-fit=cover puts the
+      // status bar (time, signal, battery) on top of y=0. Without
+      // padding-top: env(safe-area-inset-top), the topbar's content
+      // lives UNDER the status bar. The inline style is mobile-only;
+      // desktop browsers return 0 for the env() which is a no-op.
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
       className={cn(
         "sticky top-0 z-[50] flex min-h-[56px] shrink-0 items-center gap-2 border-b border-border bg-white px-3",
         "md:min-h-[60px] md:gap-3 md:px-6",
