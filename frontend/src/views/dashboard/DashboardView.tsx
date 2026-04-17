@@ -238,7 +238,7 @@ export function DashboardView() {
               scrolls as one unit (overflow-y-auto on parent), so the
               card only occupies the height its table rows need. No
               more blank space below the last row. */}
-          <div className="mx-3 mb-3 mt-3 flex flex-col rounded-2xl border border-border md:mx-4 md:mb-4 md:mt-4">
+          <div className="mx-3 mb-3 mt-3 flex flex-col overflow-hidden rounded-2xl border border-border bg-white md:mx-4 md:mb-4 md:mt-4">
             <div className="flex shrink-0 flex-wrap items-center gap-2.5 border-b border-border bg-white px-3 py-2.5 md:px-4 md:py-3">
               <input
                 value={searchTerm}
