@@ -1,7 +1,27 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Mock the api client BEFORE importing the stores so the module-level
+// debounced writers capture the mock, not the real network call.
+vi.mock("@/api/client", () => ({
+  api: {
+    settings: {
+      setUser: vi.fn().mockResolvedValue({ ok: true }),
+      setShared: vi.fn().mockResolvedValue({ ok: true }),
+      getUser: vi.fn().mockResolvedValue({ data: {} }),
+      getShared: vi.fn().mockResolvedValue({ data: {} }),
+    },
+  },
+  ApiError: class ApiError extends Error {
+    status = 0;
+    detail = "";
+  },
+}));
+
+import { api } from "@/api/client";
 import {
   hydrateAccountsFromStorage,
   installAccountsStorageSync,
+  setAccountsUserId,
   useAccountsStore,
 } from "@/stores/accountsStore";
 import {
@@ -9,11 +29,7 @@ import {
   installFiltersStorageSync,
   useFiltersStore,
 } from "@/stores/filtersStore";
-import {
-  hydrateFinanceFromStorage,
-  installFinanceStorageSync,
-  useFinanceStore,
-} from "@/stores/financeStore";
+import { useFinanceStore } from "@/stores/financeStore";
 import type { FbAccount } from "@/types/fb";
 
 const resetStores = () => {
@@ -27,41 +43,58 @@ const resetStores = () => {
       finance: { preset: "this_month", from: null, to: null },
     },
   });
-  useFinanceStore.setState({ rowMarkups: {}, pinnedIds: [], defaultMarkup: 5 });
+  useFinanceStore.setState({
+    rowMarkups: {},
+    pinnedIds: [],
+    defaultMarkup: 5,
+    showNicknames: true,
+  });
 };
 
 beforeEach(() => {
   localStorage.clear();
   resetStores();
+  vi.clearAllMocks();
+  setAccountsUserId(null);
 });
 
-describe("accountsStore — localStorage bridge", () => {
-  it("hydrates selectedIds / activeIds / order from the 3 legacy keys", () => {
-    localStorage.setItem("fb_selected_accounts", JSON.stringify(["act_1", "act_2"]));
-    localStorage.setItem("fb_active_accounts", JSON.stringify(["act_1"]));
-    localStorage.setItem("acct_order", JSON.stringify(["act_2", "act_1"]));
-    hydrateAccountsFromStorage();
+describe("accountsStore — PG + localStorage hybrid", () => {
+  it("hydrateFromServer seeds selectedIds + order without POSTing back", () => {
+    setAccountsUserId("fbuser_1");
+    useAccountsStore.getState().hydrateFromServer({
+      selectedIds: ["act_1", "act_2"],
+      order: ["act_2", "act_1"],
+    });
     const s = useAccountsStore.getState();
     expect(s.selectedIds).toEqual(["act_1", "act_2"]);
-    expect(s.activeIds).toEqual(["act_1"]);
     expect(s.order).toEqual(["act_2", "act_1"]);
+    // Seed does NOT POST — only explicit setSelectedIds / setOrder do.
+    expect(api.settings.setUser).not.toHaveBeenCalled();
   });
 
-  it("ignores corrupt JSON and falls back to empty", () => {
-    localStorage.setItem("fb_selected_accounts", "not-valid-json{");
-    hydrateAccountsFromStorage();
-    expect(useAccountsStore.getState().selectedIds).toEqual([]);
-  });
-
-  it("writes back to the same 3 keys when state changes", () => {
-    const off = installAccountsStorageSync();
+  it("setSelectedIds schedules a POST with the user id", async () => {
+    setAccountsUserId("fbuser_2");
     useAccountsStore.getState().setSelectedIds(["act_5"]);
+    // Debounced 500ms — wait a bit over.
+    await new Promise((r) => setTimeout(r, 550));
+    expect(api.settings.setUser).toHaveBeenCalledWith("fbuser_2", "selected_accounts", ["act_5"]);
+  });
+
+  it("activeIds still persists to localStorage (ephemeral UI state)", () => {
+    const off = installAccountsStorageSync();
     useAccountsStore.getState().setActiveIds(["act_5"]);
-    useAccountsStore.getState().setOrder(["act_5"]);
-    expect(localStorage.getItem("fb_selected_accounts")).toBe('["act_5"]');
     expect(localStorage.getItem("fb_active_accounts")).toBe('["act_5"]');
-    expect(localStorage.getItem("acct_order")).toBe('["act_5"]');
     off();
+  });
+
+  it("hydrateAccountsFromStorage only populates activeIds, not selectedIds/order", () => {
+    localStorage.setItem("fb_active_accounts", JSON.stringify(["act_7"]));
+    localStorage.setItem("fb_selected_accounts", JSON.stringify(["act_999"]));
+    hydrateAccountsFromStorage();
+    const s = useAccountsStore.getState();
+    expect(s.activeIds).toEqual(["act_7"]);
+    // selectedIds is NOT read from localStorage anymore.
+    expect(s.selectedIds).toEqual([]);
   });
 
   it("visibleAccounts respects custom order then falls back to alpha", () => {
@@ -72,7 +105,6 @@ describe("accountsStore — localStorage bridge", () => {
     ];
     useAccountsStore.setState({ selectedIds: ["act_1", "act_2", "act_3"], order: ["act_3"] });
     const visible = useAccountsStore.getState().visibleAccounts(all);
-    // act_3 first (explicit order), then Apple + Zebra alphabetically.
     expect(visible.map((a) => a.id)).toEqual(["act_3", "act_2", "act_1"]);
   });
 
@@ -105,32 +137,36 @@ describe("filtersStore — localStorage bridge", () => {
   });
 });
 
-describe("financeStore — localStorage bridge", () => {
-  it("hydrates rowMarkups / pinnedIds / defaultMarkup from 3 legacy keys", () => {
-    localStorage.setItem("fin_row_markups", JSON.stringify({ cmp_1: 7.5 }));
-    localStorage.setItem("fin_pinned_ids", JSON.stringify(["cmp_2"]));
-    localStorage.setItem("fin_default_markup", "10");
-    hydrateFinanceFromStorage();
+describe("financeStore — PG-backed shared settings", () => {
+  it("hydrateFromServer seeds all four fields without POSTing", () => {
+    useFinanceStore.getState().hydrateFromServer({
+      rowMarkups: { cmp_1: 7.5 },
+      pinnedIds: ["cmp_2"],
+      defaultMarkup: 10,
+      showNicknames: false,
+    });
     const s = useFinanceStore.getState();
     expect(s.rowMarkups).toEqual({ cmp_1: 7.5 });
     expect(s.pinnedIds).toEqual(["cmp_2"]);
     expect(s.defaultMarkup).toBe(10);
+    expect(s.showNicknames).toBe(false);
+    expect(api.settings.setShared).not.toHaveBeenCalled();
   });
-  it("defaults to 5% markup when key missing", () => {
-    hydrateFinanceFromStorage();
-    expect(useFinanceStore.getState().defaultMarkup).toBe(5);
-  });
-  it("togglePin adds then removes an id", () => {
+
+  it("togglePin adds then removes an id and schedules a POST", async () => {
     useFinanceStore.getState().togglePin("cmp_1");
     expect(useFinanceStore.getState().pinnedIds).toEqual(["cmp_1"]);
     useFinanceStore.getState().togglePin("cmp_1");
     expect(useFinanceStore.getState().pinnedIds).toEqual([]);
+    await new Promise((r) => setTimeout(r, 550));
+    // Latest write wins after debounce — pinnedIds came back to [].
+    expect(api.settings.setShared).toHaveBeenLastCalledWith("finance_pinned_ids", []);
   });
-  it("setRowMarkup persists per-row percentage", () => {
-    const off = installFinanceStorageSync();
+
+  it("setRowMarkup schedules a debounced POST with the merged map", async () => {
     useFinanceStore.getState().setRowMarkup("cmp_9", 12.5);
-    const stored = JSON.parse(localStorage.getItem("fin_row_markups") || "{}");
-    expect(stored.cmp_9).toBe(12.5);
-    off();
+    expect(useFinanceStore.getState().rowMarkups).toEqual({ cmp_9: 12.5 });
+    await new Promise((r) => setTimeout(r, 550));
+    expect(api.settings.setShared).toHaveBeenCalledWith("finance_row_markups", { cmp_9: 12.5 });
   });
 });

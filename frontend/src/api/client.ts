@@ -359,6 +359,29 @@ export const api = {
     remove: (campaignId: string) =>
       request<{ ok: boolean }>("DELETE", `/api/nicknames/${encodeURIComponent(campaignId)}`),
   },
+
+  settings: {
+    /** Fetch all per-user settings for the given FB user id. */
+    getUser: (fbUserId: string) =>
+      request<{ data: Record<string, unknown> }>(
+        "GET",
+        `/api/settings/user/${encodeURIComponent(fbUserId)}`,
+      ),
+    /** Upsert one per-user setting. Value can be any JSON-serialisable. */
+    setUser: (fbUserId: string, key: string, value: unknown) =>
+      request<{ ok: boolean }>(
+        "POST",
+        `/api/settings/user/${encodeURIComponent(fbUserId)}/${encodeURIComponent(key)}`,
+        { body: { value } },
+      ),
+    /** Fetch all team-wide shared settings. */
+    getShared: () => request<{ data: Record<string, unknown> }>("GET", "/api/settings/shared"),
+    /** Upsert one team-wide shared setting. */
+    setShared: (key: string, value: unknown) =>
+      request<{ ok: boolean }>("POST", `/api/settings/shared/${encodeURIComponent(key)}`, {
+        body: { value },
+      }),
+  },
 };
 
 export type Api = typeof api;

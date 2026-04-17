@@ -1,15 +1,20 @@
+import { api } from "@/api/client";
+import { debounce } from "@/lib/debounce";
 import { create } from "zustand";
 
 /**
- * Finance store — per-row markup overrides, pinned ids, default markup.
+ * Finance store — row markup overrides, pinned ids, default markup,
+ * show-nicknames toggle.
  *
- * Legacy mappings (all three are persisted localStorage keys):
- *   finRowMarkups → rowMarkups, key `fin_row_markups`
- *     { [campaignId]: markupPercent }
- *   finPinnedIds  → pinnedIds, key `fin_pinned_ids`
- *     (string[] of campaign ids pinned to top)
- *   (input#financeMarkupDefault) → defaultMarkup, key `fin_default_markup`
- *     (number, default 5)
+ * Persistence (after the 2026-04-17 PG cutover):
+ *   - rowMarkups    → shared setting `finance_row_markups`        (PG)
+ *   - pinnedIds     → shared setting `finance_pinned_ids`         (PG)
+ *   - defaultMarkup → shared setting `finance_default_markup`     (PG)
+ *   - showNicknames → shared setting `finance_show_nicknames`     (PG)
+ *
+ * SettingsProvider seeds these from the server at startup. After that,
+ * any mutation fires a debounced POST to persist team-wide. No more
+ * localStorage for these fields.
  */
 
 export interface FinanceState {
@@ -18,11 +23,36 @@ export interface FinanceState {
   defaultMarkup: number;
   showNicknames: boolean;
 
+  /** One-way seed from server — set by SettingsProvider on first load.
+   * Does NOT trigger a POST back. */
+  hydrateFromServer: (input: {
+    rowMarkups: Record<string, number>;
+    pinnedIds: string[];
+    defaultMarkup: number;
+    showNicknames: boolean;
+  }) => void;
+
   setRowMarkup: (campaignId: string, percent: number) => void;
   togglePin: (campaignId: string) => void;
   setDefaultMarkup: (v: number) => void;
   setShowNicknames: (v: boolean) => void;
 }
+
+// Debounced writers. 500ms is forgiving enough for typed-input latency
+// (markup %) without leaving data unpersisted for long if the user
+// navigates away quickly.
+const postRowMarkups = debounce((m: Record<string, number>) => {
+  void api.settings.setShared("finance_row_markups", m);
+}, 500);
+const postPinnedIds = debounce((ids: string[]) => {
+  void api.settings.setShared("finance_pinned_ids", ids);
+}, 500);
+const postDefaultMarkup = debounce((v: number) => {
+  void api.settings.setShared("finance_default_markup", v);
+}, 500);
+const postShowNicknames = debounce((v: boolean) => {
+  void api.settings.setShared("finance_show_nicknames", v);
+}, 500);
 
 export const useFinanceStore = create<FinanceState>((set) => ({
   rowMarkups: {},
@@ -30,98 +60,44 @@ export const useFinanceStore = create<FinanceState>((set) => ({
   defaultMarkup: 5,
   showNicknames: true,
 
+  hydrateFromServer: ({ rowMarkups, pinnedIds, defaultMarkup, showNicknames }) =>
+    set({ rowMarkups, pinnedIds, defaultMarkup, showNicknames }),
+
   setRowMarkup: (campaignId, percent) =>
-    set((state) => ({
-      rowMarkups: { ...state.rowMarkups, [campaignId]: percent },
-    })),
+    set((state) => {
+      const next = { ...state.rowMarkups, [campaignId]: percent };
+      postRowMarkups(next);
+      return { rowMarkups: next };
+    }),
 
   togglePin: (campaignId) =>
     set((state) => {
       const idx = state.pinnedIds.indexOf(campaignId);
-      if (idx === -1) return { pinnedIds: [...state.pinnedIds, campaignId] };
-      const next = state.pinnedIds.slice();
-      next.splice(idx, 1);
+      const next =
+        idx === -1 ? [...state.pinnedIds, campaignId] : state.pinnedIds.filter((_, i) => i !== idx);
+      postPinnedIds(next);
       return { pinnedIds: next };
     }),
 
-  setDefaultMarkup: (v) => set({ defaultMarkup: v }),
-  setShowNicknames: (v) => set({ showNicknames: v }),
+  setDefaultMarkup: (v) => {
+    set({ defaultMarkup: v });
+    postDefaultMarkup(v);
+  },
+  setShowNicknames: (v) => {
+    set({ showNicknames: v });
+    postShowNicknames(v);
+  },
 }));
 
-const K = {
-  rowMarkups: "fin_row_markups",
-  pinnedIds: "fin_pinned_ids",
-  defaultMarkup: "fin_default_markup",
-  showNicknames: "fin_show_nicknames",
-} as const;
-
-function readJson<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
+// Settings persistence lives in PostgreSQL now. These helpers remain
+// as no-ops so the stores/index.ts barrel keeps its old API without
+// every caller having to change.
 export function hydrateFinanceFromStorage(): void {
-  const rowMarkups = readJson<Record<string, number>>(K.rowMarkups, {});
-  const pinnedIds = readJson<string[]>(K.pinnedIds, []);
-  let defaultMarkup = 5;
-  try {
-    const raw = localStorage.getItem(K.defaultMarkup);
-    if (raw !== null) {
-      const parsed = Number(raw);
-      if (!Number.isNaN(parsed)) defaultMarkup = parsed;
-    }
-  } catch {
-    /* keep default */
-  }
-  let showNicknames = true;
-  try {
-    const raw = localStorage.getItem(K.showNicknames);
-    if (raw !== null) showNicknames = raw === "1";
-  } catch {
-    /* keep default */
-  }
-  useFinanceStore.setState({
-    rowMarkups: typeof rowMarkups === "object" && rowMarkups !== null ? rowMarkups : {},
-    pinnedIds: Array.isArray(pinnedIds) ? pinnedIds : [],
-    defaultMarkup,
-    showNicknames,
-  });
+  /* PG-backed; SettingsProvider does the real hydrate. */
 }
 
 export function installFinanceStorageSync(): () => void {
-  return useFinanceStore.subscribe((state, prev) => {
-    if (state.rowMarkups !== prev.rowMarkups) {
-      try {
-        localStorage.setItem(K.rowMarkups, JSON.stringify(state.rowMarkups));
-      } catch {
-        /* quota */
-      }
-    }
-    if (state.pinnedIds !== prev.pinnedIds) {
-      try {
-        localStorage.setItem(K.pinnedIds, JSON.stringify(state.pinnedIds));
-      } catch {
-        /* quota */
-      }
-    }
-    if (state.defaultMarkup !== prev.defaultMarkup) {
-      try {
-        localStorage.setItem(K.defaultMarkup, String(state.defaultMarkup));
-      } catch {
-        /* quota */
-      }
-    }
-    if (state.showNicknames !== prev.showNicknames) {
-      try {
-        localStorage.setItem(K.showNicknames, state.showNicknames ? "1" : "0");
-      } catch {
-        /* quota */
-      }
-    }
-  });
+  return () => {
+    /* no localStorage sync */
+  };
 }

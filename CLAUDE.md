@@ -19,7 +19,15 @@ Connects to Facebook Marketing API v21.0 to manage 80+ ad accounts across multip
 - **Charts**: Chart.js 4.4.0 + chartjs-plugin-datalabels 2.2.0
 - **Auth**: Facebook JS SDK (browser) + FastAPI token endpoint (server)
 - **AI**: Google Gemini API (optional, for AI recommendations)
-- **Storage**: Browser localStorage only — there is NO server-side user DB
+- **Storage (as of 2026-04-17)**:
+  - **PostgreSQL** (via `asyncpg`, `DATABASE_URL` env) — source of truth for:
+    - `campaign_nicknames` (campaign_id → store, designer) — shared team-wide
+    - `user_settings` (fb_user_id, key, value JSONB) — per-user: `selected_accounts`, `account_order`
+    - `shared_settings` (key, value JSONB) — team-wide: `finance_row_markups`, `finance_pinned_ids`, `finance_default_markup`, `finance_show_nicknames`
+  - **Browser localStorage** — ephemeral UI state only:
+    - `fb_active_accounts` (dashboard current selection — intentionally NOT synced)
+    - `filter_active_only`, date-picker preferences, sidebar collapse state
+    - `meta_dash_fb_token` (FB login token cache)
 
 ## Key Files
 
@@ -205,10 +213,12 @@ and ONLY frontend:
   `main.py` serves them via dedicated routes
 - Zeabur deploy config: `zeabur.json` runs
   `corepack enable && cd frontend && pnpm install && pnpm build && cd .. && pip install -r requirements.txt`
-- User settings (selected accounts, markups, etc.) are persisted to
-  **localStorage ONLY** — there is no server-side DB. The PostgreSQL
-  `user_settings` table and `/api/settings/*` endpoints were removed
-  alongside the legacy cutover.
+- User settings (selected accounts, markups, pins, nicknames, etc.)
+  are persisted to **PostgreSQL** via `DATABASE_URL`. See the Storage
+  section above for the split between per-user, shared, and ephemeral
+  (localStorage) state. `SettingsProvider` (under `providers/`) is the
+  hydration gate — it fires the two GETs in parallel on login and
+  only renders the app once both settle.
 
 Quality gates (all run in CI, enforced by `pnpm check`):
 - `pnpm typecheck` — strict TS + `noUncheckedIndexedAccess`

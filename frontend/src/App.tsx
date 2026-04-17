@@ -2,6 +2,7 @@ import { FbAuthProvider, useFbAuth } from "@/auth/FbAuthProvider";
 import { ConfirmDialogHost } from "@/components/ConfirmDialog";
 import { PwaInstallHint } from "@/components/PwaInstallHint";
 import { ToastHost } from "@/components/Toast";
+import { SettingsProvider } from "@/providers/SettingsProvider";
 import { router } from "@/router";
 import { hydrateAllStores, installStorageSync } from "@/stores";
 import { LoginView } from "@/views/login/LoginView";
@@ -44,10 +45,10 @@ function AuthGate() {
   const { status } = useFbAuth();
   if (status === "auth") {
     return (
-      <>
+      <SettingsProvider>
         <RouterProvider router={router} />
         <PwaInstallHint />
-      </>
+      </SettingsProvider>
     );
   }
   return <LoginView />;
