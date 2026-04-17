@@ -82,7 +82,7 @@ export function AlertsView() {
         </div>
       </Topbar>
 
-      <div className="flex items-start md:flex-row">
+      <div className="flex min-w-0 items-start md:flex-row">
         {/* Desktop sidebar (≥768px) */}
         <div className="hidden md:flex">
           <AlertAccountPanel
@@ -92,7 +92,7 @@ export function AlertsView() {
           />
         </div>
 
-        <div className="flex-1 p-3 md:p-5">
+        <div className="min-w-0 flex-1 p-3 md:p-5">
           {visibleAll.length === 0 ? (
             <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
           ) : overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching) ? (
