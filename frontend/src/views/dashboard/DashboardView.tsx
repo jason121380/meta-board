@@ -284,7 +284,7 @@ export function DashboardView() {
                     if (on) setTreeSort(null);
                   }}
                 />
-                素材比較
+                第三層素材比較
               </label>
               <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[12px] text-gray-500 md:hidden">
                 <input
