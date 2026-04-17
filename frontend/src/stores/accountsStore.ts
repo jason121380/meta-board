@@ -1,5 +1,4 @@
 import { api } from "@/api/client";
-import { debounce } from "@/lib/debounce";
 import type { FbAccount } from "@/types/fb";
 import { create } from "zustand";
 
@@ -44,13 +43,15 @@ export function setAccountsUserId(id: string | null) {
   _currentUserId = id;
 }
 
-// Debounced writers — collapse rapid state changes into a single POST.
-const postSelected = debounce((ids: string[]) => {
+// selectedIds + order are discrete click actions (checkbox toggle,
+// drag-end). Fire the POST immediately so a quick refresh doesn't
+// drop the write. No debounce.
+const postSelected = (ids: string[]) => {
   if (_currentUserId) void api.settings.setUser(_currentUserId, "selected_accounts", ids);
-}, 500);
-const postOrder = debounce((order: string[]) => {
+};
+const postOrder = (order: string[]) => {
   if (_currentUserId) void api.settings.setUser(_currentUserId, "account_order", order);
-}, 500);
+};
 
 export const useAccountsStore = create<AccountsState>((set, get) => ({
   selectedIds: [],

@@ -72,11 +72,9 @@ describe("accountsStore — PG + localStorage hybrid", () => {
     expect(api.settings.setUser).not.toHaveBeenCalled();
   });
 
-  it("setSelectedIds schedules a POST with the user id", async () => {
+  it("setSelectedIds POSTs immediately with the user id", () => {
     setAccountsUserId("fbuser_2");
     useAccountsStore.getState().setSelectedIds(["act_5"]);
-    // Debounced 500ms — wait a bit over.
-    await new Promise((r) => setTimeout(r, 550));
     expect(api.settings.setUser).toHaveBeenCalledWith("fbuser_2", "selected_accounts", ["act_5"]);
   });
 
@@ -153,13 +151,12 @@ describe("financeStore — PG-backed shared settings", () => {
     expect(api.settings.setShared).not.toHaveBeenCalled();
   });
 
-  it("togglePin adds then removes an id and schedules a POST", async () => {
+  it("togglePin adds then removes an id and POSTs immediately", () => {
     useFinanceStore.getState().togglePin("cmp_1");
     expect(useFinanceStore.getState().pinnedIds).toEqual(["cmp_1"]);
+    expect(api.settings.setShared).toHaveBeenCalledWith("finance_pinned_ids", ["cmp_1"]);
     useFinanceStore.getState().togglePin("cmp_1");
     expect(useFinanceStore.getState().pinnedIds).toEqual([]);
-    await new Promise((r) => setTimeout(r, 550));
-    // Latest write wins after debounce — pinnedIds came back to [].
     expect(api.settings.setShared).toHaveBeenLastCalledWith("finance_pinned_ids", []);
   });
 
