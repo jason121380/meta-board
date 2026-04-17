@@ -1,5 +1,7 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useMultiAccountOverview } from "@/api/hooks/useMultiAccountOverview";
+import { useNicknames } from "@/api/hooks/useNicknames";
+import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { Button } from "@/components/Button";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
@@ -7,7 +9,6 @@ import { LoadingState } from "@/components/LoadingState";
 import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
-import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { toLabel } from "@/lib/datePicker";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
@@ -51,6 +52,11 @@ export function FinanceView() {
   const defaultMarkup = useFinanceStore((s) => s.defaultMarkup);
   const setDefaultMarkup = useFinanceStore((s) => s.setDefaultMarkup);
   const pinnedIds = useFinanceStore((s) => s.pinnedIds);
+  const showNicknames = useFinanceStore((s) => s.showNicknames);
+  const setShowNicknames = useFinanceStore((s) => s.setShowNicknames);
+
+  const nicknamesQuery = useNicknames();
+  const nicknames = nicknamesQuery.data ?? {};
 
   const [search, setSearch] = useState("");
   const [hideZero, setHideZero] = useState(true);
@@ -81,7 +87,7 @@ export function FinanceView() {
   };
 
   const onDownloadCsv = () => {
-    const filtered = filterFinanceRows(tableCampaigns, hideZero, search);
+    const filtered = filterFinanceRows(tableCampaigns, hideZero, search, nicknames);
     const sorted = sortFinanceRows(
       filtered,
       { key: null, dir: "desc" },
@@ -94,6 +100,7 @@ export function FinanceView() {
       defaultMarkup,
       rowMarkups,
       includeAccountColumn: selectedId === null,
+      nicknames,
     });
     // Format the filename using the date label so users know which
     // period the export covers.
@@ -171,6 +178,15 @@ export function FinanceView() {
                 placeholder="搜尋活動名稱..."
                 className="h-10 min-w-[140px] flex-1 rounded-lg border-[1.5px] border-border px-3 text-[13px] outline-none focus:border-orange md:h-8 md:px-2.5"
               />
+              <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-gray-500">
+                <input
+                  type="checkbox"
+                  className="custom-cb"
+                  checked={showNicknames}
+                  onChange={(e) => setShowNicknames(e.currentTarget.checked)}
+                />
+                顯示暱稱
+              </label>
               <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-gray-500">
                 <input
                   type="checkbox"
