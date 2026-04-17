@@ -65,16 +65,31 @@ export function accountSpend(
 
 // ── Sorting ────────────────────────────────────────────────
 
+/** Options passed through sortFinanceRows so name-sort can reflect
+ *  the displayed label when nicknames are visible. */
+export interface SortOptions {
+  nicknames?: NicknameMap;
+  /** When true AND the campaign has a nickname, sort "name" by the
+   *  "店家 · 設計師" label instead of the raw FB campaign name. */
+  useNicknameForNameSort?: boolean;
+}
+
 /** Value extractor for sort on a given column. */
 function sortValueOf(
   c: FbCampaign,
   key: FinSortKey,
   rowMarkups: Record<string, number>,
   defaultMarkup: number,
+  opts: SortOptions = {},
 ): string | number {
   switch (key) {
-    case "name":
+    case "name": {
+      if (opts.useNicknameForNameSort) {
+        const label = formatNickname(opts.nicknames?.[c.id]);
+        if (label) return label;
+      }
       return c.name;
+    }
     case "acct":
       return c._accountName ?? "";
     case "spend":
@@ -97,14 +112,15 @@ export function sortFinanceRows(
   pinnedIds: string[],
   rowMarkups: Record<string, number>,
   defaultMarkup: number,
+  opts: SortOptions = {},
 ): FbCampaign[] {
   const compare = (a: FbCampaign, b: FbCampaign) => {
     if (!sort.key) return 0;
-    const va = sortValueOf(a, sort.key, rowMarkups, defaultMarkup);
-    const vb = sortValueOf(b, sort.key, rowMarkups, defaultMarkup);
+    const va = sortValueOf(a, sort.key, rowMarkups, defaultMarkup, opts);
+    const vb = sortValueOf(b, sort.key, rowMarkups, defaultMarkup, opts);
     const cmp =
       typeof va === "string" && typeof vb === "string"
-        ? va.localeCompare(vb)
+        ? va.localeCompare(vb, "zh-Hant")
         : (va as number) - (vb as number);
     return sort.dir === "asc" ? cmp : -cmp;
   };

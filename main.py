@@ -79,7 +79,32 @@ async def lifespan(app: FastAPI):
                     )
                     """
                 )
-            print("[startup] DB: OK (campaign_nicknames ready)", flush=True)
+                # Per-user settings — keyed on (fb_user_id, key). Used
+                # for things each person toggles privately: selected
+                # accounts, account order, etc.
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS user_settings (
+                        fb_user_id TEXT NOT NULL,
+                        key TEXT NOT NULL,
+                        value JSONB NOT NULL,
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        PRIMARY KEY (fb_user_id, key)
+                    )
+                    """
+                )
+                # Team-wide shared settings — single row per key, visible
+                # to every user. Used for markup rules, pins, etc.
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS shared_settings (
+                        key TEXT PRIMARY KEY,
+                        value JSONB NOT NULL,
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+            print("[startup] DB: OK (nicknames + settings tables ready)", flush=True)
         except Exception as exc:
             _db_pool = None
             print(f"[startup] DB: FAILED ({exc})", flush=True)
@@ -839,6 +864,117 @@ async def delete_nickname(campaign_id: str):
             "DELETE FROM campaign_nicknames WHERE campaign_id = $1",
             campaign_id,
         )
+    return {"ok": True}
+
+
+# ── Settings (PostgreSQL-backed) ──────────────────────────────────────
+#
+# Two scopes:
+#   - user_settings: keyed on (fb_user_id, key). Each user owns their
+#     own row. Used for: selected accounts, account order.
+#   - shared_settings: keyed on key only, visible to every user. Used
+#     for: finance row markups, pinned ids, default markup, show
+#     nicknames toggle.
+#
+# `fb_user_id` is passed by the frontend — it's the FB /me id that the
+# frontend already has after login. The backend trusts it (this is an
+# internal agency tool; the blast radius of a forged user id is another
+# person's private settings, not data exposure).
+
+import json
+
+
+class SettingsValuePayload(BaseModel):
+    value: Any
+
+
+@app.get("/api/settings/user/{fb_user_id}")
+async def get_user_settings(fb_user_id: str):
+    if _db_pool is None:
+        return {"data": {}}
+    async with _db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT key, value FROM user_settings WHERE fb_user_id = $1",
+            fb_user_id,
+        )
+    # asyncpg returns the jsonb column as a str; decode to the real
+    # Python object so the JSON response is nested, not a string.
+    return {
+        "data": {
+            r["key"]: (json.loads(r["value"]) if isinstance(r["value"], str) else r["value"])
+            for r in rows
+        }
+    }
+
+
+@app.post("/api/settings/user/{fb_user_id}/{key}")
+async def upsert_user_setting(fb_user_id: str, key: str, payload: SettingsValuePayload):
+    pool = _require_db()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO user_settings (fb_user_id, key, value, updated_at)
+            VALUES ($1, $2, $3::jsonb, NOW())
+            ON CONFLICT (fb_user_id, key) DO UPDATE
+            SET value = EXCLUDED.value,
+                updated_at = NOW()
+            """,
+            fb_user_id,
+            key,
+            json.dumps(payload.value),
+        )
+    return {"ok": True}
+
+
+@app.delete("/api/settings/user/{fb_user_id}/{key}")
+async def delete_user_setting(fb_user_id: str, key: str):
+    pool = _require_db()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM user_settings WHERE fb_user_id = $1 AND key = $2",
+            fb_user_id,
+            key,
+        )
+    return {"ok": True}
+
+
+@app.get("/api/settings/shared")
+async def get_shared_settings():
+    if _db_pool is None:
+        return {"data": {}}
+    async with _db_pool.acquire() as conn:
+        rows = await conn.fetch("SELECT key, value FROM shared_settings")
+    return {
+        "data": {
+            r["key"]: (json.loads(r["value"]) if isinstance(r["value"], str) else r["value"])
+            for r in rows
+        }
+    }
+
+
+@app.post("/api/settings/shared/{key}")
+async def upsert_shared_setting(key: str, payload: SettingsValuePayload):
+    pool = _require_db()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO shared_settings (key, value, updated_at)
+            VALUES ($1, $2::jsonb, NOW())
+            ON CONFLICT (key) DO UPDATE
+            SET value = EXCLUDED.value,
+                updated_at = NOW()
+            """,
+            key,
+            json.dumps(payload.value),
+        )
+    return {"ok": True}
+
+
+@app.delete("/api/settings/shared/{key}")
+async def delete_shared_setting(key: str):
+    pool = _require_db()
+    async with pool.acquire() as conn:
+        await conn.execute("DELETE FROM shared_settings WHERE key = $1", key)
     return {"ok": True}
 
 

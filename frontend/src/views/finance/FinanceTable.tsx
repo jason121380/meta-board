@@ -73,12 +73,16 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
       dir: finSort.dir,
     };
     const filtered = filterFinanceRows(campaigns, hideZero, search, nicknames);
-    return sortFinanceRows(filtered, sortState, pinnedIds, rowMarkups, defaultMarkup);
+    return sortFinanceRows(filtered, sortState, pinnedIds, rowMarkups, defaultMarkup, {
+      nicknames,
+      useNicknameForNameSort: showNicknames,
+    });
   }, [
     campaigns,
     hideZero,
     search,
     nicknames,
+    showNicknames,
     finSort.key,
     finSort.dir,
     pinnedIds,

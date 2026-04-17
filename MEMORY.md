@@ -45,7 +45,11 @@ This means the scope is **safe to request even without review** — FB's behavio
 - **Auth**: FB JS SDK (browser) → `POST /api/auth/token` → `_runtime_token` in memory
 - **Charts**: Chart.js 4.4.0 + chartjs-plugin-datalabels 2.2.0 (tree-shaken imports, not CDN)
 - **AI**: Google Gemini API via `/api/ai/chat` endpoint
-- **Storage**: Browser localStorage only — no server-side DB. The PostgreSQL `user_settings` table and `/api/settings/*` endpoints were removed in the 2026-04-15 React-only cutover.
+- **Storage (2026-04-17 PG cutover)**: PostgreSQL via `asyncpg` + `DATABASE_URL`. Three tables auto-created on startup:
+  - `campaign_nicknames` — per-campaign store/designer nicknames, shared team-wide
+  - `user_settings(fb_user_id, key, value JSONB)` — per-user: `selected_accounts`, `account_order`
+  - `shared_settings(key, value JSONB)` — team-wide: `finance_row_markups`, `finance_pinned_ids`, `finance_default_markup`, `finance_show_nicknames`
+  localStorage now only holds **ephemeral UI state**: `fb_active_accounts`, date-picker prefs, sidebar collapse, FB token cache. `SettingsProvider` is the hydration gate — fires two GETs in parallel at login, gates the router on success.
 
 ## Layout
 

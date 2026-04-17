@@ -1,49 +1,73 @@
+import { api } from "@/api/client";
+import { debounce } from "@/lib/debounce";
 import type { FbAccount } from "@/types/fb";
 import { create } from "zustand";
 
 /**
- * Accounts store — tracks the user's saved/active/ordered account lists.
+ * Accounts store — selected account ids, dashboard-active account ids,
+ * user-defined drag-sort order.
  *
- * Maps directly onto legacy the original design global `let` state:
- *   savedSelectedIds (line 1235) → selectedIds, persisted as
- *     `fb_selected_accounts`
- *   selectedAccounts  (line 1234) → activeIds, persisted as
- *     `fb_active_accounts`  (single-select currently; kept as array
- *     because the legacy code modeled it that way and we don't want
- *     to break data shape for users with existing localStorage)
- *   acctOrder         (line 1237) → order, persisted as `acct_order`
+ * Persistence split (after the 2026-04-17 PG cutover):
+ *   - selectedIds  → per-user setting `selected_accounts` (PostgreSQL)
+ *   - order        → per-user setting `account_order`     (PostgreSQL)
+ *   - activeIds    → localStorage `fb_active_accounts` (ephemeral,
+ *                    session-scoped, intentionally NOT synced across
+ *                    tabs / devices)
  *
- * `allAccounts` (the raw FB response list) is NOT persisted; it lives
- * in TanStack Query cache and comes from useAccounts().
+ * SettingsProvider seeds selectedIds + order from the server once at
+ * startup. After that, any store mutation fires a (debounced) POST to
+ * persist. Calls route through the React Query cache so any other
+ * component reading useUserSettings() sees the latest value.
  */
 
 export interface AccountsState {
-  /** Set of account ids the user has enabled in Settings (and wants
-   * visible in the Dashboard left panel). */
   selectedIds: string[];
-  /** Set of account ids currently active in the dashboard view. */
   activeIds: string[];
-  /** User-defined drag-sort order (subset of selectedIds + any others). */
   order: string[];
+
+  /** Set by SettingsProvider when it receives the server response.
+   * Separate from setSelectedIds so the seed doesn't trigger a POST
+   * back (echo loop). */
+  hydrateFromServer: (input: { selectedIds: string[]; order: string[] }) => void;
 
   setSelectedIds: (ids: string[]) => void;
   setActiveIds: (ids: string[]) => void;
   setOrder: (order: string[]) => void;
 
-  /** Utility: return the user's visible accounts (selectedIds) sorted
-   * by `order` first, then alphabetically by name. Matches the legacy
-   * getVisibleAccounts() helper at the original design line 1701. */
   visibleAccounts: (all: FbAccount[]) => FbAccount[];
 }
+
+// Module-level user id — set by SettingsProvider, read by sync writer.
+// Null before login; mutations silently no-op until a user id lands.
+let _currentUserId: string | null = null;
+export function setAccountsUserId(id: string | null) {
+  _currentUserId = id;
+}
+
+// Debounced writers — collapse rapid state changes into a single POST.
+const postSelected = debounce((ids: string[]) => {
+  if (_currentUserId) void api.settings.setUser(_currentUserId, "selected_accounts", ids);
+}, 500);
+const postOrder = debounce((order: string[]) => {
+  if (_currentUserId) void api.settings.setUser(_currentUserId, "account_order", order);
+}, 500);
 
 export const useAccountsStore = create<AccountsState>((set, get) => ({
   selectedIds: [],
   activeIds: [],
   order: [],
 
-  setSelectedIds: (ids) => set({ selectedIds: ids }),
+  hydrateFromServer: ({ selectedIds, order }) => set({ selectedIds, order }),
+
+  setSelectedIds: (ids) => {
+    set({ selectedIds: ids });
+    postSelected(ids);
+  },
   setActiveIds: (ids) => set({ activeIds: ids }),
-  setOrder: (order) => set({ order }),
+  setOrder: (order) => {
+    set({ order });
+    postOrder(order);
+  },
 
   visibleAccounts: (all) => {
     const { selectedIds, order } = get();
@@ -60,16 +84,8 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
   },
 }));
 
-// ── Legacy localStorage key bridge ─────────────────────────────
-// Zustand's `persist` middleware lumps everything into one key. We want
-// to preserve the 7 legacy keys verbatim so existing users roll over
-// without data loss. These helpers read/write each key individually.
-
-const K = {
-  selectedIds: "fb_selected_accounts",
-  activeIds: "fb_active_accounts",
-  order: "acct_order",
-} as const;
+// ── activeIds localStorage bridge (ephemeral UI state) ──────────
+const K_ACTIVE = "fb_active_accounts";
 
 function readArray(key: string): string[] {
   try {
@@ -86,24 +102,19 @@ function writeArray(key: string, value: string[]): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    /* ignore quota errors */
+    /* ignore quota */
   }
 }
 
-/** Call once at app startup, before any view reads the store. */
+/** Hydrate only the ephemeral activeIds slice from localStorage.
+ *  Called once at app startup BEFORE SettingsProvider runs. */
 export function hydrateAccountsFromStorage(): void {
-  useAccountsStore.setState({
-    selectedIds: readArray(K.selectedIds),
-    activeIds: readArray(K.activeIds),
-    order: readArray(K.order),
-  });
+  useAccountsStore.setState({ activeIds: readArray(K_ACTIVE) });
 }
 
-/** Subscribe store changes → write to the legacy localStorage keys. */
+/** Subscribe store changes → write activeIds to localStorage. */
 export function installAccountsStorageSync(): () => void {
   return useAccountsStore.subscribe((state, prev) => {
-    if (state.selectedIds !== prev.selectedIds) writeArray(K.selectedIds, state.selectedIds);
-    if (state.activeIds !== prev.activeIds) writeArray(K.activeIds, state.activeIds);
-    if (state.order !== prev.order) writeArray(K.order, state.order);
+    if (state.activeIds !== prev.activeIds) writeArray(K_ACTIVE, state.activeIds);
   });
 }

@@ -94,6 +94,7 @@ export function FinanceView() {
       pinnedIds,
       rowMarkups,
       defaultMarkup,
+      { nicknames, useNicknameForNameSort: showNicknames },
     );
     const csv = buildFinanceCsv({
       rows: sorted,
