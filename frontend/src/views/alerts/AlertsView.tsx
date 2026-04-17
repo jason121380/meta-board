@@ -65,28 +65,6 @@ export function AlertsView() {
     queryClient.invalidateQueries({ queryKey: ["overview"] });
   };
 
-  // Per-account campaign count for the sidebar.
-  // In Alerts view we show the count of all campaigns presently loaded in the overview.
-  const filteredCountByAccount = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const c of overview.campaigns) {
-      if (c._accountId) {
-        map.set(c._accountId, (map.get(c._accountId) ?? 0) + 1);
-      }
-    }
-    return map;
-  }, [overview.campaigns]);
-
-  const getCampaignCount = (accId: string, fallback?: number) => {
-    if (accId === "__total__") {
-      return overview.campaigns.length || undefined;
-    }
-    if (overview.campaigns.length > 0 || overview.isLoading === false) {
-      return filteredCountByAccount.get(accId) ?? 0;
-    }
-    return fallback;
-  };
-
   return (
     <>
       <Topbar title="警示列表" titleAction={<AcctSidebarToggle />}>
@@ -111,7 +89,6 @@ export function AlertsView() {
             accounts={visibleAll}
             selectedAccountId={selectedAcctId}
             onSelect={setSelectedAcctId}
-            getCampaignCount={getCampaignCount}
           />
         </div>
 

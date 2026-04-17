@@ -1,6 +1,5 @@
 import { api } from "@/api/client";
 import { useAccounts } from "@/api/hooks/useAccounts";
-import { Spinner } from "@/components/Spinner";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
 import { useQueryClient } from "@tanstack/react-query";
