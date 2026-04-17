@@ -119,7 +119,7 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
                 )}
               >
                 <td className="w-10 px-3 text-gray-500">{i + 1}</td>
-                <td className="w-20 px-3">
+                <td className="whitespace-nowrap px-3">
                   <FinanceStatusBadge status={camp.status} />
                 </td>
                 {multiAcct && (
@@ -148,8 +148,8 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
                     />
                   </div>
                 </td>
-                <td className="px-3 tabular-nums">${fM(sp)}</td>
-                <td className="px-3 text-right">
+                <td className="whitespace-nowrap px-3 tabular-nums">${fM(sp)}</td>
+                <td className="whitespace-nowrap px-3 text-right">
                   <input
                     type="number"
                     value={m}
@@ -164,7 +164,7 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
                   />
                   %
                 </td>
-                <td className="px-3 text-right font-semibold tabular-nums text-orange">
+                <td className="whitespace-nowrap px-3 text-right font-semibold tabular-nums text-orange">
                   ${fM(plus)}
                 </td>
                 <td className="px-3 text-center">
