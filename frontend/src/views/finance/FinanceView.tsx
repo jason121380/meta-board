@@ -1,6 +1,5 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useMultiAccountOverview } from "@/api/hooks/useMultiAccountOverview";
-import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { Button } from "@/components/Button";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
@@ -15,7 +14,6 @@ import { useFinanceStore } from "@/stores/financeStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { FinanceAccountPanel } from "./FinanceAccountPanel";
 import { FinanceTable } from "./FinanceTable";
 import {
   buildAccountRows,
@@ -109,8 +107,15 @@ export function FinanceView() {
 
   return (
     <>
-      <Topbar title="費用中心" titleAction={<AcctSidebarToggle />}>
-        <div className="flex items-center gap-3">
+      <Topbar title="費用中心">
+        <div className="flex items-center gap-2 md:gap-3">
+          <MobileAccountPicker
+            accounts={visible}
+            selectedId={selectedId}
+            onSelect={(id) => setFinSelectedAcctIds(id ? [id] : [])}
+            className="bg-transparent px-0 py-0"
+          />
+          <TopbarSeparator />
           <DatePicker value={date} onChange={(cfg) => setDate("finance", cfg)} />
           <TopbarSeparator />
           <RefreshButton isFetching={overview.isFetching} onClick={onRefresh} />
@@ -142,24 +147,8 @@ export function FinanceView() {
         </div>
       </Topbar>
 
-      {/* Mobile account picker — pinned below Topbar */}
-      <div className="shrink-0 border-b border-border md:hidden">
-        <MobileAccountPicker
-          accounts={visible}
-          selectedId={selectedId}
-          onSelect={(id) => setFinSelectedAcctIds(id ? [id] : [])}
-        />
-      </div>
-
       <div className="flex items-start md:flex-row">
-        {/* Desktop sidebar (≥768px) */}
-        <div className="hidden md:flex">
-          <FinanceAccountPanel
-            rows={accountRows}
-            selectedId={selectedId}
-            onSelect={(id) => setFinSelectedAcctIds(id ? [id] : [])}
-          />
-        </div>
+        {/* Secondary sidebar removed per USER_REQUEST 2026-04-17 */}
 
         <div className="flex-1 px-3 pt-3 md:px-4 md:pt-4">
           {/* Rounded card wrap — sized to content. The parent column

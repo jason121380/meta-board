@@ -1,6 +1,5 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useMultiAccountOverview } from "@/api/hooks/useMultiAccountOverview";
-import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
@@ -12,7 +11,6 @@ import { useFiltersStore } from "@/stores/filtersStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { AlertAccountPanel } from "./AlertAccountPanel";
 import { AlertCard } from "./AlertCard";
 import { computeAlertBuckets } from "./alertsData";
 
@@ -66,32 +64,23 @@ export function AlertsView() {
 
   return (
     <>
-      <Topbar title="警示列表" titleAction={<AcctSidebarToggle />}>
-        <div className="flex items-center gap-3">
+      <Topbar title="警示列表">
+        <div className="flex items-center gap-2 md:gap-3">
+          <MobileAccountPicker
+            accounts={visibleAll}
+            selectedId={selectedAcctId}
+            onSelect={setSelectedAcctId}
+            className="bg-transparent px-0 py-0"
+          />
+          <TopbarSeparator />
           <DatePicker value={date} onChange={(cfg) => setDate("alerts", cfg)} />
           <TopbarSeparator />
           <RefreshButton isFetching={overview.isFetching} onClick={onRefresh} title="重新分析" />
         </div>
       </Topbar>
 
-      {/* Mobile account picker — pinned below Topbar */}
-      <div className="shrink-0 border-b border-border md:hidden">
-        <MobileAccountPicker
-          accounts={visibleAll}
-          selectedId={selectedAcctId}
-          onSelect={setSelectedAcctId}
-        />
-      </div>
-
       <div className="flex items-start md:flex-row">
-        {/* Desktop sidebar (≥768px) */}
-        <div className="hidden md:flex">
-          <AlertAccountPanel
-            accounts={visibleAll}
-            selectedAccountId={selectedAcctId}
-            onSelect={setSelectedAcctId}
-          />
-        </div>
+        {/* Secondary sidebar removed per USER_REQUEST 2026-04-17 */}
 
         <div className="flex-1 p-3 md:p-5">
           {visibleAll.length === 0 ? (

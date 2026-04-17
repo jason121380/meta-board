@@ -1,6 +1,5 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useMultiAccountOverview } from "@/api/hooks/useMultiAccountOverview";
-import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
@@ -14,7 +13,6 @@ import { useFiltersStore } from "@/stores/filtersStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
-import { AccountPanel } from "./AccountPanel";
 import type { BudgetModalTarget } from "./BudgetModal";
 import { StatsGrid } from "./StatsGrid";
 import { TreeTable } from "./TreeTable";
@@ -161,8 +159,20 @@ export function DashboardView() {
 
   return (
     <>
-      <Topbar title="儀表板" titleAction={<AcctSidebarToggle />}>
+      <Topbar title="儀表板">
         <div className="flex items-center gap-2 md:gap-3">
+          <MobileAccountPicker
+            accounts={visibleAccounts}
+            selectedId={activeAccountId}
+            onSelect={(id) => {
+              if (id === null) return;
+              const acc = visibleAccounts.find((a) => a.id === id);
+              if (acc) setActiveIds([acc.id]);
+            }}
+            includeAllOption={false}
+            className="bg-transparent px-0 py-0"
+          />
+          <TopbarSeparator />
           <DatePicker value={date} onChange={(cfg) => setDate("dashboard", cfg)} />
           <button
             type="button"
@@ -218,35 +228,13 @@ export function DashboardView() {
         </div>
       </Topbar>
 
-      {/* Mobile account picker — pinned right below Topbar so it's
-          the first thing the user sees. Hidden on desktop where the
-          AccountPanel sidebar handles selection. */}
-      <div className="shrink-0 border-b border-border md:hidden">
-        <MobileAccountPicker
-          accounts={visibleAccounts}
-          selectedId={activeAccountId}
-          onSelect={(id) => {
-            if (id === null) return;
-            const acc = visibleAccounts.find((a) => a.id === id);
-            if (acc) setActiveIds([acc.id]);
-          }}
-          includeAllOption={false}
-        />
-      </div>
+
+
 
       <div className="flex items-start md:flex-row">
-        {/* Desktop sidebar (≥768px) */}
-        <div className="hidden md:flex">
-          <AccountPanel
-            accounts={visibleAccounts}
-            activeAccountId={activeAccountId}
-            isLoading={accountsQuery.isLoading}
-            getCampaignCount={getCampaignCount}
-            onSelect={(account) => setActiveIds([account.id])}
-          />
-        </div>
 
-        <div className="flex-1">
+
+        <div className="min-w-0 flex-1">
           {!statsCollapsed && (
             <StatsGrid
               accounts={activeAccounts}
@@ -299,9 +287,9 @@ export function DashboardView() {
                 {overview.isLoading ? "…" : `${filteredCampaigns.length} 個活動`}
               </span>
             </div>
-            <div className="overflow-x-auto">
+            <div className="w-full overflow-x-auto">
               {activeAccounts.length === 0 ? (
-                <EmptyState>從左側選擇廣告帳戶</EmptyState>
+                <EmptyState>從上方選擇廣告帳戶</EmptyState>
               ) : overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching) ? (
                 <LoadingState
                   title="載入行銷活動中..."
