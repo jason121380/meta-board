@@ -1,7 +1,6 @@
 import { useCreatives } from "@/api/hooks/useCreatives";
 import { useEntityStatusMutation } from "@/api/hooks/useEntityMutations";
 import { Badge } from "@/components/Badge";
-import { Button } from "@/components/Button";
 import { confirm } from "@/components/ConfirmDialog";
 import { Spinner } from "@/components/Spinner";
 import { Toggle } from "@/components/Toggle";
