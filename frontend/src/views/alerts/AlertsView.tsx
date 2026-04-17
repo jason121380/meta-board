@@ -6,13 +6,12 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { RefreshButton } from "@/components/RefreshButton";
-import { toast } from "@/components/Toast";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { AlertAccountPanel } from "./AlertAccountPanel";
 import { AlertCard } from "./AlertCard";
 import { computeAlertBuckets } from "./alertsData";
@@ -49,15 +48,6 @@ export function AlertsView() {
   // makes per-account switching instant.
   const overview = useMultiAccountOverview(visibleAll, date, { includeArchived: true });
 
-  const alertErrorKeys = Object.keys(overview.errors);
-  useEffect(() => {
-    if (overview.isLoading || alertErrorKeys.length === 0) return;
-    const names = alertErrorKeys
-      .map((id) => visibleAll.find((a) => a.id === id)?.name ?? id)
-      .join("、");
-    toast(`部分帳戶載入失敗：${names}`, "error", 5000);
-  }, [overview.isLoading, alertErrorKeys.length, visibleAll]);
-
   const scopedCampaigns = useMemo(() => {
     if (selectedAcctId === null) return overview.campaigns;
     return overview.campaigns.filter((c) => c._accountId === selectedAcctId);
@@ -93,7 +83,7 @@ export function AlertsView() {
         />
       </div>
 
-      <div className="flex md:flex-row">
+      <div className="flex items-start md:flex-row">
         {/* Desktop sidebar (≥768px) */}
         <div className="hidden md:flex">
           <AlertAccountPanel
@@ -106,7 +96,7 @@ export function AlertsView() {
         <div className="flex-1 p-3 md:p-5">
           {visibleAll.length === 0 ? (
             <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
-          ) : overview.isLoading ? (
+          ) : overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching) ? (
             <LoadingState
               title="分析廣告資料中..."
               loaded={overview.loadedCount}

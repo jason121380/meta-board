@@ -6,7 +6,6 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { RefreshButton } from "@/components/RefreshButton";
-import { toast } from "@/components/Toast";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { cn } from "@/lib/cn";
 import { getIns } from "@/lib/insights";
@@ -105,17 +104,6 @@ export function DashboardView() {
   const overview = useMultiAccountOverview(activeAccounts, date, {
     includeArchived: true,
   });
-
-  // Show errors as a toast instead of a big red banner so they don't
-  // flash on screen the moment the preloader finishes.
-  const errorKeys = Object.keys(overview.errors);
-  useEffect(() => {
-    if (overview.isLoading || errorKeys.length === 0) return;
-    const names = errorKeys
-      .map((id) => activeAccounts.find((a) => a.id === id)?.name ?? id)
-      .join("、");
-    toast(`部分帳戶載入失敗：${names}`, "error", 5000);
-  }, [overview.isLoading, errorKeys.length, activeAccounts]);
 
   // Local UI state
   const [searchTerm, setSearchTerm] = useState("");
@@ -226,7 +214,7 @@ export function DashboardView() {
         />
       </div>
 
-      <div className="flex md:flex-row">
+      <div className="flex items-start md:flex-row">
         {/* Desktop sidebar (≥768px) */}
         <div className="hidden md:flex">
           <AccountPanel
@@ -293,7 +281,7 @@ export function DashboardView() {
             <div className="overflow-x-auto">
               {activeAccounts.length === 0 ? (
                 <EmptyState>從左側選擇廣告帳戶</EmptyState>
-              ) : overview.isLoading ? (
+              ) : overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching) ? (
                 <LoadingState
                   title="載入行銷活動中..."
                   loaded={overview.loadedCount}
