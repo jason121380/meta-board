@@ -2,7 +2,7 @@ import { useFbAuth } from "@/auth/FbAuthProvider";
 import { Spinner } from "@/components/Spinner";
 
 /**
- * Login page — full-screen split layout matching dashboard.html lines
+ * Login page — full-screen split layout matching the original design lines
  * 765–798. Left: animated orange gradient blobs on dark panel. Right:
  * white card with METADASH wordmark and "Continue with Facebook" CTA.
  *

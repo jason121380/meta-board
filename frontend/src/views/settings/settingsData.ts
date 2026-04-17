@@ -4,7 +4,7 @@ import type { FbAccount } from "@/types/fb";
  * Group accounts by Facebook Business Manager. Accounts without a
  * business fall into a special "__other__" group labelled "其他".
  *
- * Ported from dashboard.html `getBmGroups()` lines 2308–2323.
+ * Ported from the original design `getBmGroups()` lines 2308–2323.
  */
 
 export interface BmGroup {
@@ -37,7 +37,7 @@ export function groupAccountsByBusiness(accounts: FbAccount[]): BmGroup[] {
 
 /**
  * Count how many accounts in a group are currently checked.
- * Ports the inline `checkedCount` computation at dashboard.html
+ * Ports the inline `checkedCount` computation at the original design
  * lines 2319–2320.
  */
 export function countChecked(group: BmGroup, checkedIds: Set<string>): number {

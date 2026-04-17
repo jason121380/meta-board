@@ -5,7 +5,7 @@ import type { FbAccount, FbCampaign, FbInsights } from "@/types/fb";
  * Pure data aggregation for the Analytics view. Every function in
  * this module is deterministic and testable — no React, no Chart.js.
  *
- * All ports are of blocks inside `loadAiAnalysis()` (dashboard.html
+ * All ports are of blocks inside `loadAiAnalysis()` (the original design
  * lines 2474–2752) and keep the exact same semantics:
  *  - First-found messaging count (never sums the two msg types)
  *  - Account spend is taken from account-level insights when available,

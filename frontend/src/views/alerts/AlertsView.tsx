@@ -21,7 +21,7 @@ import { computeAlertBuckets } from "./alertsData";
  * (私訊成本過高 / CPC 過高 / 頻次過高) with per-card sort and
  * keyword filter.
  *
- * Ported from dashboard.html lines 2874–3148 + view markup
+ * Ported from the original design lines 2874–3148 + view markup
  * at lines 1008–1030.
  */
 export function AlertsView() {
@@ -61,27 +61,48 @@ export function AlertsView() {
   };
 
   const onRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["overview-lite"] });
     queryClient.invalidateQueries({ queryKey: ["overview"] });
+  };
+
+  // Per-account campaign count for the sidebar.
+  // In Alerts view we show the count of all campaigns presently loaded in the overview.
+  const filteredCountByAccount = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of overview.campaigns) {
+      if (c._accountId) {
+        map.set(c._accountId, (map.get(c._accountId) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [overview.campaigns]);
+
+  const getCampaignCount = (accId: string, fallback?: number) => {
+    if (accId === "__total__") {
+      return overview.campaigns.length || undefined;
+    }
+    if (overview.campaigns.length > 0 || overview.isLoading === false) {
+      return filteredCountByAccount.get(accId) ?? 0;
+    }
+    return fallback;
   };
 
   return (
     <>
       <Topbar title="警示列表" titleAction={<AcctSidebarToggle />}>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3">
+          <MobileAccountPicker
+            accounts={visibleAll}
+            selectedId={selectedAcctId}
+            onSelect={setSelectedAcctId}
+            className="bg-transparent px-0 py-0"
+          />
+          <TopbarSeparator />
           <DatePicker value={date} onChange={(cfg) => setDate("alerts", cfg)} />
           <TopbarSeparator />
           <RefreshButton isFetching={overview.isFetching} onClick={onRefresh} title="重新分析" />
         </div>
       </Topbar>
-
-      {/* Mobile account picker — pinned below Topbar */}
-      <div className="shrink-0 border-b border-border md:hidden">
-        <MobileAccountPicker
-          accounts={visibleAll}
-          selectedId={selectedAcctId}
-          onSelect={setSelectedAcctId}
-        />
-      </div>
 
       <div className="flex items-start md:flex-row">
         {/* Desktop sidebar (≥768px) */}
@@ -90,6 +111,7 @@ export function AlertsView() {
             accounts={visibleAll}
             selectedAccountId={selectedAcctId}
             onSelect={setSelectedAcctId}
+            getCampaignCount={getCampaignCount}
           />
         </div>
 

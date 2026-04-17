@@ -1,6 +1,5 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useMultiAccountOverview } from "@/api/hooks/useMultiAccountOverview";
-import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { Button } from "@/components/Button";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
@@ -8,6 +7,7 @@ import { LoadingState } from "@/components/LoadingState";
 import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
+import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { toLabel } from "@/lib/datePicker";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
@@ -76,6 +76,7 @@ export function FinanceView() {
   );
 
   const onRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["overview-lite"] });
     queryClient.invalidateQueries({ queryKey: ["overview"] });
   };
 
@@ -110,7 +111,14 @@ export function FinanceView() {
   return (
     <>
       <Topbar title="費用中心" titleAction={<AcctSidebarToggle />}>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 md:gap-3">
+          <MobileAccountPicker
+            accounts={visible}
+            selectedId={selectedId}
+            onSelect={(id) => setFinSelectedAcctIds(id ? [id] : [])}
+            className="bg-transparent px-0 py-0"
+          />
+          <TopbarSeparator />
           <DatePicker value={date} onChange={(cfg) => setDate("finance", cfg)} />
           <TopbarSeparator />
           <RefreshButton isFetching={overview.isFetching} onClick={onRefresh} />
@@ -141,15 +149,6 @@ export function FinanceView() {
           </Button>
         </div>
       </Topbar>
-
-      {/* Mobile account picker — pinned below Topbar */}
-      <div className="shrink-0 border-b border-border md:hidden">
-        <MobileAccountPicker
-          accounts={visible}
-          selectedId={selectedId}
-          onSelect={(id) => setFinSelectedAcctIds(id ? [id] : [])}
-        />
-      </div>
 
       <div className="flex items-start md:flex-row">
         {/* Desktop sidebar (≥768px) */}
@@ -198,7 +197,7 @@ export function FinanceView() {
               </div>
             </div>
 
-            <div>
+            <div className="w-full overflow-x-auto">
               {visible.length === 0 ? (
                 <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
               ) : overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching) ? (

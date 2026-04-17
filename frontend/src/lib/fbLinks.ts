@@ -1,7 +1,7 @@
 /**
  * Build deep links into Facebook Ads Manager for a given entity.
  *
- * The legacy dashboard.html and the AlertCard view both compose
+ * The legacy the original design and the AlertCard view both compose
  * these URLs; centralising them here means we have ONE implementation
  * to keep in sync with FB's URL schema.
  *

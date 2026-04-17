@@ -122,6 +122,7 @@ export function DashboardView() {
   // Refresh → invalidate the overview + per-adset creatives (other
   // view caches share the overview key so they re-populate on demand)
   const onRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["accounts"] });
     queryClient.invalidateQueries({ queryKey: ["overview"] });
     queryClient.invalidateQueries({ queryKey: ["adsets"] });
     queryClient.invalidateQueries({ queryKey: ["creatives"] });
@@ -135,6 +136,28 @@ export function DashboardView() {
 
   const multiAcct = activeAccounts.length > 1;
 
+  // Per-account campaign count that respects the activeOnly filter.
+  // Falls back to campaign_count from the API (total) when data isn't loaded yet.
+  const filteredCountByAccount = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of filteredCampaigns) {
+      if (c._accountId) {
+        map.set(c._accountId, (map.get(c._accountId) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [filteredCampaigns]);
+
+  // Only use the computed count if we have loaded data for the active account;
+  // fall back to the API's campaign_count before any campaigns are fetched.
+  const getCampaignCount = (accId: string, fallback?: number) => {
+    // For accounts currently being viewed, we use the dynamic filtered count.
+    if (activeIds.includes(accId)) {
+      return filteredCountByAccount.get(accId) ?? 0;
+    }
+    // For other accounts, we show the total count from the initial account list.
+    return fallback;
+  };
   const setTreeSort = useUiStore((s) => s.setTreeSort);
   const statsCollapsed = useUiStore((s) => s.statsCollapsed);
   const toggleStatsCollapsed = useUiStore((s) => s.toggleStatsCollapsed);
@@ -143,6 +166,18 @@ export function DashboardView() {
     <>
       <Topbar title="儀表板" titleAction={<AcctSidebarToggle />}>
         <div className="flex items-center gap-2 md:gap-3">
+          <MobileAccountPicker
+            accounts={visibleAccounts}
+            selectedId={activeAccountId}
+            onSelect={(id) => {
+              if (id === null) return;
+              const acc = visibleAccounts.find((a) => a.id === id);
+              if (acc) setActiveIds([acc.id]);
+            }}
+            includeAllOption={false}
+            className="bg-transparent px-0 py-0"
+          />
+          <TopbarSeparator />
           <DatePicker value={date} onChange={(cfg) => setDate("dashboard", cfg)} />
           <button
             type="button"
@@ -198,21 +233,8 @@ export function DashboardView() {
         </div>
       </Topbar>
 
-      {/* Mobile account picker — pinned right below Topbar so it's
-          the first thing the user sees. Hidden on desktop where the
-          AccountPanel sidebar handles selection. */}
-      <div className="shrink-0 border-b border-border md:hidden">
-        <MobileAccountPicker
-          accounts={visibleAccounts}
-          selectedId={activeAccountId}
-          onSelect={(id) => {
-            if (id === null) return;
-            const acc = visibleAccounts.find((a) => a.id === id);
-            if (acc) setActiveIds([acc.id]);
-          }}
-          includeAllOption={false}
-        />
-      </div>
+
+
 
       <div className="flex items-start md:flex-row">
         {/* Desktop sidebar (≥768px) */}
@@ -225,7 +247,8 @@ export function DashboardView() {
           />
         </div>
 
-        <div className="flex-1">
+
+        <div className="min-w-0 flex-1">
           {!statsCollapsed && (
             <StatsGrid
               accounts={activeAccounts}
@@ -238,7 +261,7 @@ export function DashboardView() {
               scrolls as one unit (overflow-y-auto on parent), so the
               card only occupies the height its table rows need. No
               more blank space below the last row. */}
-          <div className="mx-3 mb-3 mt-3 flex flex-col rounded-2xl border border-border md:mx-4 md:mb-4 md:mt-4">
+          <div className="mx-3 mb-3 mt-3 flex flex-col overflow-hidden rounded-2xl border border-border bg-white md:mx-4 md:mb-4 md:mt-4">
             <div className="flex shrink-0 flex-wrap items-center gap-2.5 border-b border-border bg-white px-3 py-2.5 md:px-4 md:py-3">
               <input
                 value={searchTerm}
@@ -263,7 +286,7 @@ export function DashboardView() {
                     if (on) setTreeSort(null);
                   }}
                 />
-                素材比較
+                第三層素材比較
               </label>
               <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[12px] text-gray-500 md:hidden">
                 <input
@@ -278,9 +301,9 @@ export function DashboardView() {
                 {overview.isLoading ? "…" : `${filteredCampaigns.length} 個活動`}
               </span>
             </div>
-            <div className="overflow-x-auto">
+            <div className="w-full overflow-x-auto">
               {activeAccounts.length === 0 ? (
-                <EmptyState>從左側選擇廣告帳戶</EmptyState>
+                <EmptyState>從上方選擇廣告帳戶</EmptyState>
               ) : overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching) ? (
                 <LoadingState
                   title="載入行銷活動中..."

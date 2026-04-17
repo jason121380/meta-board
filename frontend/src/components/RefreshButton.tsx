@@ -18,7 +18,7 @@ export interface RefreshButtonProps {
   title?: string;
 }
 
-export function RefreshButton({ isFetching, onClick, title = "重新整理" }: RefreshButtonProps) {
+export function RefreshButton({ isFetching, onClick, title = "重新整理 (強制從 FB 更新)" }: RefreshButtonProps) {
   return (
     <Button
       variant="ghost"
@@ -26,7 +26,7 @@ export function RefreshButton({ isFetching, onClick, title = "重新整理" }: R
       title={title}
       aria-label={title}
       onClick={onClick}
-      className="h-10 w-10 justify-center px-0 md:h-[30px] md:w-[30px]"
+      className="h-10 w-10 justify-center px-0 transition-transform active:scale-90 md:h-[30px] md:w-[30px]"
       aria-busy={isFetching}
     >
       <svg

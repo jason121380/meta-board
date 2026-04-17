@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 /*
- * Global base styles — ported from dashboard.html.
+ * Global base styles — ported from the original template.
  * Anything in this file must remain visually identical to the legacy
  * build. Per-component styles go in component-specific files.
  */
@@ -23,6 +23,7 @@
   html,
   body {
     height: 100%;
+    overflow: hidden;
     /* Prevent pinch-to-zoom on iOS Safari. The viewport meta tag's
        user-scalable=no is ignored since iOS 10. touch-action on the
        root element is the reliable alternative for PWA apps. */
@@ -122,7 +123,7 @@
     position: relative;
     display: inline-block;
     width: 32px;
-    height: 18px;
+    height: 14px;
   }
   .toggle input {
     opacity: 0;
@@ -134,16 +135,16 @@
     cursor: pointer;
     inset: 0;
     background: #d0d0c8;
-    border-radius: 18px;
+    border-radius: 14px;
     transition: 0.2s;
   }
   .slider::before {
     position: absolute;
     content: "";
-    height: 12px;
-    width: 12px;
-    left: 3px;
-    bottom: 3px;
+    height: 10px;
+    width: 10px;
+    left: 2px;
+    bottom: 2px;
     background: white;
     border-radius: 50%;
     transition: 0.2s;
@@ -152,7 +153,7 @@
     background: var(--orange);
   }
   input:checked + .slider::before {
-    transform: translateX(14px);
+    transform: translateX(18px);
   }
 
   /* Spinner used in loading states */
@@ -170,6 +171,12 @@
    * (renamed from ad-row → creative-row in commit d720fa2 after an
    * ad-blocker bug. See /MEMORY.md.)
    */
+  table.tree th,
+  table.tree td {
+    padding: 6px 14px;
+    vertical-align: middle;
+  }
+  
   table.tree tr.campaign-row {
     background: var(--white);
   }
@@ -268,7 +275,7 @@
 /*
  * ── Mobile responsive overrides ──────────────────────────────
  *
- * Ported from dashboard.html @media (max-width: 768px) block.
+ * Ported from the original design @media (max-width: 768px) block.
  * Rather than re-declaring every Tailwind utility class, we target
  * the semantic anchors placed on key layout nodes:
  *   .shell-root    → outermost layout flex

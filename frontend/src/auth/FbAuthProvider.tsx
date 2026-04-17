@@ -12,7 +12,7 @@ import {
 
 /**
  * Facebook JS SDK provider — replaces the window-level `fbAsyncInit`
- * dance in dashboard.html with a React context. The SDK is loaded
+ * dance in the original design with a React context. The SDK is loaded
  * exactly once per page using a module-level flag (survives React 18
  * Strict Mode's double-mount behavior).
  *
@@ -135,21 +135,13 @@ export function FbAuthProvider({ children }: { children: ReactNode }) {
     async (token: string) => {
       try {
         const result = await api.auth.setToken(token);
+        // Cache token locally to survive refreshes without relying on FB cookies
+        localStorage.setItem("meta_dash_fb_token", token);
+        
         const name = result.name ?? "User";
         const id = result.id ?? "";
-        // Fetch picture via FB.api so we can show avatar
-        let pictureUrl: string | undefined;
-        try {
-          await new Promise<void>((resolve) => {
-            window.FB?.api("/me", { fields: "picture.width(80)" }, (resp) => {
-              const r = resp as { picture?: { data?: { url?: string } } };
-              pictureUrl = r?.picture?.data?.url;
-              resolve();
-            });
-          });
-        } catch {
-          /* ignore picture fetch failure */
-        }
+        const pictureUrl = result.pictureUrl;
+
         setUser({ id, name, pictureUrl });
         setStatus("auth");
         setError(null);
@@ -161,6 +153,7 @@ export function FbAuthProvider({ children }: { children: ReactNode }) {
         // too, not just the data (vs invalidateQueries).
         queryClient.resetQueries();
       } catch (err) {
+        localStorage.removeItem("meta_dash_fb_token");
         const msg = err instanceof ApiError ? err.detail : (err as Error).message;
         setError(msg);
         setStatus("unauth");
@@ -185,11 +178,21 @@ export function FbAuthProvider({ children }: { children: ReactNode }) {
       setStatus((prev) => (prev === "checking" ? "unauth" : prev));
     }, 6000);
 
+    // Fast path: use cached token if available so we skip the
+    // "checking" screen delay and bypass browser third-party cookie limits
+    const cached = localStorage.getItem("meta_dash_fb_token");
+    if (cached) {
+      void exchangeToken(cached);
+    }
+
     ensureSdkLoaded().then(() => {
       window.FB?.getLoginStatus((resp) => {
         if (resp.status === "connected" && resp.authResponse) {
-          void exchangeToken(resp.authResponse.accessToken);
-        } else {
+          localStorage.setItem("meta_dash_fb_token", resp.authResponse.accessToken);
+          if (!cached) {
+            void exchangeToken(resp.authResponse.accessToken);
+          }
+        } else if (!cached) {
           setStatus((prev) => (prev === "checking" ? "unauth" : prev));
         }
       });
@@ -220,6 +223,7 @@ export function FbAuthProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
+    localStorage.removeItem("meta_dash_fb_token");
     setUser(null);
     setStatus("unauth");
   }, []);

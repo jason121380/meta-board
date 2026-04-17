@@ -1,6 +1,6 @@
 /**
  * Facebook ad account status → human label + color mapping.
- * Ported verbatim from dashboard.html line 1275–1281.
+ * Ported verbatim from the original design line 1275–1281.
  *
  * FB's `account_status` is an integer with these documented values:
  *  1   ACTIVE

@@ -27,7 +27,7 @@ export interface CampaignRowProps {
 
 /**
  * First-level row — a single FB campaign with lazy-loaded adsets
- * inside an expanded state. Matches dashboard.html lines 1971–2003.
+ * inside an expanded state. Matches the original design lines 1971–2003.
  *
  * Budget column shows either daily_budget or lifetime_budget; if
  * neither is set we display a hint that the budget lives on the
@@ -136,15 +136,20 @@ function CampaignRowInner({
                 void onToggleStatus(e.currentTarget.checked);
               }}
             />
-            <Button
-              size="sm"
-              className="border-0 text-gray-500 hover:text-orange"
+            <button
+              type="button"
+              title="調整預算"
+              aria-label="調整預算"
+              className="cursor-pointer border-0 bg-transparent p-1 text-gray-400 hover:text-orange outline-none"
               onClick={() =>
                 onOpenBudget({ kind: "campaign", id: campaign.id, name: campaign.name })
               }
             >
-              調整預算
-            </Button>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <line x1="12" y1="1" x2="12" y2="23" />
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
+            </button>
           </div>
         </td>
       </tr>

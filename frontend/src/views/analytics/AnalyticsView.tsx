@@ -79,6 +79,7 @@ export function AnalyticsView() {
   );
 
   const onRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["overview-lite"] });
     queryClient.invalidateQueries({ queryKey: ["overview"] });
   };
 

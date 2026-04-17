@@ -1,5 +1,5 @@
 /*
- * Design tokens — literal port of dashboard.html :root block.
+ * Design tokens — literal port of the original design :root block.
  * DO NOT add / rename / remove a token without a side-by-side visual diff:
  * every existing component in the legacy build uses `var(--*)` and assumes
  * these exact values. See /style.md for the authoritative spec.
@@ -13,7 +13,7 @@
   --orange-border: #ffe8d9;
   --orange-muted: #b07a50;
 
-  /* Legacy aliases — several dashboard.html components still reference
+  /* Legacy aliases — several the original design components still reference
      `--blue` / `--blue-dark` / `--blue-bg` (a holdover from the original
      "Google My Business" blue theme before rebrand). Keep them so any
      component CSS we port verbatim continues to work. */

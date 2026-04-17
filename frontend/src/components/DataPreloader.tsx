@@ -172,13 +172,20 @@ export function DataPreloader({ onComplete }: { onComplete: () => void }) {
   // Display = max(real, time) — real progress always wins when it
   // jumps ahead (batch completes), time fills the gaps in between.
   const pct = Math.round(Math.max(realPct, timePct));
+  
+  // To keep the illusion intact, the accompanying text "(X / Y)" must
+  // smoothly match the fake percentage rather than staying frozen at
+  // the real loaded count.
+  const displayLoaded = Math.min(
+    progress.total,
+    Math.max(progress.loaded, Math.round((pct / 100) * progress.total))
+  );
 
   if (done) return null;
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/80 backdrop-blur-sm">
       <div className="flex w-[300px] flex-col items-center gap-4 rounded-2xl border border-border bg-white px-8 py-10 shadow-lg">
-        <Spinner size={36} />
         <div className="text-[15px] font-bold text-ink">更新數據中</div>
         <div className="flex w-full flex-col items-center gap-2">
           <div className="text-[13px] font-semibold tabular-nums text-orange">{pct}%</div>
@@ -190,8 +197,8 @@ export function DataPreloader({ onComplete }: { onComplete: () => void }) {
           </div>
           {progress.total > 0 && (
             <div className="text-[11px] text-gray-500">
-              {progress.loaded > 0
-                ? `已完成 ${progress.loaded} / ${progress.total} 個帳戶`
+              {displayLoaded > 0
+                ? `已完成 ${displayLoaded} / ${progress.total} 個帳戶`
                 : `正在連線 Facebook，共 ${progress.total} 個帳戶`}
             </div>
           )}

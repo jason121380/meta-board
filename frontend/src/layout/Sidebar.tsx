@@ -8,7 +8,7 @@ import { NavLink } from "react-router-dom";
  * Left sidebar — 220px fixed, 60px logo header, nav items, user
  * dropdown at the bottom that opens upward.
  *
- * Layout and behavior ported from dashboard.html lines 801–843.
+ * Layout and behavior ported from the original template.
  * Five visible nav items: 儀表板 / 數據分析 / 警示列表 / 費用中心 / 設定.
  * (快速上架 route still exists for direct URL access but is hidden
  * from the sidebar nav per product decision 2026-04-14.)
@@ -143,7 +143,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
     <aside
       data-mobile-open={mobileOpen ? "true" : "false"}
       className={cn(
-        "shell-sidebar fixed inset-y-0 left-0 z-[100] flex w-[220px] flex-col overflow-y-auto border-r border-border bg-white",
+        "shell-sidebar fixed inset-y-0 left-0 z-[100] flex w-[180px] flex-col overflow-y-auto border-r border-border bg-white",
       )}
       onClick={() => {
         // Tapping a link inside the sidebar triggers a route change
@@ -209,12 +209,12 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             <div
               className={cn(
                 "absolute bottom-[calc(100%+8px)] left-0 z-[999]",
-                "w-[210px] rounded-xl border-[1.5px] border-border bg-white p-1.5 shadow-md",
+                "w-[165px] rounded-xl border-[1.5px] border-border bg-white p-1.5 shadow-md",
               )}
             >
-              <div className="mb-1 border-b border-border px-2.5 pb-1.5 pt-2 text-xs font-bold text-ink">
-                <div>{user?.name}</div>
-                <div className="text-[11px] font-normal text-gray-300">Facebook 帳號</div>
+              <div className="mb-1 border-b border-border px-2 pb-1.5 pt-2 text-xs font-bold text-ink">
+                <div className="truncate">{user?.name}</div>
+                <div className="text-[10px] font-normal text-gray-300">Facebook 帳號</div>
               </div>
               <button
                 type="button"

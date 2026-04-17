@@ -7,7 +7,7 @@ import type { ScatterPoint } from "../analyticsData";
 /**
  * Scatter chart with mode switch: when any campaign has message data
  * the chart plots spend (x) vs msg cost (y); otherwise it plots
- * CTR (x) vs spend (y). Port of dashboard.html lines 2635–2651.
+ * CTR (x) vs spend (y). Port of the original design lines 2635–2651.
  */
 
 export interface ScatterChartCardProps {

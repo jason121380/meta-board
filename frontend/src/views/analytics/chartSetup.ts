@@ -21,7 +21,7 @@ import ChartDataLabels from "chartjs-plugin-datalabels";
  * at module load. react-chartjs-2 is tree-shakeable, so we must
  * explicitly register each piece we use.
  *
- * The legacy dashboard.html imports Chart.js via CDN (non-tree-
+ * The legacy the original design imports Chart.js via CDN (non-tree-
  * shakeable UMD build), which registers everything automatically. In
  * the React build we pin the same version (chart.js@4.4.0) so the
  * drawn canvas pixels are byte-identical, but we have to enumerate

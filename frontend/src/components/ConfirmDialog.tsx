@@ -5,7 +5,7 @@ import { Modal } from "./Modal";
 
 /**
  * Global confirm dialog — replaces the `showConfirm()` helper in
- * dashboard.html. CLAUDE.md mandates that any status toggle or budget
+ * the original design. CLAUDE.md mandates that any status toggle or budget
  * change MUST go through a confirm dialog before firing the API call.
  *
  * Usage:

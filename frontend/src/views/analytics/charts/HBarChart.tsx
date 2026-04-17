@@ -6,7 +6,7 @@ import "../chartSetup";
 /**
  * Horizontal bar chart with right-aligned datalabels.
  *
- * Ported from dashboard.html bar-chart pattern used by 7 different
+ * Ported from the original design bar-chart pattern used by 7 different
  * charts (spend by account, msg by account, top msg, best CPM,
  * account msg cost, account CTR, msg ROI). All share the same shape:
  *   - indexAxis: "y"

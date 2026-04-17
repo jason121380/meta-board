@@ -79,8 +79,8 @@ export function MobileAccountPicker({
   };
 
   return (
-    <div className={cn("flex shrink-0 items-center gap-2.5 bg-white px-4 py-2.5", className)}>
-      <span className="text-[10px] font-bold uppercase tracking-[0.5px] text-gray-300">
+    <div className={cn("flex shrink-0 items-center gap-2", className)}>
+      <span className="hidden whitespace-nowrap text-[11px] font-bold uppercase tracking-[0.5px] text-gray-300 sm:inline">
         {label}
       </span>
       <button
@@ -88,10 +88,10 @@ export function MobileAccountPicker({
         onClick={() => setOpen(true)}
         aria-label={`選擇廣告帳戶,目前:${currentName}`}
         aria-haspopup="dialog"
-        className="flex h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-pill border-[1.5px] border-border bg-white px-4 text-left text-[14px] font-medium text-ink active:scale-[0.98] active:bg-orange-bg"
+        className="flex h-10 min-w-0 max-w-[200px] items-center justify-between gap-2.5 rounded-pill border-[1.5px] border-border bg-white px-4 text-left text-[13px] font-medium text-ink active:scale-[0.98] active:bg-orange-bg sm:h-9 md:max-w-[280px]"
       >
         <span className="min-w-0 truncate">{currentName}</span>
-        <span aria-hidden="true" className="text-[11px] text-gray-300">
+        <span aria-hidden="true" className="text-[10px] text-gray-300">
           ▼
         </span>
       </button>

@@ -93,7 +93,7 @@ export function TreeTable({
           />
         ))}
         {/* Totals row */}
-        <tr className="border-t-2 border-border-strong bg-bg">
+        <tr className="border-t border-border bg-bg">
           <td colSpan={multiAcct ? 3 : 2} className="px-3.5 py-2.5 text-[13px] font-bold text-ink">
             合計
           </td>
