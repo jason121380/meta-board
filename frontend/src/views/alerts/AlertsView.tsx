@@ -6,12 +6,13 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { RefreshButton } from "@/components/RefreshButton";
+import { toast } from "@/components/Toast";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { AlertAccountPanel } from "./AlertAccountPanel";
 import { AlertCard } from "./AlertCard";
 import { computeAlertBuckets } from "./alertsData";
@@ -47,6 +48,15 @@ export function AlertsView() {
   // Fetching once for the full set and filtering CLIENT-SIDE below
   // makes per-account switching instant.
   const overview = useMultiAccountOverview(visibleAll, date, { includeArchived: true });
+
+  const alertErrorKeys = Object.keys(overview.errors);
+  useEffect(() => {
+    if (overview.isLoading || alertErrorKeys.length === 0) return;
+    const names = alertErrorKeys
+      .map((id) => visibleAll.find((a) => a.id === id)?.name ?? id)
+      .join("、");
+    toast(`部分帳戶載入失敗：${names}`, "error", 5000);
+  }, [overview.isLoading, alertErrorKeys.length, visibleAll]);
 
   const scopedCampaigns = useMemo(() => {
     if (selectedAcctId === null) return overview.campaigns;
@@ -94,19 +104,6 @@ export function AlertsView() {
         </div>
 
         <div className="flex-1 p-3 md:p-5">
-          {!overview.isLoading && Object.keys(overview.errors).length > 0 && (
-            <div className="mb-3 rounded-lg border border-red-bg bg-red-bg/40 px-4 py-2.5 text-[12px] text-red">
-              <div className="font-semibold">部分帳戶載入失敗：</div>
-              {Object.entries(overview.errors).map(([acctId, msg]) => {
-                const name = visibleAll.find((a) => a.id === acctId)?.name ?? acctId;
-                return (
-                  <div key={acctId} className="mt-0.5 break-all">
-                    <span className="font-medium">{name}</span>: {msg}
-                  </div>
-                );
-              })}
-            </div>
-          )}
           {visibleAll.length === 0 ? (
             <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
           ) : overview.isLoading ? (

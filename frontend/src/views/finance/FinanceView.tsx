@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { RefreshButton } from "@/components/RefreshButton";
+import { toast } from "@/components/Toast";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { toLabel } from "@/lib/datePicker";
 import { useAccountsStore } from "@/stores/accountsStore";
@@ -14,7 +15,7 @@ import { useFiltersStore } from "@/stores/filtersStore";
 import { useFinanceStore } from "@/stores/financeStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FinanceAccountPanel } from "./FinanceAccountPanel";
 import { FinanceTable } from "./FinanceTable";
 import {
@@ -59,6 +60,13 @@ export function FinanceView() {
   // useMultiAccountInsights. include_archived: true because the
   // Finance table wants every status (matches legacy behavior).
   const overview = useMultiAccountOverview(visible, date, { includeArchived: true });
+
+  const finErrorKeys = Object.keys(overview.errors);
+  useEffect(() => {
+    if (overview.isLoading || finErrorKeys.length === 0) return;
+    const names = finErrorKeys.map((id) => visible.find((a) => a.id === id)?.name ?? id).join("、");
+    toast(`部分帳戶載入失敗：${names}`, "error", 5000);
+  }, [overview.isLoading, finErrorKeys.length, visible]);
 
   const selectedId = finSelectedAcctIds.length === 1 ? (finSelectedAcctIds[0] ?? null) : null;
 
@@ -198,19 +206,6 @@ export function FinanceView() {
               </div>
             </div>
 
-            {!overview.isLoading && Object.keys(overview.errors).length > 0 && (
-              <div className="border-b border-red-bg bg-red-bg/40 px-4 py-2.5 text-[12px] text-red">
-                <div className="font-semibold">部分帳戶載入失敗：</div>
-                {Object.entries(overview.errors).map(([acctId, msg]) => {
-                  const name = visible.find((a) => a.id === acctId)?.name ?? acctId;
-                  return (
-                    <div key={acctId} className="mt-0.5 break-all">
-                      <span className="font-medium">{name}</span>: {msg}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
             <div>
               {visible.length === 0 ? (
                 <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
