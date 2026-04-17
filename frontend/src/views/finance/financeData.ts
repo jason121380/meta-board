@@ -1,5 +1,19 @@
+import type { NicknameMap } from "@/api/hooks/useNicknames";
 import { spendOf } from "@/lib/insights";
 import type { FbAccount, FbCampaign, FbInsights } from "@/types/fb";
+
+/** Join store + designer into the canonical "店家 · 設計師" label.
+ *  Either field may be empty; returns `null` when both are empty. */
+export function formatNickname(
+  nick: { store: string; designer: string } | undefined,
+): string | null {
+  if (!nick) return null;
+  const s = nick.store.trim();
+  const d = nick.designer.trim();
+  if (!s && !d) return null;
+  if (s && d) return `${s} · ${d}`;
+  return s || d;
+}
 
 /**
  * Pure data helpers for the Finance view. No React, no DOM — all
@@ -101,13 +115,14 @@ export function sortFinanceRows(
 
 /**
  * Row-by-row filter: "hide zero spend" + name search. `search` is
- * compared case-insensitively against both campaign name AND account
- * name (legacy behavior).
+ * compared case-insensitively against campaign name, account name,
+ * and — when provided — the campaign's store/designer nicknames.
  */
 export function filterFinanceRows(
   campaigns: FbCampaign[],
   hideZero: boolean,
   search: string,
+  nicknames?: NicknameMap,
 ): FbCampaign[] {
   const q = search.trim().toLowerCase();
   return campaigns.filter((c) => {
@@ -115,7 +130,12 @@ export function filterFinanceRows(
     if (q) {
       const name = c.name.toLowerCase();
       const acct = (c._accountName ?? "").toLowerCase();
-      if (!name.includes(q) && !acct.includes(q)) return false;
+      const nick = nicknames?.[c.id];
+      const store = (nick?.store ?? "").toLowerCase();
+      const designer = (nick?.designer ?? "").toLowerCase();
+      if (!name.includes(q) && !acct.includes(q) && !store.includes(q) && !designer.includes(q)) {
+        return false;
+      }
     }
     return true;
   });
@@ -129,22 +149,26 @@ export interface CsvExportInput {
   rowMarkups: Record<string, number>;
   /** Include the "廣告帳號" column (all-accounts mode). */
   includeAccountColumn: boolean;
+  nicknames?: NicknameMap;
 }
 
 /** Build the CSV text. Caller is responsible for download. */
 export function buildFinanceCsv(input: CsvExportInput): string {
-  const { rows, defaultMarkup, rowMarkups, includeAccountColumn } = input;
+  const { rows, defaultMarkup, rowMarkups, includeAccountColumn, nicknames } = input;
   const header = includeAccountColumn
-    ? ["No.", "狀態", "廣告帳號", "行銷活動名稱", "花費", "月%", "花費+%"]
-    : ["No.", "狀態", "行銷活動名稱", "花費", "月%", "花費+%"];
+    ? ["No.", "狀態", "廣告帳號", "行銷活動名稱", "店家", "設計師", "花費", "月%", "花費+%"]
+    : ["No.", "狀態", "行銷活動名稱", "店家", "設計師", "花費", "月%", "花費+%"];
   const records: Array<Array<string | number>> = [header];
   rows.forEach((camp, i) => {
     const sp = spendOf(camp);
     const m = markupFor(camp.id, rowMarkups, defaultMarkup);
+    const nick = nicknames?.[camp.id];
     const cells: Array<string | number> = [
       i + 1,
       camp.status,
       camp.name,
+      nick?.store ?? "",
+      nick?.designer ?? "",
       sp.toFixed(0),
       `${m}%`,
       spendPlus(sp, m),

@@ -342,6 +342,23 @@ export const api = {
         body: { messages, context },
       }),
   },
+
+  nicknames: {
+    /** Fetch all campaign nicknames from the server. Returns an array
+     * of `{campaign_id, store, designer}` rows. */
+    list: () =>
+      request<{
+        data: Array<{ campaign_id: string; store: string; designer: string }>;
+      }>("GET", "/api/nicknames"),
+    /** Upsert a single campaign's nickname. Sending both fields empty
+     * deletes the row server-side. */
+    set: (campaignId: string, store: string, designer: string) =>
+      request<{ ok: boolean }>("POST", `/api/nicknames/${encodeURIComponent(campaignId)}`, {
+        body: { store, designer },
+      }),
+    remove: (campaignId: string) =>
+      request<{ ok: boolean }>("DELETE", `/api/nicknames/${encodeURIComponent(campaignId)}`),
+  },
 };
 
 export type Api = typeof api;

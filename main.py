@@ -12,6 +12,8 @@ from dotenv import load_dotenv
 from pathlib import Path
 from pydantic import BaseModel
 
+import asyncpg
+
 load_dotenv()
 
 APP_ID = os.getenv("FB_APP_ID")
@@ -26,6 +28,11 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 _runtime_token: Optional[str] = None
 # Shared httpx client (created in lifespan)
 _http_client: Optional[httpx.AsyncClient] = None
+# Shared asyncpg pool (created in lifespan when DATABASE_URL is set).
+# None when running locally without a DB — the nickname endpoints return
+# empty / 503 rather than crashing, so the rest of the app stays usable.
+_db_pool: Optional[asyncpg.Pool] = None
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 # Limit concurrent outbound FB API calls to avoid hitting Facebook's
 # per-app rate limit (~200 concurrent). 40 slots ≈ 20 accounts in
@@ -47,7 +54,7 @@ DIST_DIR = Path(__file__).parent / "dist"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _http_client
+    global _http_client, _db_pool
     # Per-request overrides in _fb_fetch_and_cache set the real
     # timeout (10s for GET, 30s for POST). This client-level value
     # is just a safety ceiling for any code path that slips through
@@ -56,9 +63,34 @@ async def lifespan(app: FastAPI):
         timeout=30,
         limits=httpx.Limits(max_connections=200, max_keepalive_connections=40),
     )
+    if DATABASE_URL:
+        try:
+            _db_pool = await asyncpg.create_pool(
+                DATABASE_URL, min_size=1, max_size=5, command_timeout=10
+            )
+            async with _db_pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS campaign_nicknames (
+                        campaign_id TEXT PRIMARY KEY,
+                        store TEXT NOT NULL DEFAULT '',
+                        designer TEXT NOT NULL DEFAULT '',
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+            print("[startup] DB: OK (campaign_nicknames ready)", flush=True)
+        except Exception as exc:
+            _db_pool = None
+            print(f"[startup] DB: FAILED ({exc})", flush=True)
+    else:
+        print("[startup] DB: SKIPPED (DATABASE_URL not set)", flush=True)
     yield
     await _http_client.aclose()
     _http_client = None
+    if _db_pool is not None:
+        await _db_pool.close()
+        _db_pool = None
 
 
 app = FastAPI(title="FB Ads Dashboard", lifespan=lifespan)
@@ -732,6 +764,82 @@ async def get_me():
         return {"logged_in": True, **me}
     except Exception:
         return {"logged_in": False}
+
+
+# ── Campaign Nicknames (PostgreSQL-backed) ────────────────────────────
+#
+# Stored in `campaign_nicknames` (campaign_id PK). Global / shared
+# across all authenticated users — the LURE team uses a single shared
+# nickname list per campaign.
+
+class NicknamePayload(BaseModel):
+    store: str = ""
+    designer: str = ""
+
+
+def _require_db() -> asyncpg.Pool:
+    if _db_pool is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Database not configured. Set DATABASE_URL and redeploy.",
+        )
+    return _db_pool
+
+
+@app.get("/api/nicknames")
+async def list_nicknames():
+    if _db_pool is None:
+        return {"data": []}
+    async with _db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT campaign_id, store, designer FROM campaign_nicknames"
+        )
+    return {
+        "data": [
+            {"campaign_id": r["campaign_id"], "store": r["store"], "designer": r["designer"]}
+            for r in rows
+        ]
+    }
+
+
+@app.post("/api/nicknames/{campaign_id}")
+async def upsert_nickname(campaign_id: str, payload: NicknamePayload):
+    pool = _require_db()
+    store = (payload.store or "").strip()
+    designer = (payload.designer or "").strip()
+    async with pool.acquire() as conn:
+        if not store and not designer:
+            # Both empty → treat as delete so we don't keep ghost rows
+            await conn.execute(
+                "DELETE FROM campaign_nicknames WHERE campaign_id = $1",
+                campaign_id,
+            )
+            return {"ok": True, "deleted": True}
+        await conn.execute(
+            """
+            INSERT INTO campaign_nicknames (campaign_id, store, designer, updated_at)
+            VALUES ($1, $2, $3, NOW())
+            ON CONFLICT (campaign_id) DO UPDATE
+            SET store = EXCLUDED.store,
+                designer = EXCLUDED.designer,
+                updated_at = NOW()
+            """,
+            campaign_id,
+            store,
+            designer,
+        )
+    return {"ok": True, "campaign_id": campaign_id, "store": store, "designer": designer}
+
+
+@app.delete("/api/nicknames/{campaign_id}")
+async def delete_nickname(campaign_id: str):
+    pool = _require_db()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM campaign_nicknames WHERE campaign_id = $1",
+            campaign_id,
+        )
+    return {"ok": True}
 
 
 # ── Quick Launch ──────────────────────────────────────────────────────

@@ -16,16 +16,19 @@ export interface FinanceState {
   rowMarkups: Record<string, number>;
   pinnedIds: string[];
   defaultMarkup: number;
+  showNicknames: boolean;
 
   setRowMarkup: (campaignId: string, percent: number) => void;
   togglePin: (campaignId: string) => void;
   setDefaultMarkup: (v: number) => void;
+  setShowNicknames: (v: boolean) => void;
 }
 
 export const useFinanceStore = create<FinanceState>((set) => ({
   rowMarkups: {},
   pinnedIds: [],
   defaultMarkup: 5,
+  showNicknames: true,
 
   setRowMarkup: (campaignId, percent) =>
     set((state) => ({
@@ -42,12 +45,14 @@ export const useFinanceStore = create<FinanceState>((set) => ({
     }),
 
   setDefaultMarkup: (v) => set({ defaultMarkup: v }),
+  setShowNicknames: (v) => set({ showNicknames: v }),
 }));
 
 const K = {
   rowMarkups: "fin_row_markups",
   pinnedIds: "fin_pinned_ids",
   defaultMarkup: "fin_default_markup",
+  showNicknames: "fin_show_nicknames",
 } as const;
 
 function readJson<T>(key: string, fallback: T): T {
@@ -73,10 +78,18 @@ export function hydrateFinanceFromStorage(): void {
   } catch {
     /* keep default */
   }
+  let showNicknames = true;
+  try {
+    const raw = localStorage.getItem(K.showNicknames);
+    if (raw !== null) showNicknames = raw === "1";
+  } catch {
+    /* keep default */
+  }
   useFinanceStore.setState({
     rowMarkups: typeof rowMarkups === "object" && rowMarkups !== null ? rowMarkups : {},
     pinnedIds: Array.isArray(pinnedIds) ? pinnedIds : [],
     defaultMarkup,
+    showNicknames,
   });
 }
 
@@ -99,6 +112,13 @@ export function installFinanceStorageSync(): () => void {
     if (state.defaultMarkup !== prev.defaultMarkup) {
       try {
         localStorage.setItem(K.defaultMarkup, String(state.defaultMarkup));
+      } catch {
+        /* quota */
+      }
+    }
+    if (state.showNicknames !== prev.showNicknames) {
+      try {
+        localStorage.setItem(K.showNicknames, state.showNicknames ? "1" : "0");
       } catch {
         /* quota */
       }
