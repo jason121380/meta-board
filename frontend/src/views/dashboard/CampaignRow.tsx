@@ -136,15 +136,15 @@ function CampaignRowInner({
                 void onToggleStatus(e.currentTarget.checked);
               }}
             />
-            <Button
-              size="sm"
-              className="border-0 text-gray-500 hover:text-orange"
+            <button
+              type="button"
+              className="cursor-pointer border-0 bg-transparent p-1 text-[12px] text-gray-500 hover:text-orange outline-none"
               onClick={() =>
                 onOpenBudget({ kind: "campaign", id: campaign.id, name: campaign.name })
               }
             >
               調整預算
-            </Button>
+            </button>
           </div>
         </td>
       </tr>
