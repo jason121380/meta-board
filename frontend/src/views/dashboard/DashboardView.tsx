@@ -1,5 +1,6 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useMultiAccountOverview } from "@/api/hooks/useMultiAccountOverview";
+import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
@@ -13,6 +14,7 @@ import { useFiltersStore } from "@/stores/filtersStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
+import { AccountPanel } from "./AccountPanel";
 import type { BudgetModalTarget } from "./BudgetModal";
 import { StatsGrid } from "./StatsGrid";
 import { TreeTable } from "./TreeTable";
@@ -148,9 +150,11 @@ export function DashboardView() {
   // Only use the computed count if we have loaded data for the active account;
   // fall back to the API's campaign_count before any campaigns are fetched.
   const getCampaignCount = (accId: string, fallback?: number) => {
-    if (overview.campaigns.length > 0 || overview.isLoading === false) {
+    // For accounts currently being viewed, we use the dynamic filtered count.
+    if (activeIds.includes(accId)) {
       return filteredCountByAccount.get(accId) ?? 0;
     }
+    // For other accounts, we show the total count from the initial account list.
     return fallback;
   };
   const setTreeSort = useUiStore((s) => s.setTreeSort);
@@ -159,7 +163,7 @@ export function DashboardView() {
 
   return (
     <>
-      <Topbar title="儀表板">
+      <Topbar title="儀表板" titleAction={<AcctSidebarToggle />}>
         <div className="flex items-center gap-2 md:gap-3">
           <MobileAccountPicker
             accounts={visibleAccounts}
@@ -232,6 +236,16 @@ export function DashboardView() {
 
 
       <div className="flex items-start md:flex-row">
+        {/* Desktop sidebar (≥768px) */}
+        <div className="hidden md:flex">
+          <AccountPanel
+            accounts={visibleAccounts}
+            activeAccountId={activeAccountId}
+            isLoading={accountsQuery.isLoading}
+            getCampaignCount={getCampaignCount}
+            onSelect={(account) => setActiveIds([account.id])}
+          />
+        </div>
 
 
         <div className="min-w-0 flex-1">
