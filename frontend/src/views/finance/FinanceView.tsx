@@ -151,7 +151,7 @@ export function FinanceView() {
         />
       </div>
 
-      <div className="flex min-h-0 flex-1 md:flex-row">
+      <div className="flex md:flex-row">
         {/* Desktop sidebar (≥768px) */}
         <div className="hidden md:flex">
           <FinanceAccountPanel
