@@ -1,5 +1,6 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useMultiAccountOverview } from "@/api/hooks/useMultiAccountOverview";
+import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
@@ -11,6 +12,7 @@ import { useFiltersStore } from "@/stores/filtersStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { AlertAccountPanel } from "./AlertAccountPanel";
 import { AlertCard } from "./AlertCard";
 import { computeAlertBuckets } from "./alertsData";
 
@@ -59,12 +61,35 @@ export function AlertsView() {
   };
 
   const onRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["overview-lite"] });
     queryClient.invalidateQueries({ queryKey: ["overview"] });
+  };
+
+  // Per-account campaign count for the sidebar.
+  // In Alerts view we show the count of all campaigns presently loaded in the overview.
+  const filteredCountByAccount = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of overview.campaigns) {
+      if (c._accountId) {
+        map.set(c._accountId, (map.get(c._accountId) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [overview.campaigns]);
+
+  const getCampaignCount = (accId: string, fallback?: number) => {
+    if (accId === "__total__") {
+      return overview.campaigns.length || undefined;
+    }
+    if (overview.campaigns.length > 0 || overview.isLoading === false) {
+      return filteredCountByAccount.get(accId) ?? 0;
+    }
+    return fallback;
   };
 
   return (
     <>
-      <Topbar title="警示列表">
+      <Topbar title="警示列表" titleAction={<AcctSidebarToggle />}>
         <div className="flex items-center gap-2 md:gap-3">
           <MobileAccountPicker
             accounts={visibleAll}
@@ -80,7 +105,15 @@ export function AlertsView() {
       </Topbar>
 
       <div className="flex items-start md:flex-row">
-        {/* Secondary sidebar removed per USER_REQUEST 2026-04-17 */}
+        {/* Desktop sidebar (≥768px) */}
+        <div className="hidden md:flex">
+          <AlertAccountPanel
+            accounts={visibleAll}
+            selectedAccountId={selectedAcctId}
+            onSelect={setSelectedAcctId}
+            getCampaignCount={getCampaignCount}
+          />
+        </div>
 
         <div className="flex-1 p-3 md:p-5">
           {visibleAll.length === 0 ? (

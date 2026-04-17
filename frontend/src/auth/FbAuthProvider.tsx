@@ -140,19 +140,8 @@ export function FbAuthProvider({ children }: { children: ReactNode }) {
         
         const name = result.name ?? "User";
         const id = result.id ?? "";
-        // Fetch picture via FB.api so we can show avatar
-        let pictureUrl: string | undefined;
-        try {
-          await new Promise<void>((resolve) => {
-            window.FB?.api("/me", { fields: "picture.width(80)" }, (resp) => {
-              const r = resp as { picture?: { data?: { url?: string } } };
-              pictureUrl = r?.picture?.data?.url;
-              resolve();
-            });
-          });
-        } catch {
-          /* ignore picture fetch failure */
-        }
+        const pictureUrl = result.pictureUrl;
+
         setUser({ id, name, pictureUrl });
         setStatus("auth");
         setError(null);

@@ -121,7 +121,7 @@ export function AlertCard({
       <div className="flex-1 overflow-auto">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="border-b border-border bg-bg">
+            <tr className="bg-bg">
               <SortHeader label="行銷活動" sortKey="campaign" sort={sort} onToggle={toggleSort} />
               <SortHeader
                 label={metric.label}
@@ -135,7 +135,7 @@ export function AlertCard({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={2} className="px-2.5 py-5 text-center text-xs text-gray-300">
+                <td colSpan={2} className="px-3.5 py-5 text-center text-xs text-gray-300">
                   無異常項目
                 </td>
               </tr>
@@ -175,9 +175,10 @@ function SortHeader({
     <th
       onClick={() => onToggle(sortKey)}
       className={cn(
-        "sticky top-0 z-[1] cursor-pointer select-none whitespace-nowrap px-2.5 py-2 text-[11px] font-bold",
+        "sticky top-0 z-[1] cursor-pointer select-none whitespace-nowrap border-b border-border bg-bg px-3.5 py-2.5",
+        "text-[11px] font-semibold uppercase tracking-[0.5px]",
         right ? "text-right" : "text-left",
-        active ? "text-orange" : "text-gray-500",
+        active ? "text-ink" : "text-gray-300",
       )}
     >
       {label}
@@ -200,7 +201,7 @@ const AlertCardRow = memo(function AlertCardRow({
   const link = fbCampaignLink(entry, businessId);
   return (
     <tr className="border-b border-border">
-      <td className="max-w-[220px] px-3 py-3 text-left text-[13px] md:px-2.5 md:py-2 md:text-xs">
+      <td className="max-w-[220px] px-3 py-2 text-left text-[13px] md:px-3 md:py-1.5 md:text-xs">
         <div className="flex items-center">
           <span className="flex-1 truncate font-semibold" title={entry.campaign.name}>
             {entry.campaign.name}
@@ -235,7 +236,7 @@ const AlertCardRow = memo(function AlertCardRow({
           )}
         </div>
       </td>
-      <td className="whitespace-nowrap px-3 py-3 text-right text-[13px] md:px-2.5 md:py-2 md:text-xs">
+      <td className="whitespace-nowrap px-3 py-2 text-right text-[13px] md:px-3 md:py-1.5 md:text-xs">
         {metric.render(entry)}
       </td>
     </tr>

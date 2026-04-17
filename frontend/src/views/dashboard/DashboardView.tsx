@@ -122,6 +122,7 @@ export function DashboardView() {
   // Refresh → invalidate the overview + per-adset creatives (other
   // view caches share the overview key so they re-populate on demand)
   const onRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["accounts"] });
     queryClient.invalidateQueries({ queryKey: ["overview"] });
     queryClient.invalidateQueries({ queryKey: ["adsets"] });
     queryClient.invalidateQueries({ queryKey: ["creatives"] });
@@ -242,7 +243,6 @@ export function DashboardView() {
             accounts={visibleAccounts}
             activeAccountId={activeAccountId}
             isLoading={accountsQuery.isLoading}
-            getCampaignCount={getCampaignCount}
             onSelect={(account) => setActiveIds([account.id])}
           />
         </div>

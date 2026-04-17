@@ -186,9 +186,13 @@ export interface AuthMeResponse {
 export const api = {
   auth: {
     setToken: (token: string) =>
-      request<{ ok: boolean; name?: string; id?: string }>("POST", "/api/auth/token", {
-        body: { token },
-      }),
+      request<{ ok: boolean; name?: string; id?: string; pictureUrl?: string }>(
+        "POST",
+        "/api/auth/token",
+        {
+          body: { token },
+        },
+      ),
     clearToken: () => request<{ ok: boolean }>("DELETE", "/api/auth/token"),
     me: () => request<AuthMeResponse>("GET", "/api/auth/me"),
   },

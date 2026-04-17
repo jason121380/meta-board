@@ -209,12 +209,12 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             <div
               className={cn(
                 "absolute bottom-[calc(100%+8px)] left-0 z-[999]",
-                "w-[210px] rounded-xl border-[1.5px] border-border bg-white p-1.5 shadow-md",
+                "w-[165px] rounded-xl border-[1.5px] border-border bg-white p-1.5 shadow-md",
               )}
             >
-              <div className="mb-1 border-b border-border px-2.5 pb-1.5 pt-2 text-xs font-bold text-ink">
-                <div>{user?.name}</div>
-                <div className="text-[11px] font-normal text-gray-300">Facebook 帳號</div>
+              <div className="mb-1 border-b border-border px-2 pb-1.5 pt-2 text-xs font-bold text-ink">
+                <div className="truncate">{user?.name}</div>
+                <div className="text-[10px] font-normal text-gray-300">Facebook 帳號</div>
               </div>
               <button
                 type="button"

@@ -7,6 +7,7 @@ import { LoadingState } from "@/components/LoadingState";
 import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
+import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { toLabel } from "@/lib/datePicker";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
@@ -14,6 +15,7 @@ import { useFinanceStore } from "@/stores/financeStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { FinanceAccountPanel } from "./FinanceAccountPanel";
 import { FinanceTable } from "./FinanceTable";
 import {
   buildAccountRows,
@@ -74,6 +76,7 @@ export function FinanceView() {
   );
 
   const onRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["overview-lite"] });
     queryClient.invalidateQueries({ queryKey: ["overview"] });
   };
 
@@ -107,7 +110,7 @@ export function FinanceView() {
 
   return (
     <>
-      <Topbar title="費用中心">
+      <Topbar title="費用中心" titleAction={<AcctSidebarToggle />}>
         <div className="flex items-center gap-2 md:gap-3">
           <MobileAccountPicker
             accounts={visible}
@@ -148,7 +151,14 @@ export function FinanceView() {
       </Topbar>
 
       <div className="flex items-start md:flex-row">
-        {/* Secondary sidebar removed per USER_REQUEST 2026-04-17 */}
+        {/* Desktop sidebar (≥768px) */}
+        <div className="hidden md:flex">
+          <FinanceAccountPanel
+            rows={accountRows}
+            selectedId={selectedId}
+            onSelect={(id) => setFinSelectedAcctIds(id ? [id] : [])}
+          />
+        </div>
 
         <div className="flex-1 px-3 pt-3 md:px-4 md:pt-4">
           {/* Rounded card wrap — sized to content. The parent column
@@ -187,7 +197,7 @@ export function FinanceView() {
               </div>
             </div>
 
-            <div>
+            <div className="w-full overflow-x-auto">
               {visible.length === 0 ? (
                 <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
               ) : overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching) ? (

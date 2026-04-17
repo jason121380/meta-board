@@ -26,7 +26,6 @@ export interface AccountPanelProps {
   activeAccountId: string | null;
   isLoading: boolean;
   onSelect: (account: FbAccount) => void;
-  getCampaignCount?: (accId: string, fallback?: number) => number | undefined;
 }
 
 export function AccountPanel({
@@ -34,14 +33,13 @@ export function AccountPanel({
   activeAccountId,
   isLoading,
   onSelect,
-  getCampaignCount,
 }: AccountPanelProps) {
   const collapsed = useUiStore((s) => s.acctSidebarCollapsed);
 
   if (collapsed) return null;
 
   return (
-    <aside className="sticky top-0 flex min-h-[calc(100dvh-64px)] w-[180px] shrink-0 flex-col border-r border-border bg-bg">
+    <aside className="sticky top-0 flex min-h-[calc(100dvh-64px)] w-[160px] shrink-0 flex-col border-r border-border bg-bg">
       <div className="border-b border-border bg-white px-3 pb-2 pt-2.5">
         <h4 className="text-[11px] font-bold uppercase tracking-[0.6px] text-gray-300">廣告帳戶</h4>
       </div>
@@ -73,16 +71,6 @@ export function AccountPanel({
                 >
                   {acc.name}
                 </span>
-                {(() => {
-                  const count = getCampaignCount
-                    ? getCampaignCount(acc.id, acc.campaign_count)
-                    : acc.campaign_count;
-                  return count !== undefined ? (
-                    <span className="text-[11px] font-medium text-gray-400 tabular-nums">
-                      {count}
-                    </span>
-                  ) : null;
-                })()}
               </button>
             );
           })

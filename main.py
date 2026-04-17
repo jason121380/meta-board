@@ -711,8 +711,10 @@ async def set_token(payload: TokenPayload):
     global _runtime_token
     _runtime_token = payload.token
     try:
+        # Get basic profile
         me = await fb_get("me", {"fields": "id,name,picture"})
-        return {"ok": True, "name": me.get("name"), "id": me.get("id")}
+        pic = me.get("picture", {}).get("data", {}).get("url")
+        return {"ok": True, "name": me.get("name"), "id": me.get("id"), "pictureUrl": pic}
     except Exception as e:
         _runtime_token = None
         raise HTTPException(status_code=400, detail=str(e))
