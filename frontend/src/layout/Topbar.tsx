@@ -61,7 +61,7 @@ export function Topbar({ title, titleAction, children, className }: TopbarProps)
           <line x1="3" y1="18" x2="21" y2="18" />
         </svg>
       </button>
-      <div className="min-w-0 shrink-0 truncate text-[15px] font-bold tracking-[-0.2px] text-ink md:text-base">
+      <div className="hidden min-w-0 shrink-0 truncate text-[15px] font-bold tracking-[-0.2px] text-ink md:block md:text-base">
         {title}
       </div>
       {titleAction}
@@ -71,5 +71,8 @@ export function Topbar({ title, titleAction, children, className }: TopbarProps)
 }
 
 export function TopbarSeparator() {
-  return <div className="h-5 w-px bg-border" />;
+  // Hidden on mobile (< 768px) — the Topbar there uses the account
+  // picker's `mr-auto` to split left vs right, so the middle vertical
+  // rule is redundant visual noise.
+  return <div className="hidden h-5 w-px bg-border md:block" />;
 }
