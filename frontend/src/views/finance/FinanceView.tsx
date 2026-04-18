@@ -7,14 +7,12 @@ import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { MobileAccountPicker } from "@/components/MobileAccountPicker";
-import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { toLabel } from "@/lib/datePicker";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
 import { useFinanceStore } from "@/stores/financeStore";
 import { useUiStore } from "@/stores/uiStore";
-import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { FinanceAccountPanel } from "./FinanceAccountPanel";
 import { FinanceTable } from "./FinanceTable";
@@ -36,8 +34,6 @@ import {
  * the browser via a data URL anchor click (matches legacy).
  */
 export function FinanceView() {
-  const queryClient = useQueryClient();
-
   const accountsQuery = useAccounts();
   const allAccounts = accountsQuery.data ?? [];
   const visible = useAccountsStore((s) => s.visibleAccounts)(allAccounts);
@@ -81,11 +77,6 @@ export function FinanceView() {
     [visible, overview.insights, overview.campaigns, rowMarkups, defaultMarkup],
   );
 
-  const onRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["overview-lite"] });
-    queryClient.invalidateQueries({ queryKey: ["overview"] });
-  };
-
   const onDownloadCsv = () => {
     const filtered = filterFinanceRows(tableCampaigns, hideZero, search, nicknames);
     const sorted = sortFinanceRows(
@@ -128,8 +119,6 @@ export function FinanceView() {
           />
           <TopbarSeparator />
           <DatePicker value={date} onChange={(cfg) => setDate("finance", cfg)} />
-          <TopbarSeparator />
-          <RefreshButton isFetching={overview.isFetching} onClick={onRefresh} />
           <Button
             variant="ghost"
             size="sm"
