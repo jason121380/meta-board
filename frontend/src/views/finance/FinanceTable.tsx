@@ -323,27 +323,27 @@ function SortHeader({
 function FinanceStatusBadge({ status }: { status: FbEntityStatus }) {
   if (status === "ACTIVE") {
     return (
-      <span className="inline-block rounded-[10px] bg-[#E8F5E9] px-[7px] py-[2px] text-[11px] font-semibold text-[#2E7D32]">
+      <span className="inline-block whitespace-nowrap rounded-[10px] bg-[#E8F5E9] px-[7px] py-[2px] text-[11px] font-semibold text-[#2E7D32]">
         進行中
       </span>
     );
   }
   if (status === "PAUSED") {
     return (
-      <span className="inline-block rounded-[10px] bg-[#F5F5F5] px-[7px] py-[2px] text-[11px] font-semibold text-[#757575]">
+      <span className="inline-block whitespace-nowrap rounded-[10px] bg-[#F5F5F5] px-[7px] py-[2px] text-[11px] font-semibold text-[#757575]">
         暫停
       </span>
     );
   }
   if (status === "ARCHIVED") {
     return (
-      <span className="inline-block rounded-[10px] bg-[#EEEEEE] px-[7px] py-[2px] text-[11px] font-semibold text-[#9E9E9E]">
+      <span className="inline-block whitespace-nowrap rounded-[10px] bg-[#EEEEEE] px-[7px] py-[2px] text-[11px] font-semibold text-[#9E9E9E]">
         已封存
       </span>
     );
   }
   return (
-    <span className="inline-block rounded-[10px] bg-[#FFEBEE] px-[7px] py-[2px] text-[11px] font-semibold text-[#B71C1C]">
+    <span className="inline-block whitespace-nowrap rounded-[10px] bg-[#FFEBEE] px-[7px] py-[2px] text-[11px] font-semibold text-[#B71C1C]">
       {status === "DELETED" ? "已刪除" : String(status)}
     </span>
   );

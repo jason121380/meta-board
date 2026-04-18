@@ -1,7 +1,7 @@
 import { useFbAuth } from "@/auth/FbAuthProvider";
 import { cn } from "@/lib/cn";
 import { prefetchView } from "@/router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 
 /**
@@ -138,6 +138,31 @@ export interface SidebarProps {
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const { user, logout } = useFbAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuWrapRef = useRef<HTMLDivElement | null>(null);
+
+  // Close the user menu on click-outside. Hover-close (onMouseLeave)
+  // caused "滑鼠移過去，選單消失" because the 8px gap between trigger
+  // and popover sits outside the relative container's hit box — the
+  // cursor transitioning across the gap fires mouseleave and kills
+  // the menu before the user can click an item.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!menuWrapRef.current) return;
+      if (!menuWrapRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   return (
     <aside
@@ -184,7 +209,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
       {/* User dropdown — opens upward from the bottom */}
       <div className="mt-auto border-t border-border px-2 py-3">
-        <div className="relative" onMouseLeave={() => setMenuOpen(false)}>
+        <div className="relative" ref={menuWrapRef}>
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
