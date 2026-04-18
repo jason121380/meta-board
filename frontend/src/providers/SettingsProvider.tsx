@@ -52,6 +52,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const u = userQuery.data ?? {};
     const s = sharedQuery.data ?? {};
 
+    console.log("[settings] hydrate — fb uid=", userId);
+    console.log("[settings] user settings from PG:", u);
+    console.log("[settings] shared settings from PG:", s);
+
     // Per-user: selected_accounts, account_order
     const selectedIds = Array.isArray(u.selected_accounts)
       ? (u.selected_accounts as string[]).filter((v): v is string => typeof v === "string")

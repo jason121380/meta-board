@@ -47,10 +47,20 @@ export function setAccountsUserId(id: string | null) {
 // drag-end). Fire the POST immediately so a quick refresh doesn't
 // drop the write. No debounce.
 const postSelected = (ids: string[]) => {
-  if (_currentUserId) void api.settings.setUser(_currentUserId, "selected_accounts", ids);
+  if (!_currentUserId) {
+    console.warn("[settings] postSelected skipped — no fb user id");
+    return;
+  }
+  console.log("[settings] POST selected_accounts uid=", _currentUserId, "ids=", ids);
+  void api.settings.setUser(_currentUserId, "selected_accounts", ids);
 };
 const postOrder = (order: string[]) => {
-  if (_currentUserId) void api.settings.setUser(_currentUserId, "account_order", order);
+  if (!_currentUserId) {
+    console.warn("[settings] postOrder skipped — no fb user id");
+    return;
+  }
+  console.log("[settings] POST account_order uid=", _currentUserId, "order=", order);
+  void api.settings.setUser(_currentUserId, "account_order", order);
 };
 
 export const useAccountsStore = create<AccountsState>((set, get) => ({
