@@ -5,12 +5,10 @@ import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { MobileAccountPicker } from "@/components/MobileAccountPicker";
-import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
 import { useUiStore } from "@/stores/uiStore";
-import { useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { AlertAccountPanel } from "./AlertAccountPanel";
 import { AlertCard } from "./AlertCard";
@@ -25,8 +23,6 @@ import { computeAlertBuckets } from "./alertsData";
  * at lines 1008–1030.
  */
 export function AlertsView() {
-  const queryClient = useQueryClient();
-
   const accountsQuery = useAccounts();
   const allAccounts = accountsQuery.data ?? [];
   const visibleAll = useAccountsStore((s) => s.visibleAccounts)(allAccounts);
@@ -60,11 +56,6 @@ export function AlertsView() {
     return allAccounts.find((a) => a.id === accountId)?.business?.id;
   };
 
-  const onRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["overview-lite"] });
-    queryClient.invalidateQueries({ queryKey: ["overview"] });
-  };
-
   return (
     <>
       <Topbar title="警示列表" titleAction={<AcctSidebarToggle />}>
@@ -77,8 +68,6 @@ export function AlertsView() {
           />
           <TopbarSeparator />
           <DatePicker value={date} onChange={(cfg) => setDate("alerts", cfg)} />
-          <TopbarSeparator />
-          <RefreshButton isFetching={overview.isFetching} onClick={onRefresh} title="重新分析" />
         </div>
       </Topbar>
 

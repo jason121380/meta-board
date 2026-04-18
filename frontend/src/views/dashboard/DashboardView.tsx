@@ -5,14 +5,12 @@ import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { MobileAccountPicker } from "@/components/MobileAccountPicker";
-import { RefreshButton } from "@/components/RefreshButton";
 import { Topbar, TopbarSeparator } from "@/layout/Topbar";
 import { cn } from "@/lib/cn";
 import { getIns } from "@/lib/insights";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
 import { useUiStore } from "@/stores/uiStore";
-import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { AccountPanel } from "./AccountPanel";
 import type { BudgetModalTarget } from "./BudgetModal";
@@ -55,8 +53,6 @@ const ComparisonTable = lazy(() =>
  * instant).
  */
 export function DashboardView() {
-  const queryClient = useQueryClient();
-
   // Accounts
   const accountsQuery = useAccounts();
   const allAccounts = accountsQuery.data ?? [];
@@ -118,15 +114,6 @@ export function DashboardView() {
   const openBudget = useCallback((target: BudgetModalTarget) => {
     setBudgetTarget(target);
   }, []);
-
-  // Refresh → invalidate the overview + per-adset creatives (other
-  // view caches share the overview key so they re-populate on demand)
-  const onRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["accounts"] });
-    queryClient.invalidateQueries({ queryKey: ["overview"] });
-    queryClient.invalidateQueries({ queryKey: ["adsets"] });
-    queryClient.invalidateQueries({ queryKey: ["creatives"] });
-  };
 
   // Filter campaigns by "only with spend" + account-scope
   const filteredCampaigns = useMemo(() => {
@@ -204,10 +191,6 @@ export function DashboardView() {
             />
             只顯示有花費
           </label>
-          <span className="hidden md:inline">
-            <TopbarSeparator />
-          </span>
-          <RefreshButton isFetching={overview.isFetching} onClick={onRefresh} />
         </div>
       </Topbar>
 

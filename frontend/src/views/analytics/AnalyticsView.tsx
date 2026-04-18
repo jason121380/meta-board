@@ -3,14 +3,12 @@ import { useMultiAccountOverview } from "@/api/hooks/useMultiAccountOverview";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
-import { RefreshButton } from "@/components/RefreshButton";
-import { Topbar, TopbarSeparator } from "@/layout/Topbar";
+import { Topbar } from "@/layout/Topbar";
 import { toLabel } from "@/lib/datePicker";
 import { fM } from "@/lib/format";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
 import type { FbAccount } from "@/types/fb";
-import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnalyticsKpisRow } from "./AnalyticsKpis";
 import { ChartCard } from "./ChartCard";
@@ -59,8 +57,6 @@ const PALETTE_DOUGHNUT = [
 ];
 
 export function AnalyticsView() {
-  const queryClient = useQueryClient();
-
   const accountsQuery = useAccounts();
   const allAccounts = accountsQuery.data ?? [];
   const visible = useAccountsStore((s) => s.visibleAccounts)(allAccounts);
@@ -78,11 +74,6 @@ export function AnalyticsView() {
     [overview.campaigns, overview.insights, visible],
   );
 
-  const onRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["overview-lite"] });
-    queryClient.invalidateQueries({ queryKey: ["overview"] });
-  };
-
   const isLoading = overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching);
 
   return (
@@ -90,8 +81,6 @@ export function AnalyticsView() {
       <Topbar title="數據分析">
         <div className="flex items-center gap-3">
           <DatePicker value={date} onChange={(cfg) => setDate("analytics", cfg)} />
-          <TopbarSeparator />
-          <RefreshButton isFetching={overview.isFetching} onClick={onRefresh} title="重新分析" />
         </div>
       </Topbar>
 
