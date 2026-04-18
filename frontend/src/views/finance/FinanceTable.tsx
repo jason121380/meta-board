@@ -110,13 +110,16 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
           initialDesigner={editing.designer}
         />
       )}
-      <table className="w-full min-w-[720px] border-collapse text-[13px]">
+      {/* min-w-[640px] on mobile (was 720px) packs columns tighter so
+          more fit in the viewport before horizontal scroll kicks in;
+          desktop (md:) keeps the original 720px target. */}
+      <table className="w-full min-w-[640px] border-collapse text-[12px] md:min-w-[720px] md:text-[13px]">
         <thead>
           <tr className="bg-bg">
-            <th className="sticky top-0 z-[1] w-10 border-b border-border bg-bg px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.5px] text-gray-300">
+            <th className="sticky top-0 z-[1] w-8 border-b border-border bg-bg px-1.5 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.5px] text-gray-300 md:w-10 md:px-3.5 md:py-2.5">
               No.
             </th>
-            <th className="sticky top-0 z-[1] w-20 border-b border-border bg-bg px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.5px] text-gray-300">
+            <th className="sticky top-0 z-[1] w-14 border-b border-border bg-bg px-1.5 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.5px] text-gray-300 md:w-20 md:px-3.5 md:py-2.5">
               狀態
             </th>
             {multiAcct && (
@@ -126,7 +129,7 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
             <SortHeader label="花費" sortKey="spend" sort={finSort} onSort={setFinSort} />
             <SortHeader label="月%" sortKey="markup" sort={finSort} onSort={setFinSort} right />
             <SortHeader label="花費+%" sortKey="plus" sort={finSort} onSort={setFinSort} right />
-            <th className="sticky top-0 z-[1] w-12 border-b border-border bg-bg px-3.5 py-2.5 text-center text-[11px] font-semibold uppercase tracking-[0.5px] text-gray-300">
+            <th className="sticky top-0 z-[1] w-9 border-b border-border bg-bg px-1.5 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.5px] text-gray-300 md:w-12 md:px-3.5 md:py-2.5">
               Pin
             </th>
           </tr>
@@ -159,24 +162,24 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
                     isPinned && "border-l-[3px] border-l-orange bg-orange-bg",
                   )}
                 >
-                  <td className="w-10 px-3.5 text-gray-500">{i + 1}</td>
-                  <td className="w-20 px-3.5">
+                  <td className="w-8 px-1.5 text-gray-500 md:w-10 md:px-3.5">{i + 1}</td>
+                  <td className="w-14 px-1.5 md:w-20 md:px-3.5">
                     <FinanceStatusBadge status={camp.status} />
                   </td>
                   {multiAcct && (
                     <td
-                      className="max-w-[120px] truncate px-3.5 text-[11px] text-gray-500"
+                      className="max-w-[80px] truncate px-1.5 text-[11px] text-gray-500 md:max-w-[120px] md:px-3.5"
                       title={camp._accountName ?? ""}
                     >
                       {camp._accountName ?? ""}
                     </td>
                   )}
-                  <td className="px-3.5 font-medium" title={camp.name}>
-                    <div className="flex items-center gap-1.5">
+                  <td className="px-1.5 font-medium md:px-3.5" title={camp.name}>
+                    <div className="flex items-center gap-1 md:gap-1.5">
                       <span
                         className={cn(
                           "min-w-0 flex-1 truncate",
-                          multiAcct ? "max-w-[260px]" : "max-w-[300px]",
+                          multiAcct ? "max-w-[160px] md:max-w-[260px]" : "max-w-[200px] md:max-w-[300px]",
                         )}
                       >
                         {(() => {
@@ -222,8 +225,8 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
                       />
                     </div>
                   </td>
-                  <td className="px-3.5 tabular-nums">${fM(sp)}</td>
-                  <td className="px-3.5 text-right">
+                  <td className="px-1.5 tabular-nums md:px-3.5">${fM(sp)}</td>
+                  <td className="px-1.5 text-right md:px-3.5">
                     <input
                       type="number"
                       value={m}
@@ -234,14 +237,14 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
                         const v = Number.parseFloat(e.currentTarget.value);
                         if (!Number.isNaN(v)) setRowMarkup(camp.id, v);
                       }}
-                      className="h-6 w-[52px] rounded border-[1.5px] border-border bg-white px-1 text-center text-xs"
+                      className="h-6 w-[44px] rounded border-[1.5px] border-border bg-white px-1 text-center text-xs md:w-[52px]"
                     />
                     %
                   </td>
-                  <td className="px-3.5 text-right font-semibold tabular-nums text-orange">
+                  <td className="px-1.5 text-right font-semibold tabular-nums text-orange md:px-3.5">
                     ${fM(plus)}
                   </td>
-                  <td className="px-3.5 text-center">
+                  <td className="px-1.5 text-center md:px-3.5">
                     <button
                       type="button"
                       title={isPinned ? "取消置頂" : "置頂"}
@@ -269,15 +272,15 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
             <tr className="border-t border-border bg-bg">
               <td
                 colSpan={multiAcct ? 4 : 3}
-                className="px-3.5 py-2.5 text-[13px] font-bold text-ink"
+                className="px-1.5 py-2 text-[12px] font-bold text-ink md:px-3.5 md:py-2.5 md:text-[13px]"
               >
                 合計
               </td>
-              <td className="px-3.5 py-2.5 text-[13px] font-bold tabular-nums text-ink">
+              <td className="px-1.5 py-2 text-[12px] font-bold tabular-nums text-ink md:px-3.5 md:py-2.5 md:text-[13px]">
                 ${fM(spendSum)}
               </td>
               <td />
-              <td className="px-3.5 py-2.5 text-right text-[13px] font-bold tabular-nums text-orange">
+              <td className="px-1.5 py-2 text-right text-[12px] font-bold tabular-nums text-orange md:px-3.5 md:py-2.5 md:text-[13px]">
                 ${fM(plusSum)}
               </td>
               <td />
@@ -308,7 +311,7 @@ function SortHeader({
     <th
       onClick={() => sortKey && onSort(sortKey)}
       className={cn(
-        "sticky top-0 z-[1] cursor-pointer select-none whitespace-nowrap border-b border-border bg-bg px-3.5 py-2.5",
+        "sticky top-0 z-[1] cursor-pointer select-none whitespace-nowrap border-b border-border bg-bg px-1.5 py-2 md:px-3.5 md:py-2.5",
         "text-[11px] font-semibold uppercase tracking-[0.5px]",
         right ? "text-right" : "text-left",
         active ? "text-orange" : "text-gray-300",
