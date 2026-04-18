@@ -126,6 +126,7 @@ export function DashboardView() {
   const setTreeSort = useUiStore((s) => s.setTreeSort);
   const statsCollapsed = useUiStore((s) => s.statsCollapsed);
   const toggleStatsCollapsed = useUiStore((s) => s.toggleStatsCollapsed);
+  const settingsReady = useUiStore((s) => s.settingsReady);
 
   return (
     <>
@@ -263,7 +264,13 @@ export function DashboardView() {
               </span>
             </div>
             <div className="w-full overflow-x-auto">
-              {activeAccounts.length === 0 ? (
+              {!settingsReady ? (
+                <LoadingState
+                  title="載入行銷活動中..."
+                  loaded={overview.loadedCount}
+                  total={overview.totalCount}
+                />
+              ) : activeAccounts.length === 0 ? (
                 <EmptyState>從上方選擇廣告帳戶</EmptyState>
               ) : overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching) ? (
                 <LoadingState

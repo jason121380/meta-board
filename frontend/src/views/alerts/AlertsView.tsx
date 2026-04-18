@@ -29,6 +29,7 @@ export function AlertsView() {
 
   const selectedAcctId = useUiStore((s) => s.alertSelectedAcctId);
   const setSelectedAcctId = useUiStore((s) => s.setAlertSelectedAcctId);
+  const settingsReady = useUiStore((s) => s.settingsReady);
 
   const date = useFiltersStore((s) => s.date.alerts);
   const setDate = useFiltersStore((s) => s.setDate);
@@ -82,7 +83,13 @@ export function AlertsView() {
         </div>
 
         <div className="min-w-0 flex-1 p-3 md:p-5">
-          {visibleAll.length === 0 ? (
+          {!settingsReady ? (
+            <LoadingState
+              title="分析廣告資料中..."
+              loaded={overview.loadedCount}
+              total={overview.totalCount}
+            />
+          ) : visibleAll.length === 0 ? (
             <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
           ) : overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching) ? (
             <LoadingState

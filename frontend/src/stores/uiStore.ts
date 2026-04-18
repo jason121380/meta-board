@@ -45,6 +45,13 @@ export interface UiState {
    * itself gets the full vertical space. */
   statsCollapsed: boolean;
 
+  /** Set by SettingsProvider when the PG hydration completes. Views
+   * use this to suppress the "從上方選擇廣告帳戶" empty state during
+   * the brief moment between FB account list resolving and the
+   * server-side selectedIds arriving — without it the user sees a
+   * flash of empty state before the data loads. */
+  settingsReady: boolean;
+
   toggleCamp: (id: string) => void;
   toggleAdset: (id: string) => void;
   setExpandedCamps: (ids: string[]) => void;
@@ -62,6 +69,8 @@ export interface UiState {
   toggleStatsCollapsed: () => void;
   setStatsCollapsed: (v: boolean) => void;
 
+  setSettingsReady: (v: boolean) => void;
+
   /** Reset all ephemeral state — used on logout. */
   reset: () => void;
 }
@@ -75,6 +84,7 @@ const initial = {
   finSort: { key: null, dir: "desc" as SortDir },
   acctSidebarCollapsed: false,
   statsCollapsed: false,
+  settingsReady: false,
 };
 
 export const useUiStore = create<UiState>((set) => ({
@@ -125,6 +135,8 @@ export const useUiStore = create<UiState>((set) => ({
 
   toggleStatsCollapsed: () => set((state) => ({ statsCollapsed: !state.statsCollapsed })),
   setStatsCollapsed: (v) => set({ statsCollapsed: v }),
+
+  setSettingsReady: (v) => set({ settingsReady: v }),
 
   reset: () => set(initial),
 }));
