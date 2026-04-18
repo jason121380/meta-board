@@ -28,11 +28,61 @@ const importFinance = () => import("@/views/finance/FinanceView");
 const importLaunch = () => import("@/views/launch/QuickLaunchView");
 const importSettings = () => import("@/views/settings/SettingsView");
 
-const AnalyticsView = lazy(() => importAnalytics().then((m) => ({ default: m.AnalyticsView })));
-const AlertsView = lazy(() => importAlerts().then((m) => ({ default: m.AlertsView })));
-const FinanceView = lazy(() => importFinance().then((m) => ({ default: m.FinanceView })));
-const QuickLaunchView = lazy(() => importLaunch().then((m) => ({ default: m.QuickLaunchView })));
-const SettingsView = lazy(() => importSettings().then((m) => ({ default: m.SettingsView })));
+/**
+ * Wrap a dynamic import so a failed chunk fetch (typically because
+ * the user opened the app BEFORE a Zeabur redeploy and the old
+ * hashed `assets/*-XXXX.js` files no longer exist on the server)
+ * triggers a one-time hard reload. Without this guard the user sees
+ * a "Failed to fetch dynamically imported module" white-screen and
+ * has to manually refresh.
+ *
+ * The reload guard is keyed in sessionStorage so a genuinely broken
+ * chunk doesn't spin in an infinite reload loop.
+ */
+function withReloadOnChunkError<T>(loader: () => Promise<T>): () => Promise<T> {
+  const KEY = "chunk_reload_attempted";
+  return async () => {
+    try {
+      const result = await loader();
+      // Successful load → clear the reload guard so a future stale
+      // chunk in the same session can also trigger a one-shot reload.
+      if (typeof window !== "undefined") sessionStorage.removeItem(KEY);
+      return result;
+    } catch (err) {
+      const isChunkError =
+        err instanceof Error &&
+        /Failed to fetch dynamically imported module|Importing a module script failed|ChunkLoadError/i.test(
+          err.message,
+        );
+      if (isChunkError && typeof window !== "undefined") {
+        if (sessionStorage.getItem(KEY) !== "1") {
+          sessionStorage.setItem(KEY, "1");
+          window.location.reload();
+          // Return a never-resolving promise so React doesn't try to
+          // render anything during the (imminent) reload.
+          return new Promise<T>(() => {});
+        }
+      }
+      throw err;
+    }
+  };
+}
+
+const AnalyticsView = lazy(() =>
+  withReloadOnChunkError(importAnalytics)().then((m) => ({ default: m.AnalyticsView })),
+);
+const AlertsView = lazy(() =>
+  withReloadOnChunkError(importAlerts)().then((m) => ({ default: m.AlertsView })),
+);
+const FinanceView = lazy(() =>
+  withReloadOnChunkError(importFinance)().then((m) => ({ default: m.FinanceView })),
+);
+const QuickLaunchView = lazy(() =>
+  withReloadOnChunkError(importLaunch)().then((m) => ({ default: m.QuickLaunchView })),
+);
+const SettingsView = lazy(() =>
+  withReloadOnChunkError(importSettings)().then((m) => ({ default: m.SettingsView })),
+);
 
 /** Trigger an early download of a view's JS chunk before navigation. */
 export const prefetchView = (path: string): void => {
