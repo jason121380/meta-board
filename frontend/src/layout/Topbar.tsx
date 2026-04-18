@@ -1,15 +1,17 @@
+import { MobileUserAvatar } from "@/components/MobileUserAvatar";
 import { cn } from "@/lib/cn";
 import type { ReactNode } from "react";
-import { useMobileSidebarToggle } from "./Shell";
 
 /**
  * Top bar — 60px tall, white background, bottom border, shadow-sm.
  * Shared container for every view's top strip (page title + date
  * picker + refresh button + any per-view controls).
  *
- * Mobile (≤768px): reveals a hamburger button on the left that
- * toggles the sidebar. Desktop: the hamburger is hidden by the
- * `.shell-hamburger` class in globals.css.
+ * Mobile (≤768px): the leftmost item is a circular user avatar that
+ * opens a logout modal (the desktop sidebar's user dropdown is hidden
+ * behind the BottomTabBar on phones, so this is the only logout entry
+ * point). The legacy hamburger is no longer rendered on mobile — the
+ * sidebar nav was fully replaced by the bottom tab bar.
  */
 
 export interface TopbarProps {
@@ -23,7 +25,6 @@ export interface TopbarProps {
 }
 
 export function Topbar({ title, titleAction, children, className }: TopbarProps) {
-  const toggle = useMobileSidebarToggle();
   return (
     <div
       // PWA safe-area: on iOS standalone, viewport-fit=cover puts the
@@ -39,28 +40,7 @@ export function Topbar({ title, titleAction, children, className }: TopbarProps)
         className,
       )}
     >
-      <button
-        type="button"
-        aria-label="開啟選單"
-        onClick={toggle}
-        className="shell-hamburger -ml-1 hidden h-11 w-11 items-center justify-center rounded-xl border border-border text-ink active:scale-95 active:bg-orange-bg active:text-orange"
-      >
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <line x1="3" y1="6" x2="21" y2="6" />
-          <line x1="3" y1="12" x2="21" y2="12" />
-          <line x1="3" y1="18" x2="21" y2="18" />
-        </svg>
-      </button>
+      <MobileUserAvatar />
       <div className="hidden min-w-0 shrink-0 truncate text-[15px] font-bold tracking-[-0.2px] text-ink md:block md:text-base">
         {title}
       </div>
