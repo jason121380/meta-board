@@ -8,6 +8,7 @@ import { toLabel } from "@/lib/datePicker";
 import { fM } from "@/lib/format";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
+import { useUiStore } from "@/stores/uiStore";
 import type { FbAccount } from "@/types/fb";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnalyticsKpisRow } from "./AnalyticsKpis";
@@ -63,6 +64,7 @@ export function AnalyticsView() {
 
   const date = useFiltersStore((s) => s.date.analytics);
   const setDate = useFiltersStore((s) => s.setDate);
+  const settingsReady = useUiStore((s) => s.settingsReady);
 
   // Single batch request for campaigns + per-account insights —
   // replaces the old `useMultiAccountCampaigns` + `useMultiAccountInsights`
@@ -85,7 +87,13 @@ export function AnalyticsView() {
       </Topbar>
 
       <div className="flex-1 p-3 md:p-6">
-        {visible.length === 0 ? (
+        {!settingsReady ? (
+          <LoadingState
+            title="分析資料中..."
+            loaded={overview.loadedCount}
+            total={overview.totalCount}
+          />
+        ) : visible.length === 0 ? (
           <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
         ) : isLoading ? (
           <LoadingState

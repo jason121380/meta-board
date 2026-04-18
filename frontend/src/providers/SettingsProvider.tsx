@@ -1,32 +1,24 @@
 import { useSharedSettings, useUserSettings } from "@/api/hooks/useSettings";
 import { useFbAuth } from "@/auth/FbAuthProvider";
-import { LoadingState } from "@/components/LoadingState";
 import { setAccountsUserId, useAccountsStore } from "@/stores/accountsStore";
 import { useFinanceStore } from "@/stores/financeStore";
+import { useUiStore } from "@/stores/uiStore";
 import { type ReactNode, useEffect, useState } from "react";
 
 /**
- * SettingsProvider — PostgreSQL hydration gate.
+ * SettingsProvider — PostgreSQL hydration runner (not a gate).
  *
- * Mounted immediately inside AuthGate (i.e. after FB auth succeeds and
- * we have a user id). Fires two GETs in parallel:
+ * Mounted immediately inside AuthGate. Fires two GETs in parallel:
  *   - /api/settings/user/{fb_user_id}   → per-user: selected accounts + order
  *   - /api/settings/shared              → shared: finance markups, pins, etc.
  *
- * Children only mount once both have resolved (or failed — empty data
- * is fine, the app just starts with defaults). This replaces the old
- * localStorage-only hydration path for those keys.
+ * Hydrates the Zustand stores in a useEffect once both queries succeed
+ * AND flips uiStore.settingsReady so views can suppress their own
+ * "select an account" empty state during the brief loading window.
  *
- * The hydration is ONE-WAY: we seed the Zustand stores from server
- * data on first load. Subsequent mutations flow stores → API mutations
- * → server. Query cache is the source of truth, not the stores — but
- * Zustand keeps the synchronous snapshot needed by views that read
- * store state during render.
- *
- * ⚠️ `seeded` MUST be a useState, not useRef. A ref mutation doesn't
- * trigger a re-render, so the `loaded` check in render would stay
- * `false` forever after the effect ran, and the user would see the
- * loading screen indefinitely.
+ * Children render IMMEDIATELY — no loading screen here. The user's
+ * perception is a single "load data" screen because each view's own
+ * data-loading state covers the settings hydration window.
  */
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
@@ -37,6 +29,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const sharedQuery = useSharedSettings();
 
   const [seeded, setSeeded] = useState(false);
+  const setSettingsReady = useUiStore((s) => s.setSettingsReady);
 
   // Register the FB user id with the accounts store so its writer
   // knows which user to POST under. Cleared on logout.
@@ -56,7 +49,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     console.log("[settings] user settings from PG:", u);
     console.log("[settings] shared settings from PG:", s);
 
-    // Per-user: selected_accounts, account_order
     const selectedIds = Array.isArray(u.selected_accounts)
       ? (u.selected_accounts as string[]).filter((v): v is string => typeof v === "string")
       : [];
@@ -65,8 +57,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       : [];
     useAccountsStore.getState().hydrateFromServer({ selectedIds, order });
 
-    // Shared: finance_row_markups, finance_pinned_ids,
-    // finance_default_markup, finance_show_nicknames
     const rowMarkups =
       s.finance_row_markups && typeof s.finance_row_markups === "object"
         ? (s.finance_row_markups as Record<string, number>)
@@ -87,15 +77,25 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     });
 
     setSeeded(true);
-  }, [seeded, userQuery.isSuccess, sharedQuery.isSuccess, userQuery.data, sharedQuery.data]);
+    setSettingsReady(true);
+  }, [
+    seeded,
+    userQuery.isSuccess,
+    sharedQuery.isSuccess,
+    userQuery.data,
+    sharedQuery.data,
+    setSettingsReady,
+    userId,
+  ]);
 
-  const errored = userQuery.isError || sharedQuery.isError;
-  // Render children as soon as EITHER seeding completes OR the queries
-  // fail. Failing through to the app with default-empty state beats
-  // being stuck on a loading spinner forever when the DB is offline.
-  if (!seeded && !errored) {
-    return <LoadingState title="載入設定中..." />;
-  }
+  // Failures shouldn't block the app either — flip ready so views
+  // don't wait forever on a dead DB.
+  useEffect(() => {
+    if (userQuery.isError || sharedQuery.isError) {
+      setSettingsReady(true);
+    }
+  }, [userQuery.isError, sharedQuery.isError, setSettingsReady]);
 
   return <>{children}</>;
 }
+
