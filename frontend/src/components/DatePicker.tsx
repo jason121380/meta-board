@@ -31,7 +31,6 @@ export interface DatePickerProps {
 
 export function DatePicker({ value, onChange }: DatePickerProps) {
   const [open, setOpen] = useState(false);
-  const [showCal, setShowCal] = useState(false);
   const [picking, setPicking] = useState<"from" | "to">("from");
   const [customFrom, setCustomFrom] = useState<string | null>(
     value.preset === "custom" ? value.from : null,
@@ -55,8 +54,15 @@ export function DatePicker({ value, onChange }: DatePickerProps) {
         const d = new Date(`${range.start}T00:00:00`);
         setViewDate(new Date(d.getFullYear(), d.getMonth(), 1));
       }
-    } else {
-      setShowCal(false);
+      // Sync the draft custom range to whatever is currently resolved
+      // so the calendar highlights the active selection on every open.
+      if (value.preset === "custom") {
+        setCustomFrom(value.from);
+        setCustomTo(value.to);
+      } else {
+        setCustomFrom(null);
+        setCustomTo(null);
+      }
       setPicking("from");
     }
   }, [open, value]);
@@ -67,41 +73,35 @@ export function DatePicker({ value, onChange }: DatePickerProps) {
   const selectPreset = (preset: Exclude<DatePreset, "custom">) => {
     setCustomFrom(null);
     setCustomTo(null);
-    setShowCal(false);
+    setPicking("from");
     setOpen(false);
     onChange({ preset, from: null, to: null });
   };
 
-  const enterCustomMode = () => {
-    setShowCal(true);
-    setPicking("from");
-    setCustomFrom(null);
-    setCustomTo(null);
-    const now = new Date();
-    setViewDate(new Date(now.getFullYear(), now.getMonth(), 1));
-  };
-
+  // Direct calendar click flow (no "自訂" gate):
+  //   click 1 → sets `from`, switches to picking=to
+  //   click 2 → sets `to` (auto-orders if before `from`), auto-applies
+  //             and closes the popover
   const selectDay = (dateStr: string) => {
-    if (!showCal) return;
     if (picking === "from") {
       setCustomFrom(dateStr);
       setCustomTo(null);
       setPicking("to");
       return;
     }
-    if (customFrom && dateStr < customFrom) {
-      setCustomTo(customFrom);
-      setCustomFrom(dateStr);
-    } else {
-      setCustomTo(dateStr);
+    let from = customFrom;
+    let to = dateStr;
+    if (from && dateStr < from) {
+      to = from;
+      from = dateStr;
     }
+    setCustomFrom(from);
+    setCustomTo(to);
     setPicking("from");
-  };
-
-  const applyCustom = () => {
-    if (!customFrom || !customTo) return;
-    setOpen(false);
-    onChange({ preset: "custom", from: customFrom, to: customTo });
+    if (from && to) {
+      setOpen(false);
+      onChange({ preset: "custom", from, to });
+    }
   };
 
   return (
@@ -153,7 +153,7 @@ export function DatePicker({ value, onChange }: DatePickerProps) {
           {/* Presets — horizontal scrolling pills on mobile, vertical column on desktop */}
           <div className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-border p-2 md:w-[150px] md:flex-col md:gap-0 md:overflow-visible md:border-r md:border-b-0">
             {DP_PRESETS.map((preset) => {
-              const active = !showCal && value.preset === preset.value;
+              const active = value.preset === preset.value;
               return (
                 <button
                   key={preset.value}
@@ -177,30 +177,11 @@ export function DatePicker({ value, onChange }: DatePickerProps) {
                 </button>
               );
             })}
-            <div className="hidden h-px bg-border md:my-1 md:block" />
-            <button
-              type="button"
-              onClick={enterCustomMode}
-              className={cn(
-                "flex shrink-0 select-none items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-[13px] md:w-full",
-                "cursor-pointer transition-colors duration-100",
-                showCal
-                  ? "bg-orange-bg font-semibold text-orange"
-                  : "text-gray-500 hover:bg-orange-bg hover:text-orange",
-              )}
-            >
-              <span
-                className={cn(
-                  "h-1.5 w-1.5 shrink-0 rounded-full border-[1.5px]",
-                  showCal ? "border-orange bg-orange" : "border-gray-300",
-                )}
-              />
-              自訂
-            </button>
           </div>
 
           <div className="relative flex flex-col">
-            {/* Calendar */}
+            {/* Calendar — always interactive, no "自訂" gate. First
+                click sets from, second click sets to and auto-applies. */}
             <Calendar
               viewDate={viewDate}
               onPrev={() =>
@@ -209,42 +190,25 @@ export function DatePicker({ value, onChange }: DatePickerProps) {
               onNext={() =>
                 setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))
               }
-              readonly={!showCal}
               onSelectDay={selectDay}
-              from={showCal ? customFrom : range.start}
-              to={showCal ? customTo : range.end}
+              from={customFrom ?? range.start}
+              to={customTo ?? range.end}
               picking={picking}
             />
 
-            {/* Footer: apply or display range — flows in normal layout
-                so the calendar's pb is determined by its own content. */}
+            {/* Footer — always shows the current range (or the draft
+                during a custom pick). No apply button: second calendar
+                click auto-applies. */}
             <div className="px-4 pb-3">
-              {showCal ? (
-                <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2.5">
-                  <span className="rounded-md bg-orange-bg px-2.5 py-1 text-xs font-medium text-orange">
-                    {customFrom || "開始日期"}
-                  </span>
-                  <span className="text-gray-300">→</span>
-                  <span className="rounded-md bg-orange-bg px-2.5 py-1 text-xs font-medium text-orange">
-                    {customTo || "結束日期"}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={!customFrom || !customTo}
-                    onClick={applyCustom}
-                    className={cn(
-                      "ml-auto h-9 cursor-pointer rounded-lg bg-orange px-5 text-xs font-semibold text-white md:h-[30px] md:px-4",
-                      "transition-colors hover:bg-orange-dark disabled:cursor-not-allowed disabled:bg-gray-300",
-                    )}
-                  >
-                    套用
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center border-t border-border pt-2.5 text-xs text-gray-500">
-                  {range.start} → {range.end}
-                </div>
-              )}
+              <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2.5 text-xs text-gray-500">
+                <span className="rounded-md bg-orange-bg px-2.5 py-1 font-medium text-orange">
+                  {customFrom ?? range.start ?? "開始日期"}
+                </span>
+                <span className="text-gray-300">→</span>
+                <span className="rounded-md bg-orange-bg px-2.5 py-1 font-medium text-orange">
+                  {customTo ?? range.end ?? "結束日期"}
+                </span>
+              </div>
             </div>
           </div>
         </Popover.Content>
@@ -257,14 +221,13 @@ interface CalendarProps {
   viewDate: Date;
   onPrev: () => void;
   onNext: () => void;
-  readonly: boolean;
   onSelectDay: (dateStr: string) => void;
   from: string | null;
   to: string | null;
   picking: "from" | "to";
 }
 
-function Calendar({ viewDate, onPrev, onNext, readonly, onSelectDay, from, to }: CalendarProps) {
+function Calendar({ viewDate, onPrev, onNext, onSelectDay, from, to }: CalendarProps) {
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
   const today = fmtDate(new Date());
@@ -369,18 +332,16 @@ function Calendar({ viewDate, onPrev, onNext, readonly, onSelectDay, from, to }:
             <button
               key={ds}
               type="button"
-              onClick={readonly ? undefined : () => onSelectDay(ds)}
+              onClick={() => onSelectDay(ds)}
               className={cn(
-                "flex h-9 items-center justify-center font-sans text-[13px] transition-colors duration-75 md:h-8 md:text-xs",
-                !readonly && "cursor-pointer",
-                readonly && "cursor-default",
+                "flex h-9 cursor-pointer items-center justify-center font-sans text-[13px] transition-colors duration-75 md:h-8 md:text-xs",
                 selected && "bg-orange font-semibold text-white",
                 selected && !rangeSingle && isFrom && "rounded-l-lg",
                 selected && !rangeSingle && isTo && "rounded-r-lg",
                 rangeSingle && selected && "rounded-lg",
                 inRange && "bg-orange-bg text-orange",
                 !selected && !inRange && isToday && "font-bold text-orange",
-                !selected && !inRange && !readonly && "hover:bg-orange-bg active:bg-orange-bg",
+                !selected && !inRange && "hover:bg-orange-bg active:bg-orange-bg",
               )}
             >
               {cell.day}

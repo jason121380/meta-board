@@ -952,6 +952,7 @@ async def upsert_user_setting(fb_user_id: str, key: str, payload: SettingsValueP
             key,
             json.dumps(payload.value),
         )
+    print(f"[settings] user POST uid={fb_user_id!r} key={key!r}", flush=True)
     return {"ok": True}
 
 
@@ -996,7 +997,53 @@ async def upsert_shared_setting(key: str, payload: SettingsValuePayload):
             key,
             json.dumps(payload.value),
         )
+    print(f"[settings] shared POST key={key!r}", flush=True)
     return {"ok": True}
+
+
+# ── Debug dump endpoint ───────────────────────────────────────────────
+#
+# Curl-able from a browser / fetch() so the user can see:
+#   - whether DATABASE_URL is live
+#   - what fb_user_id currently owns which user_settings rows
+#   - what shared_settings are stored
+#   - how many campaign_nicknames exist
+# Returns redacted output (no value payloads that might contain secrets,
+# though our data is already non-sensitive). Useful for diagnosing
+# "saved settings didn't come back".
+
+@app.get("/api/_debug/settings")
+async def debug_settings_dump():
+    if _db_pool is None:
+        return {"db": "not_configured", "database_url_set": bool(DATABASE_URL)}
+    out: dict = {"db": "connected"}
+    async with _db_pool.acquire() as conn:
+        user_rows = await conn.fetch(
+            "SELECT fb_user_id, key, value, updated_at FROM user_settings ORDER BY updated_at DESC"
+        )
+        shared_rows = await conn.fetch(
+            "SELECT key, value, updated_at FROM shared_settings ORDER BY updated_at DESC"
+        )
+        nickname_count = await conn.fetchval("SELECT COUNT(*) FROM campaign_nicknames")
+    out["user_settings"] = [
+        {
+            "fb_user_id": r["fb_user_id"],
+            "key": r["key"],
+            "value": (json.loads(r["value"]) if isinstance(r["value"], str) else r["value"]),
+            "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+        }
+        for r in user_rows
+    ]
+    out["shared_settings"] = [
+        {
+            "key": r["key"],
+            "value": (json.loads(r["value"]) if isinstance(r["value"], str) else r["value"]),
+            "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+        }
+        for r in shared_rows
+    ]
+    out["campaign_nicknames_count"] = nickname_count
+    return out
 
 
 @app.delete("/api/settings/shared/{key}")

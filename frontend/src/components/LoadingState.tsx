@@ -1,6 +1,5 @@
 import { cn } from "@/lib/cn";
 import { type ReactNode, useEffect, useState } from "react";
-import { Spinner } from "./Spinner";
 
 /**
  * Prominent loading state — larger and clearer than the tiny
@@ -123,7 +122,6 @@ export function LoadingState({
         className,
       )}
     >
-      <Spinner size={32} />
       <div className="text-[14px] font-semibold text-ink">{title}</div>
       {effectiveSubtitle && <div className="text-[12px] text-gray-500">{effectiveSubtitle}</div>}
       <progress value={pct} max={100} className="sr-only" aria-label="載入進度">
