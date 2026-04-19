@@ -2,6 +2,7 @@ import { useSharedSettings, useUserSettings } from "@/api/hooks/useSettings";
 import { useFbAuth } from "@/auth/FbAuthProvider";
 import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
+import { toast } from "@/components/Toast";
 import { useUiStore } from "@/stores/uiStore";
 import { useState } from "react";
 
@@ -90,6 +91,38 @@ export function MobileUserAvatar() {
               查看資料庫完整內容 →
             </a>
           </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full justify-center"
+            onClick={async () => {
+              if (!user.id) {
+                toast("無 FB 使用者 id", "error", 4000);
+                return;
+              }
+              try {
+                const r = await fetch(
+                  `/api/settings/user/${encodeURIComponent(user.id)}/__ping`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ value: { at: new Date().toISOString() } }),
+                  },
+                );
+                const body = await r.text();
+                if (r.ok) {
+                  toast(`測試寫入 OK (${r.status}) → 重新整理看 debug`, "success", 5000);
+                } else {
+                  toast(`測試寫入失敗 ${r.status}: ${body.slice(0, 80)}`, "error", 6000);
+                }
+              } catch (e) {
+                toast(`網路錯誤：${(e as Error).message}`, "error", 6000);
+              }
+            }}
+          >
+            測試寫入 __ping
+          </Button>
           <Button
             type="button"
             variant="primary"
