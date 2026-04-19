@@ -269,7 +269,9 @@ export function DashboardView() {
                 有花費
               </label>
               <span className="whitespace-nowrap text-xs text-gray-500">
-                {overview.isLoading ? "…" : `${filteredCampaigns.length} 個活動`}
+                {overview.isLoading || overview.insightsPending
+                  ? "…"
+                  : `${filteredCampaigns.length} 個活動`}
               </span>
             </div>
             <div className="w-full overflow-x-auto">
@@ -281,7 +283,7 @@ export function DashboardView() {
                 />
               ) : activeAccounts.length === 0 ? (
                 <EmptyState>從上方選擇廣告帳戶</EmptyState>
-              ) : overview.isLoading ? (
+              ) : overview.isLoading || overview.insightsPending ? (
                 <LoadingState
                   title="載入行銷活動中..."
                   loaded={overview.loadedCount}
