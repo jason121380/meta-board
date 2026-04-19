@@ -98,11 +98,16 @@ const config: Config = {
           "50%": { transform: "translateX(200%)" },
           "100%": { transform: "translateX(-100%)" },
         },
+        "bounce-dot": {
+          "0%, 80%, 100%": { transform: "scale(0.6)", opacity: "0.55" },
+          "40%": { transform: "scale(1)", opacity: "1" },
+        },
       },
       animation: {
         shimmer: "shimmer 1.2s infinite",
         spin: "spin 0.7s linear infinite",
         "fade-in": "fade-in 0.25s ease-out both",
+        "bounce-dot": "bounce-dot 1.2s ease-in-out infinite both",
       },
     },
   },

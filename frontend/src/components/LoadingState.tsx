@@ -122,6 +122,20 @@ export function LoadingState({
         className,
       )}
     >
+      <div className="flex items-end gap-1.5" aria-hidden="true">
+        <span
+          className="h-2.5 w-2.5 rounded-full bg-orange animate-bounce-dot"
+          style={{ animationDelay: "0s" }}
+        />
+        <span
+          className="h-2.5 w-2.5 rounded-full bg-orange animate-bounce-dot"
+          style={{ animationDelay: "0.16s" }}
+        />
+        <span
+          className="h-2.5 w-2.5 rounded-full bg-orange animate-bounce-dot"
+          style={{ animationDelay: "0.32s" }}
+        />
+      </div>
       <div className="text-[14px] font-semibold text-ink">{title}</div>
       {effectiveSubtitle && <div className="text-[12px] text-gray-500">{effectiveSubtitle}</div>}
       <progress value={pct} max={100} className="sr-only" aria-label="載入進度">
