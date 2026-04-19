@@ -1,5 +1,6 @@
 import { api } from "@/api/client";
 import { toast } from "@/components/Toast";
+import { queryClient } from "@/lib/queryClient";
 import type { FbAccount } from "@/types/fb";
 import { create } from "zustand";
 
@@ -53,10 +54,14 @@ async function postSelected(ids: string[]): Promise<void> {
     toast("儲存失敗：無 FB 使用者 id", "error", 4000);
     return;
   }
-  console.log("[settings] POST selected_accounts uid=", _currentUserId, "ids=", ids);
+  const uid = _currentUserId;
+  console.log("[settings] POST selected_accounts uid=", uid, "ids=", ids);
   try {
-    await api.settings.setUser(_currentUserId, "selected_accounts", ids);
+    await api.settings.setUser(uid, "selected_accounts", ids);
     console.log("[settings] POST selected_accounts OK");
+    // Invalidate the useUserSettings query so any UI reading from it
+    // (avatar debug modal etc.) refetches instead of showing stale data.
+    queryClient.invalidateQueries({ queryKey: ["settings", "user", uid] });
   } catch (e) {
     console.error("[settings] POST selected_accounts FAILED:", e);
     toast(`儲存帳戶失敗：${(e as Error).message ?? "unknown"}`, "error", 5000);
@@ -67,10 +72,12 @@ async function postOrder(order: string[]): Promise<void> {
     console.warn("[settings] postOrder skipped — no fb user id");
     return;
   }
-  console.log("[settings] POST account_order uid=", _currentUserId, "order=", order);
+  const uid = _currentUserId;
+  console.log("[settings] POST account_order uid=", uid, "order=", order);
   try {
-    await api.settings.setUser(_currentUserId, "account_order", order);
+    await api.settings.setUser(uid, "account_order", order);
     console.log("[settings] POST account_order OK");
+    queryClient.invalidateQueries({ queryKey: ["settings", "user", uid] });
   } catch (e) {
     console.error("[settings] POST account_order FAILED:", e);
     toast(`儲存排序失敗：${(e as Error).message ?? "unknown"}`, "error", 5000);

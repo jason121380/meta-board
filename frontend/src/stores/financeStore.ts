@@ -1,6 +1,11 @@
 import { api } from "@/api/client";
 import { debounce } from "@/lib/debounce";
+import { queryClient } from "@/lib/queryClient";
 import { create } from "zustand";
+
+const invalidateSharedSettings = () => {
+  queryClient.invalidateQueries({ queryKey: ["settings", "shared"] });
+};
 
 /**
  * Finance store — row markup overrides, pinned ids, default markup,
@@ -43,17 +48,29 @@ export interface FinanceState {
 // fire immediately so a quick refresh after a click never loses the
 // write.
 const postRowMarkups = debounce((m: Record<string, number>) => {
-  void api.settings.setShared("finance_row_markups", m);
+  api.settings
+    .setShared("finance_row_markups", m)
+    .then(invalidateSharedSettings)
+    .catch(() => {});
 }, 500);
 const postDefaultMarkup = debounce((v: number) => {
-  void api.settings.setShared("finance_default_markup", v);
+  api.settings
+    .setShared("finance_default_markup", v)
+    .then(invalidateSharedSettings)
+    .catch(() => {});
 }, 500);
 
 const postPinnedIds = (ids: string[]) => {
-  void api.settings.setShared("finance_pinned_ids", ids);
+  api.settings
+    .setShared("finance_pinned_ids", ids)
+    .then(invalidateSharedSettings)
+    .catch(() => {});
 };
 const postShowNicknames = (v: boolean) => {
-  void api.settings.setShared("finance_show_nicknames", v);
+  api.settings
+    .setShared("finance_show_nicknames", v)
+    .then(invalidateSharedSettings)
+    .catch(() => {});
 };
 
 // Belt-and-suspenders for the debounced typed-input writers: if the

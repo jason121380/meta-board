@@ -141,20 +141,15 @@ const TABS: TabItem[] = [
         width="22"
         height="22"
         viewBox="0 0 24 24"
-        fill="currentColor"
-        stroke="none"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
         aria-hidden="true"
       >
-        <path d="M12 1a1 1 0 011 1v1.07A7 7 0 0119 10v0a7 7 0 01-6 6.93V22a1 1 0 01-2 0v-5.07A7 7 0 015 10v0a7 7 0 016-6.93V2a1 1 0 011-1zm5 4H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 010 7H7" />
-        <circle cx="12" cy="12" r="9" fillOpacity="0.15" />
-        <path
-          d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        <line x1="12" y1="1" x2="12" y2="23" />
+        <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
       </svg>
     ),
     iconInactive: (

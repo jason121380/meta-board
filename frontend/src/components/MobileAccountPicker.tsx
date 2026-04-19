@@ -22,8 +22,9 @@ import { useEffect, useMemo, useState } from "react";
  *
  * The dialog body supports substring search on account name. With
  * 80+ accounts per user, scrolling the whole list on mobile is
- * painful; the search box is autoFocused on open so the keyboard
- * pops up immediately and typing filters the list live.
+ * painful; tapping the search box brings up the keyboard on demand.
+ * We intentionally don't autofocus — the user usually wants to see
+ * the list first before deciding to filter.
  */
 
 export interface MobileAccountPickerProps {
@@ -102,8 +103,6 @@ export function MobileAccountPicker({
       <Modal open={open} onOpenChange={setOpen} title="選擇廣告帳戶" width={360}>
         <input
           type="search"
-          // biome-ignore lint/a11y/noAutofocus: mobile pickers benefit from an immediate keyboard to filter 80+ accounts.
-          autoFocus
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
           placeholder="搜尋帳戶..."
