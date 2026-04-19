@@ -76,7 +76,7 @@ export function AnalyticsView() {
     [overview.campaigns, overview.insights, visible],
   );
 
-  const isLoading = overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching);
+  const isLoading = overview.isLoading;
 
   return (
     <>

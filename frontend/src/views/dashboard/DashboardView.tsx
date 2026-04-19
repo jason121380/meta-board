@@ -281,7 +281,7 @@ export function DashboardView() {
                 />
               ) : activeAccounts.length === 0 ? (
                 <EmptyState>從上方選擇廣告帳戶</EmptyState>
-              ) : overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching) ? (
+              ) : overview.isLoading ? (
                 <LoadingState
                   title="載入行銷活動中..."
                   loaded={overview.loadedCount}

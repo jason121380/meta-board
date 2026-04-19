@@ -209,7 +209,7 @@ export function FinanceView() {
                 <LoadingState title="載入財務資料中..." />
               ) : visible.length === 0 ? (
                 <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
-              ) : overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching) ? (
+              ) : overview.isLoading ? (
                 <LoadingState title="載入財務資料中..." />
               ) : (
                 <FinanceTable
