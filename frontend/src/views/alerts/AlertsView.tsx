@@ -91,7 +91,7 @@ export function AlertsView() {
             />
           ) : visibleAll.length === 0 ? (
             <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
-          ) : overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching) ? (
+          ) : overview.isLoading ? (
             <LoadingState
               title="分析廣告資料中..."
               loaded={overview.loadedCount}

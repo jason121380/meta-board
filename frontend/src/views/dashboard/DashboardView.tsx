@@ -78,8 +78,17 @@ export function DashboardView() {
   //   - The effect's only state-mutation is `setActiveIds`, which
   //     is a stable Zustand setter — no loop risk
   useEffect(() => {
-    if (activeIds.length > 0) return;
     if (visibleAccounts.length === 0) return;
+    // Auto-select the first visible account when EITHER:
+    //   - activeIds is empty (first-time user / just saved settings), OR
+    //   - activeIds references an account that's no longer visible
+    //     (user removed it from the "enabled" list in Settings). Without
+    //     this second check the dashboard sits on an empty state with
+    //     a ghost selection forever — that was the "設定完回到儀表板
+    //     還是空的" bug.
+    const visibleIdSet = new Set(visibleAccounts.map((a) => a.id));
+    const hasValidActive = activeIds.some((id) => visibleIdSet.has(id));
+    if (hasValidActive) return;
     const first = visibleAccounts[0];
     if (first) setActiveIds([first.id]);
   }, [activeIds, visibleAccounts, setActiveIds]);
@@ -272,7 +281,7 @@ export function DashboardView() {
                 />
               ) : activeAccounts.length === 0 ? (
                 <EmptyState>從上方選擇廣告帳戶</EmptyState>
-              ) : overview.isLoading || (overview.campaigns.length === 0 && overview.isFetching) ? (
+              ) : overview.isLoading ? (
                 <LoadingState
                   title="載入行銷活動中..."
                   loaded={overview.loadedCount}
