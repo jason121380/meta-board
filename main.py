@@ -79,6 +79,29 @@ async def lifespan(app: FastAPI):
                     )
                     """
                 )
+                # Schema compatibility guard: the legacy build shipped a
+                # different `user_settings` table (pre-2026-04-15 cutover).
+                # CREATE TABLE IF NOT EXISTS silently skips when the table
+                # exists, so a stale schema would leave INSERTs failing
+                # with "column not found" and surface as an HTTP 500.
+                # Detect a missing column and recreate the table.
+                expected = {"fb_user_id", "key", "value", "updated_at"}
+                existing = {
+                    r["column_name"]
+                    for r in await conn.fetch(
+                        """
+                        SELECT column_name FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'user_settings'
+                        """
+                    )
+                }
+                if existing and not expected.issubset(existing):
+                    print(
+                        f"[startup] DB: user_settings schema mismatch (has {sorted(existing)}),"
+                        f" dropping + recreating",
+                        flush=True,
+                    )
+                    await conn.execute("DROP TABLE IF EXISTS user_settings")
                 # Per-user settings — keyed on (fb_user_id, key). Used
                 # for things each person toggles privately: selected
                 # accounts, account order, etc.
@@ -93,6 +116,24 @@ async def lifespan(app: FastAPI):
                     )
                     """
                 )
+                # Same defensive check for shared_settings.
+                expected_shared = {"key", "value", "updated_at"}
+                existing_shared = {
+                    r["column_name"]
+                    for r in await conn.fetch(
+                        """
+                        SELECT column_name FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'shared_settings'
+                        """
+                    )
+                }
+                if existing_shared and not expected_shared.issubset(existing_shared):
+                    print(
+                        f"[startup] DB: shared_settings schema mismatch (has {sorted(existing_shared)}),"
+                        f" dropping + recreating",
+                        flush=True,
+                    )
+                    await conn.execute("DROP TABLE IF EXISTS shared_settings")
                 # Team-wide shared settings — single row per key, visible
                 # to every user. Used for markup rules, pins, etc.
                 await conn.execute(
