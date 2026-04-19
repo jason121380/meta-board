@@ -1,9 +1,6 @@
-import { useSharedSettings, useUserSettings } from "@/api/hooks/useSettings";
 import { useFbAuth } from "@/auth/FbAuthProvider";
 import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
-import { toast } from "@/components/Toast";
-import { useUiStore } from "@/stores/uiStore";
 import { useState } from "react";
 
 /**
@@ -18,16 +15,11 @@ import { useState } from "react";
  */
 export function MobileUserAvatar() {
   const { user, logout } = useFbAuth();
-  const settingsReady = useUiStore((s) => s.settingsReady);
-  const userQuery = useUserSettings(user?.id ?? null);
-  const sharedQuery = useSharedSettings();
   const [open, setOpen] = useState(false);
 
   if (!user) return null;
 
   const initial = (user.name?.[0] ?? "?").toUpperCase();
-  const userKeys = Object.keys(userQuery.data ?? {});
-  const sharedKeys = Object.keys(sharedQuery.data ?? {});
 
   return (
     <>
@@ -57,72 +49,6 @@ export function MobileUserAvatar() {
         width={320}
       >
         <div className="flex flex-col gap-3">
-          {/* Diagnostic strip — visible state of the current session.
-              Helps the user (and us) quickly check why settings might
-              not be loading without opening DevTools. */}
-          <div className="rounded-lg border border-border bg-bg p-2.5 text-[11px] leading-relaxed text-gray-500">
-            <div>
-              FB id: <span className="font-mono text-ink">{user.id || "(空)"}</span>
-            </div>
-            <div>
-              Settings ready:{" "}
-              <span className={settingsReady ? "text-[#2E7D32]" : "text-orange"}>
-                {settingsReady ? "yes" : "no"}
-              </span>
-            </div>
-            <div>
-              user_settings keys:{" "}
-              <span className="font-mono text-ink">
-                {userKeys.length > 0 ? userKeys.join(", ") : "(無)"}
-              </span>
-            </div>
-            <div>
-              shared_settings keys:{" "}
-              <span className="font-mono text-ink">
-                {sharedKeys.length > 0 ? sharedKeys.join(", ") : "(無)"}
-              </span>
-            </div>
-            <a
-              href="/api/_debug/settings"
-              target="_blank"
-              rel="noreferrer"
-              className="mt-1.5 inline-block text-orange underline"
-            >
-              查看資料庫完整內容 →
-            </a>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="w-full justify-center"
-            onClick={async () => {
-              if (!user.id) {
-                toast("無 FB 使用者 id", "error", 4000);
-                return;
-              }
-              try {
-                const r = await fetch(
-                  `/api/settings/user/${encodeURIComponent(user.id)}/__ping`,
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ value: { at: new Date().toISOString() } }),
-                  },
-                );
-                const body = await r.text();
-                if (r.ok) {
-                  toast(`測試寫入 OK (${r.status}) → 重新整理看 debug`, "success", 5000);
-                } else {
-                  toast(`測試寫入失敗 ${r.status}: ${body.slice(0, 80)}`, "error", 6000);
-                }
-              } catch (e) {
-                toast(`網路錯誤：${(e as Error).message}`, "error", 6000);
-              }
-            }}
-          >
-            測試寫入 __ping
-          </Button>
           <Button
             type="button"
             variant="primary"

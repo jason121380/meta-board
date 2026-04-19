@@ -6,6 +6,7 @@ import { toast } from "@/components/Toast";
 import { Topbar } from "@/layout/Topbar";
 import { accountStatusColor, accountStatusLabel } from "@/lib/accountStatus";
 import { cn } from "@/lib/cn";
+import { queryClient } from "@/lib/queryClient";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -92,9 +93,11 @@ export function SettingsView() {
 
   const save = () => {
     setSelectedIds([...pendingChecked]);
-    // The setState call above writes through installAccountsStorageSync
-    // into localStorage. There's no DB round-trip to await — we show
-    // the toast and navigate immediately.
+    // Drop cached overview/insights data so the destination view
+    // remounts into its LoadingState instead of flashing stale numbers
+    // keyed by the previous account set.
+    queryClient.removeQueries({ queryKey: ["overview"] });
+    queryClient.removeQueries({ queryKey: ["overview-lite"] });
     toast("儲存成功");
     navigate("/dashboard");
   };
