@@ -1,4 +1,5 @@
 import { api } from "@/api/client";
+import { toast } from "@/components/Toast";
 import type { FbAccount } from "@/types/fb";
 import { create } from "zustand";
 
@@ -46,22 +47,35 @@ export function setAccountsUserId(id: string | null) {
 // selectedIds + order are discrete click actions (checkbox toggle,
 // drag-end). Fire the POST immediately so a quick refresh doesn't
 // drop the write. No debounce.
-const postSelected = (ids: string[]) => {
+async function postSelected(ids: string[]): Promise<void> {
   if (!_currentUserId) {
     console.warn("[settings] postSelected skipped — no fb user id");
+    toast("儲存失敗：無 FB 使用者 id", "error", 4000);
     return;
   }
   console.log("[settings] POST selected_accounts uid=", _currentUserId, "ids=", ids);
-  void api.settings.setUser(_currentUserId, "selected_accounts", ids);
-};
-const postOrder = (order: string[]) => {
+  try {
+    await api.settings.setUser(_currentUserId, "selected_accounts", ids);
+    console.log("[settings] POST selected_accounts OK");
+  } catch (e) {
+    console.error("[settings] POST selected_accounts FAILED:", e);
+    toast(`儲存帳戶失敗：${(e as Error).message ?? "unknown"}`, "error", 5000);
+  }
+}
+async function postOrder(order: string[]): Promise<void> {
   if (!_currentUserId) {
     console.warn("[settings] postOrder skipped — no fb user id");
     return;
   }
   console.log("[settings] POST account_order uid=", _currentUserId, "order=", order);
-  void api.settings.setUser(_currentUserId, "account_order", order);
-};
+  try {
+    await api.settings.setUser(_currentUserId, "account_order", order);
+    console.log("[settings] POST account_order OK");
+  } catch (e) {
+    console.error("[settings] POST account_order FAILED:", e);
+    toast(`儲存排序失敗：${(e as Error).message ?? "unknown"}`, "error", 5000);
+  }
+}
 
 export const useAccountsStore = create<AccountsState>((set, get) => ({
   selectedIds: [],
@@ -72,12 +86,12 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
 
   setSelectedIds: (ids) => {
     set({ selectedIds: ids });
-    postSelected(ids);
+    void postSelected(ids);
   },
   setActiveIds: (ids) => set({ activeIds: ids }),
   setOrder: (order) => {
     set({ order });
-    postOrder(order);
+    void postOrder(order);
   },
 
   visibleAccounts: (all) => {
