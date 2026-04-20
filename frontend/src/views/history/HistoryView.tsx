@@ -68,6 +68,11 @@ export function HistoryView() {
     [months, monthlyCampaigns],
   );
 
+  const businessId = useMemo(() => {
+    if (!selectedId) return undefined;
+    return allAccounts.find((a) => a.id === selectedId)?.business?.id;
+  }, [allAccounts, selectedId]);
+
   return (
     <>
       <Topbar title="歷史花費" titleAction={<AcctSidebarToggle />}>
@@ -150,6 +155,8 @@ export function HistoryView() {
                   hideZero={hideZero}
                   showNicknames={showNicknames}
                   nicknames={nicknames}
+                  accountId={selectedId}
+                  businessId={businessId}
                 />
               )}
             </div>

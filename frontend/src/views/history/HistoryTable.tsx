@@ -1,7 +1,9 @@
 import type { NicknameMap } from "@/api/hooks/useNicknames";
+import { FbCampaignLink } from "@/components/FbCampaignLink";
+import { NicknameEditModal } from "@/components/NicknameEditModal";
 import { fM } from "@/lib/format";
 import { formatNickname } from "@/views/finance/financeData";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { HistoryRow, MonthCol } from "./historyData";
 import { monthTotals } from "./historyData";
 
@@ -27,6 +29,8 @@ export function HistoryTable({
   hideZero,
   showNicknames,
   nicknames,
+  accountId,
+  businessId,
 }: {
   months: MonthCol[];
   rows: HistoryRow[];
@@ -34,7 +38,15 @@ export function HistoryTable({
   hideZero: boolean;
   showNicknames: boolean;
   nicknames: NicknameMap;
+  accountId: string | null;
+  businessId: string | undefined;
 }) {
+  const [editing, setEditing] = useState<{
+    id: string;
+    name: string;
+    store: string;
+    designer: string;
+  } | null>(null);
   const visibleRows = useMemo(() => {
     const term = search.trim().toLowerCase();
     return rows.filter((r) => {
@@ -56,6 +68,19 @@ export function HistoryTable({
   }
 
   return (
+    <>
+      {editing && (
+        <NicknameEditModal
+          open={true}
+          onOpenChange={(o) => {
+            if (!o) setEditing(null);
+          }}
+          campaignId={editing.id}
+          campaignName={editing.name}
+          initialStore={editing.store}
+          initialDesigner={editing.designer}
+        />
+      )}
     <table className="w-full border-collapse text-[13px]">
       <thead>
         <tr className="border-b border-border bg-white">
@@ -86,10 +111,47 @@ export function HistoryTable({
             className="border-b border-border bg-white hover:bg-orange-bg"
           >
             <td
-              className="sticky left-0 z-[5] max-w-[240px] truncate bg-inherit px-3 py-2 text-[13px] font-medium text-ink"
+              className="sticky left-0 z-[5] bg-inherit px-3 py-2 text-[13px] font-medium text-ink"
               title={row.campaignName}
             >
-              {display}
+              <div className="flex items-center gap-1.5">
+                <span className="min-w-0 max-w-[240px] flex-1 truncate">{display}</span>
+                <button
+                  type="button"
+                  title="編輯暱稱"
+                  aria-label={`編輯暱稱 ${row.campaignName}`}
+                  onClick={() =>
+                    setEditing({
+                      id: row.campaignId,
+                      name: row.campaignName,
+                      store: nicknames[row.campaignId]?.store ?? "",
+                      designer: nicknames[row.campaignId]?.designer ?? "",
+                    })
+                  }
+                  className="shrink-0 cursor-pointer text-gray-300 hover:text-orange"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                  </svg>
+                </button>
+                <FbCampaignLink
+                  campaignId={row.campaignId}
+                  accountId={accountId ?? undefined}
+                  campaignName={row.campaignName}
+                  businessId={businessId}
+                />
+              </div>
             </td>
             {months.map((m) => {
               const v = row.spendByMonth[m.key] ?? 0;
@@ -130,5 +192,6 @@ export function HistoryTable({
         </tfoot>
       )}
     </table>
+    </>
   );
 }
