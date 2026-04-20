@@ -2,6 +2,7 @@ import { useFbAuth } from "@/auth/FbAuthProvider";
 import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 /**
  * Mobile-only avatar in the top-left of every Topbar.
@@ -15,6 +16,7 @@ import { useState } from "react";
  */
 export function MobileUserAvatar() {
   const { user, logout } = useFbAuth();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
   if (!user) return null;
@@ -60,6 +62,18 @@ export function MobileUserAvatar() {
             className="w-full justify-center"
           >
             登出
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="md"
+            onClick={() => {
+              setOpen(false);
+              navigate("/engineering");
+            }}
+            className="w-full justify-center"
+          >
+            工程模式
           </Button>
           <Button
             type="button"

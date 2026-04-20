@@ -343,6 +343,28 @@ export const api = {
       }),
   },
 
+  engineering: {
+    /** Latest parsed `X-Business-Use-Case-Usage` snapshot from FB,
+     * plus peak `estimated_time_to_regain_access` across all business
+     * ids. Used by the Engineering (debug) view to show rate-limit
+     * headroom per business and warn before we hit 100%. */
+    fbUsage: () =>
+      request<{
+        data: Record<
+          string,
+          {
+            call_count: number;
+            total_cputime: number;
+            total_time: number;
+            estimated_time_to_regain_access: number;
+            type: string;
+            observed_at: number;
+          }
+        >;
+        peak_regain_minutes: number;
+      }>("GET", "/api/fb-usage"),
+  },
+
   nicknames: {
     /** Fetch all campaign nicknames from the server. Returns an array
      * of `{campaign_id, store, designer}` rows. */

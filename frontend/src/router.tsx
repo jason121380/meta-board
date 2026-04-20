@@ -28,6 +28,7 @@ const importFinance = () => import("@/views/finance/FinanceView");
 const importHistory = () => import("@/views/history/HistoryView");
 const importLaunch = () => import("@/views/launch/QuickLaunchView");
 const importSettings = () => import("@/views/settings/SettingsView");
+const importEngineering = () => import("@/views/engineering/EngineeringView");
 
 /**
  * Wrap a dynamic import so a failed chunk fetch (typically because
@@ -87,6 +88,9 @@ const QuickLaunchView = lazy(() =>
 const SettingsView = lazy(() =>
   withReloadOnChunkError(importSettings)().then((m) => ({ default: m.SettingsView })),
 );
+const EngineeringView = lazy(() =>
+  withReloadOnChunkError(importEngineering)().then((m) => ({ default: m.EngineeringView })),
+);
 
 /** Trigger an early download of a view's JS chunk before navigation. */
 export const prefetchView = (path: string): void => {
@@ -109,6 +113,9 @@ export const prefetchView = (path: string): void => {
     case "/settings":
       void importSettings();
       return;
+    case "/engineering":
+      void importEngineering();
+      return;
   }
 };
 
@@ -128,6 +135,7 @@ export const router = createBrowserRouter([
       { path: "history", element: lazyView(<HistoryView />) },
       { path: "launch", element: lazyView(<QuickLaunchView />) },
       { path: "settings", element: lazyView(<SettingsView />) },
+      { path: "engineering", element: lazyView(<EngineeringView />) },
       { path: "*", element: <Navigate to="/dashboard" replace /> },
     ],
   },
