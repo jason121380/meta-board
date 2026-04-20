@@ -2,6 +2,8 @@ import type { NicknameMap } from "@/api/hooks/useNicknames";
 import { FbCampaignLink } from "@/components/FbCampaignLink";
 import { NicknameEditModal } from "@/components/NicknameEditModal";
 import { fM } from "@/lib/format";
+import { buildShareUrl } from "@/lib/shareReport";
+import { toast } from "@/components/Toast";
 import { formatNickname } from "@/views/finance/financeData";
 import { useMemo, useState } from "react";
 import type { HistoryRow, MonthCol } from "./historyData";
@@ -151,6 +153,47 @@ export function HistoryTable({
                   campaignName={row.campaignName}
                   businessId={businessId}
                 />
+                {accountId && (
+                  <button
+                    type="button"
+                    title="報告"
+                    aria-label={`報告 ${row.campaignName}`}
+                    onClick={async () => {
+                      const url = buildShareUrl({
+                        campaignId: row.campaignId,
+                        accountId,
+                        hideMoney: true,
+                        datePreset: "this_month",
+                      });
+                      try {
+                        await navigator.clipboard.writeText(url);
+                        toast("已複製分享連結", "success", 2500);
+                      } catch {
+                        /* clipboard unavailable */
+                      }
+                      window.open(url, "_blank", "noopener,noreferrer");
+                    }}
+                    className="shrink-0 cursor-pointer text-gray-300 hover:text-orange"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="8" y1="13" x2="16" y2="13" />
+                      <line x1="8" y1="17" x2="16" y2="17" />
+                      <line x1="8" y1="9" x2="10" y2="9" />
+                    </svg>
+                  </button>
+                )}
               </div>
             </td>
             {months.map((m) => {

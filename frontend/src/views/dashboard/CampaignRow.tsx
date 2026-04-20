@@ -11,9 +11,10 @@ import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
 import { useUiStore } from "@/stores/uiStore";
 import type { FbCampaign } from "@/types/fb";
-import { memo } from "react";
+import { memo, useState } from "react";
 import { AdsetRow } from "./AdsetRow";
 import type { BudgetModalTarget } from "./BudgetModal";
+import { ReportModal } from "./ReportModal";
 
 export interface CampaignRowProps {
   campaign: FbCampaign;
@@ -53,6 +54,7 @@ function CampaignRowInner({
   const mutation = useEntityStatusMutation();
   const accountsQuery = useAccounts();
   const businessId = accountsQuery.data?.find((a) => a.id === campaign._accountId)?.business?.id;
+  const [reportOpen, setReportOpen] = useState(false);
 
   const ins = getIns(campaign);
   const msgs = getMsgCount(campaign);
@@ -149,9 +151,30 @@ function CampaignRowInner({
                 <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
               </svg>
             </button>
+            <button
+              type="button"
+              title="報告"
+              aria-label="報告"
+              className="cursor-pointer border-0 bg-transparent p-1 text-gray-400 hover:text-orange outline-none"
+              onClick={() => setReportOpen(true)}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="8" y1="13" x2="16" y2="13" />
+                <line x1="8" y1="17" x2="16" y2="17" />
+                <line x1="8" y1="9" x2="10" y2="9" />
+              </svg>
+            </button>
           </div>
         </td>
       </tr>
+      <ReportModal
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        campaign={campaign}
+        date={date}
+      />
       {expanded && (
         <CampaignAdsets
           query={adsetsQuery}
