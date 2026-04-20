@@ -86,7 +86,7 @@ export function HistoryTable({
     <table className="w-full border-collapse text-[13px]">
       <thead>
         <tr className="border-b border-border bg-white">
-          <th className="sticky left-0 z-10 bg-white px-3 py-2.5 text-left text-[12px] font-semibold text-ink">
+          <th className="bg-white px-3 py-2.5 text-left text-[12px] font-semibold text-ink">
             行銷活動
           </th>
           {months.map((m) => (
@@ -113,7 +113,7 @@ export function HistoryTable({
             className="border-b border-border bg-white hover:bg-orange-bg"
           >
             <td
-              className="sticky left-0 z-[5] bg-inherit px-3 py-2 text-[13px] font-medium text-ink"
+              className="bg-inherit px-3 py-2 text-[13px] font-medium text-ink"
               title={row.campaignName}
             >
               <div className="flex items-center gap-1.5">
@@ -217,7 +217,7 @@ export function HistoryTable({
       {visibleRows.length > 0 && (
         <tfoot>
           <tr className="border-t-2 border-border bg-bg">
-            <td className="sticky left-0 z-[5] bg-bg px-3 py-2.5 text-[12px] font-semibold text-ink">
+            <td className="bg-bg px-3 py-2.5 text-[12px] font-semibold text-ink">
               合計
             </td>
             {months.map((m) => (
