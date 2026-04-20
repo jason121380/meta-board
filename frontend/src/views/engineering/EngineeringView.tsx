@@ -172,33 +172,68 @@ function UsageBar({ label, value }: { label: string; value: number }) {
  * Subscribe to the query cache so the panel re-renders on every
  * add / remove / state-change event. `useSyncExternalStore` avoids
  * us having to manually rig up useState + useEffect for every event.
+ *
+ * IMPORTANT: `getSnapshot` MUST return a stable reference when the
+ * underlying values haven't changed, otherwise every render re-runs
+ * the external store subscription and React bails with the
+ * "Maximum update depth exceeded" error (#185). We cache the last
+ * snapshot in a module-level ref and only allocate a new object when
+ * one of the six counters actually moves.
  */
-function useQueryCacheStats() {
-  const subscribe = (cb: () => void) => queryClient.getQueryCache().subscribe(cb);
-  return useSyncExternalStore(
-    subscribe,
-    () => {
-      const qs = queryClient.getQueryCache().getAll();
-      const stats = {
-        total: qs.length,
-        fetching: 0,
-        success: 0,
-        error: 0,
-        pending: 0,
-        stale: 0,
-      };
-      for (const q of qs) {
-        const s = q.state;
-        if (s.fetchStatus === "fetching") stats.fetching += 1;
-        if (s.status === "success") stats.success += 1;
-        if (s.status === "error") stats.error += 1;
-        if (s.status === "pending") stats.pending += 1;
-        if (q.isStale()) stats.stale += 1;
-      }
-      return stats;
-    },
-    () => ({ total: 0, fetching: 0, success: 0, error: 0, pending: 0, stale: 0 }),
-  );
+interface QueryStats {
+  total: number;
+  fetching: number;
+  success: number;
+  error: number;
+  pending: number;
+  stale: number;
+}
+const EMPTY_STATS: QueryStats = {
+  total: 0,
+  fetching: 0,
+  success: 0,
+  error: 0,
+  pending: 0,
+  stale: 0,
+};
+let lastStatsSnapshot: QueryStats = EMPTY_STATS;
+function computeQueryStats(): QueryStats {
+  const qs = queryClient.getQueryCache().getAll();
+  let total = qs.length;
+  let fetching = 0;
+  let success = 0;
+  let error = 0;
+  let pending = 0;
+  let stale = 0;
+  for (const q of qs) {
+    const s = q.state;
+    if (s.fetchStatus === "fetching") fetching += 1;
+    if (s.status === "success") success += 1;
+    if (s.status === "error") error += 1;
+    if (s.status === "pending") pending += 1;
+    if (q.isStale()) stale += 1;
+  }
+  total = qs.length;
+  const prev = lastStatsSnapshot;
+  if (
+    prev.total === total &&
+    prev.fetching === fetching &&
+    prev.success === success &&
+    prev.error === error &&
+    prev.pending === pending &&
+    prev.stale === stale
+  ) {
+    return prev;
+  }
+  const next = { total, fetching, success, error, pending, stale };
+  lastStatsSnapshot = next;
+  return next;
+}
+const subscribeQueryCache = (cb: () => void) => queryClient.getQueryCache().subscribe(cb);
+const getStatsServer = () => EMPTY_STATS;
+
+function useQueryCacheStats(): QueryStats {
+  return useSyncExternalStore(subscribeQueryCache, computeQueryStats, getStatsServer);
 }
 
 function ReactQueryPanel() {
@@ -297,19 +332,21 @@ function Stat({
 
 // ── Browser / runtime ────────────────────────────────────────
 
+// Hoisted so useSyncExternalStore doesn't re-subscribe on every
+// render (stable function identity is part of its contract).
+const subscribeOnline = (cb: () => void) => {
+  window.addEventListener("online", cb);
+  window.addEventListener("offline", cb);
+  return () => {
+    window.removeEventListener("online", cb);
+    window.removeEventListener("offline", cb);
+  };
+};
+const getOnlineSnapshot = () => navigator.onLine;
+const getOnlineSnapshotServer = () => true;
+
 function useOnlineStatus() {
-  return useSyncExternalStore(
-    (cb) => {
-      window.addEventListener("online", cb);
-      window.addEventListener("offline", cb);
-      return () => {
-        window.removeEventListener("online", cb);
-        window.removeEventListener("offline", cb);
-      };
-    },
-    () => navigator.onLine,
-    () => true,
-  );
+  return useSyncExternalStore(subscribeOnline, getOnlineSnapshot, getOnlineSnapshotServer);
 }
 
 function BrowserPanel() {

@@ -184,7 +184,7 @@ export function DataPreloader({ onComplete }: { onComplete: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/80 backdrop-blur-sm">
-      <div className="flex w-[300px] flex-col items-center gap-4 rounded-2xl border border-border bg-white px-8 py-10">
+      <div className="flex w-[300px] flex-col items-center gap-4 rounded-2xl bg-white px-8 py-10">
         <div className="text-[15px] font-bold text-ink">更新數據中</div>
         <div className="flex w-full flex-col items-center gap-2">
           <div className="text-[13px] font-semibold tabular-nums text-orange">{pct}%</div>
