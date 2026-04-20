@@ -25,6 +25,7 @@ import { Navigate, createBrowserRouter } from "react-router-dom";
 const importAnalytics = () => import("@/views/analytics/AnalyticsView");
 const importAlerts = () => import("@/views/alerts/AlertsView");
 const importFinance = () => import("@/views/finance/FinanceView");
+const importHistory = () => import("@/views/history/HistoryView");
 const importLaunch = () => import("@/views/launch/QuickLaunchView");
 const importSettings = () => import("@/views/settings/SettingsView");
 
@@ -77,6 +78,9 @@ const AlertsView = lazy(() =>
 const FinanceView = lazy(() =>
   withReloadOnChunkError(importFinance)().then((m) => ({ default: m.FinanceView })),
 );
+const HistoryView = lazy(() =>
+  withReloadOnChunkError(importHistory)().then((m) => ({ default: m.HistoryView })),
+);
 const QuickLaunchView = lazy(() =>
   withReloadOnChunkError(importLaunch)().then((m) => ({ default: m.QuickLaunchView })),
 );
@@ -95,6 +99,9 @@ export const prefetchView = (path: string): void => {
       return;
     case "/finance":
       void importFinance();
+      return;
+    case "/history":
+      void importHistory();
       return;
     case "/launch":
       void importLaunch();
@@ -118,6 +125,7 @@ export const router = createBrowserRouter([
       { path: "analytics", element: lazyView(<AnalyticsView />) },
       { path: "alerts", element: lazyView(<AlertsView />) },
       { path: "finance", element: lazyView(<FinanceView />) },
+      { path: "history", element: lazyView(<HistoryView />) },
       { path: "launch", element: lazyView(<QuickLaunchView />) },
       { path: "settings", element: lazyView(<SettingsView />) },
       { path: "*", element: <Navigate to="/dashboard" replace /> },
