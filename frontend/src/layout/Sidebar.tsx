@@ -103,6 +103,26 @@ const NAV_ITEMS: NavItem[] = [
       </svg>
     ),
   },
+  {
+    to: "/history",
+    label: "歷史花費",
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M3 3v18h18" />
+        <path d="M7 14l4-4 4 4 5-6" />
+      </svg>
+    ),
+  },
 ];
 
 // 快速上架 hidden from the sidebar nav (route still exists for
