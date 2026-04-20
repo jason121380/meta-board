@@ -1,6 +1,7 @@
+import { Modal } from "@/components/Modal";
 import { cn } from "@/lib/cn";
 import { prefetchView } from "@/router";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 /**
@@ -13,6 +14,11 @@ import { useLocation, useNavigate } from "react-router-dom";
  *   - Active tab: orange fill + label
  *   - Inactive: gray outline + label
  *   - Prefetches JS chunk on touchstart for instant navigation
+ *
+ * When the app has more than 5 views, the 5th slot becomes "更多"
+ * (more) which opens a bottom-sheet Modal listing the overflow
+ * items. This keeps the bar at 5 visible tabs while still giving
+ * mobile users access to the full desktop-sidebar feature set.
  *
  * Hidden on desktop via `md:hidden` — the desktop sidebar remains.
  */
@@ -169,34 +175,46 @@ const TABS: TabItem[] = [
       </svg>
     ),
   },
+];
+
+// Overflow items — accessible via the "更多" tab (5th slot) instead
+// of being crammed into the main bar. Order matches the desktop
+// sidebar so users who switch between mobile and desktop don't have
+// to re-learn navigation.
+interface OverflowItem {
+  path: string;
+  label: string;
+  icon: JSX.Element;
+}
+
+const OVERFLOW: OverflowItem[] = [
+  {
+    path: "/history",
+    label: "歷史花費",
+    icon: (
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M3 3v18h18" />
+        <path d="M7 14l4-4 4 4 5-6" />
+      </svg>
+    ),
+  },
   {
     path: "/settings",
     label: "設定",
-    iconActive: (
+    icon: (
       <svg
-        width="22"
-        height="22"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        stroke="none"
-        aria-hidden="true"
-      >
-        <circle cx="12" cy="12" r="3" />
-        <path
-          d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"
-          fillOpacity="0.15"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
-      </svg>
-    ),
-    iconInactive: (
-      <svg
-        width="22"
-        height="22"
+        width="20"
+        height="20"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -210,11 +228,31 @@ const TABS: TabItem[] = [
       </svg>
     ),
   },
+  {
+    path: "/engineering",
+    label: "工程模式",
+    icon: (
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94L6.92 19.1a2.12 2.12 0 01-3-3l6.08-6.64a6 6 0 017.94-7.94l-3.76 3.76z" />
+      </svg>
+    ),
+  },
 ];
 
 export function BottomTabBar() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const handleTab = useCallback(
     (path: string) => {
@@ -229,33 +267,119 @@ export function BottomTabBar() {
     [navigate],
   );
 
+  // The "更多" tab is considered active whenever the current route
+  // matches one of the overflow items — this way the highlight stays
+  // consistent even when the user lands on e.g. /settings via
+  // deep-link instead of tapping 更多 first.
+  const moreActive = OVERFLOW.some((item) => pathname.startsWith(item.path));
+
   return (
-    <nav
-      className="btm-tab-bar fixed inset-x-0 bottom-0 z-[200] border-t border-border bg-white/95 backdrop-blur-md md:hidden"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    <>
+      <nav
+        className="btm-tab-bar fixed inset-x-0 bottom-0 z-[200] border-t border-border bg-white/95 backdrop-blur-md md:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="flex">
+          {TABS.map((tab) => {
+            const active = pathname.startsWith(tab.path);
+            return (
+              <button
+                key={tab.path}
+                type="button"
+                onClick={() => handleTab(tab.path)}
+                onTouchStart={() => prefetchView(tab.path)}
+                className={cn(
+                  "flex flex-1 flex-col items-center justify-center gap-0.5 pb-1 pt-2",
+                  "text-[10px] font-semibold transition-colors duration-150",
+                  "active:scale-95 active:opacity-80",
+                  active ? "text-orange" : "text-gray-300",
+                )}
+              >
+                {active ? tab.iconActive : tab.iconInactive}
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => {
+              if ("vibrate" in navigator) navigator.vibrate(8);
+              setMoreOpen(true);
+            }}
+            // Eagerly warm the overflow targets so tapping an item
+            // in the sheet feels instant.
+            onTouchStart={() => {
+              for (const item of OVERFLOW) prefetchView(item.path);
+            }}
+            className={cn(
+              "flex flex-1 flex-col items-center justify-center gap-0.5 pb-1 pt-2",
+              "text-[10px] font-semibold transition-colors duration-150",
+              "active:scale-95 active:opacity-80",
+              moreActive ? "text-orange" : "text-gray-300",
+            )}
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+          >
+            <MoreIcon filled={moreActive} />
+            <span>更多</span>
+          </button>
+        </div>
+      </nav>
+      <Modal open={moreOpen} onOpenChange={setMoreOpen} title="更多" width={320}>
+        <ul className="flex flex-col gap-1">
+          {OVERFLOW.map((item) => {
+            const active = pathname.startsWith(item.path);
+            return (
+              <li key={item.path}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    handleTab(item.path);
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-xl px-3 py-3 text-[14px] font-semibold",
+                    "active:scale-[0.98]",
+                    active
+                      ? "bg-orange-bg text-orange"
+                      : "bg-transparent text-ink hover:bg-orange-bg",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                      active ? "bg-white text-orange" : "bg-bg text-gray-500",
+                    )}
+                  >
+                    {item.icon}
+                  </span>
+                  {item.label}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </Modal>
+    </>
+  );
+}
+
+function MoreIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth={filled ? "0" : "1.8"}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
     >
-      <div className="flex">
-        {TABS.map((tab) => {
-          const active = pathname.startsWith(tab.path);
-          return (
-            <button
-              key={tab.path}
-              type="button"
-              onClick={() => handleTab(tab.path)}
-              onTouchStart={() => prefetchView(tab.path)}
-              className={cn(
-                "flex flex-1 flex-col items-center justify-center gap-0.5 pb-1 pt-2",
-                "text-[10px] font-semibold transition-colors duration-150",
-                "active:scale-95 active:opacity-80",
-                active ? "text-orange" : "text-gray-300",
-              )}
-            >
-              {active ? tab.iconActive : tab.iconInactive}
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
-    </nav>
+      <circle cx="5" cy="12" r="1.8" />
+      <circle cx="12" cy="12" r="1.8" />
+      <circle cx="19" cy="12" r="1.8" />
+    </svg>
   );
 }

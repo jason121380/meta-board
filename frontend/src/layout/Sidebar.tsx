@@ -2,7 +2,7 @@ import { useFbAuth } from "@/auth/FbAuthProvider";
 import { cn } from "@/lib/cn";
 import { prefetchView } from "@/router";
 import { useEffect, useRef, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 
 /**
  * Left sidebar — 220px fixed, 60px logo header, nav items, user
@@ -157,6 +157,7 @@ export interface SidebarProps {
 
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const { user, logout } = useFbAuth();
+  const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuWrapRef = useRef<HTMLDivElement | null>(null);
 
@@ -267,6 +268,18 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                 <div className="truncate">{user?.name}</div>
                 <div className="text-[10px] font-normal text-gray-300">Facebook 帳號</div>
               </div>
+              <button
+                type="button"
+                onMouseEnter={() => prefetchView("/engineering")}
+                onFocus={() => prefetchView("/engineering")}
+                onClick={() => {
+                  setMenuOpen(false);
+                  navigate("/engineering");
+                }}
+                className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] text-gray-500 hover:bg-orange-bg hover:text-orange"
+              >
+                工程模式
+              </button>
               <button
                 type="button"
                 onClick={() => {

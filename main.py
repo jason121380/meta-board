@@ -265,17 +265,99 @@ print(
 # Cache scope is per-token: the key includes a hash of the access token
 # so different users (or token rotations) never see each other's data.
 import hashlib
+import json as _json
 import re
 import time
 
 _CACHE_TTL_SECONDS = 60.0
-_fb_cache: dict[str, tuple[float, Any]] = {}
+# Accounts list changes very rarely (new ad accounts are onboarded
+# manually); keep it cached for 10 minutes to stay well within FB's
+# per-ad-account rate limits (80004). This is the single biggest
+# request-reduction lever we have — every tab load used to pay one
+# /api/accounts call against FB.
+_ACCOUNTS_CACHE_TTL_SECONDS = 600.0
+# Cache entry is (inserted_at, data, ttl). Older entries written with
+# just (inserted_at, data) are migrated on read via _cache_get.
+_fb_cache: dict[str, tuple[float, Any, float]] = {}
 # Per-key request locks — when N concurrent requests miss the same
 # cache key, the first one holds the lock and actually fans out to
 # FB, while the rest await the lock and hit the now-populated cache
 # on their retry. This prevents a cache stampede on /api/accounts and
 # /api/overview, which every tab fires on first load.
 _fb_cache_locks: dict[str, asyncio.Lock] = {}
+
+# Latest FB rate-limit usage snapshot, parsed from the
+# `X-Business-Use-Case-Usage` response header. Key = business id (the
+# outer JSON key FB uses); value = dict with the highest observed
+# `call_count` / `total_cputime` / `total_time` percentages plus
+# `estimated_time_to_regain_access` (minutes) and the timestamp of
+# the reading. Exposed via `/api/fb-usage` so the frontend can warn
+# the user before they hit 100% or show how long to wait after a
+# rate-limit error.
+_fb_usage: dict[str, dict[str, Any]] = {}
+
+
+def _parse_bucu_header(raw: Optional[str]) -> None:
+    """Parse `X-Business-Use-Case-Usage` into `_fb_usage`.
+
+    FB docs: https://developers.facebook.com/docs/graph-api/overview/rate-limiting#headers
+    Header is a JSON object mapping business id → list of usage entries
+    (one per call type: ads_management / ads_insights / ...). Each entry
+    reports percent usage against FB's 100% ceiling, plus
+    `estimated_time_to_regain_access` in minutes (0 when not throttled).
+
+    Silently ignored when the header is missing or malformed — FB
+    doesn't promise it on every response and we don't want a bad
+    header format to break the actual data call.
+    """
+    if not raw:
+        return
+    try:
+        parsed = _json.loads(raw)
+    except Exception:
+        return
+    if not isinstance(parsed, dict):
+        return
+    now = time.time()
+    for biz_id, entries in parsed.items():
+        if not isinstance(entries, list):
+            continue
+        peak = {"call_count": 0, "total_cputime": 0, "total_time": 0}
+        regain = 0
+        call_type = ""
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            for k in peak:
+                try:
+                    peak[k] = max(peak[k], int(entry.get(k, 0) or 0))
+                except (TypeError, ValueError):
+                    continue
+            try:
+                regain = max(regain, int(entry.get("estimated_time_to_regain_access", 0) or 0))
+            except (TypeError, ValueError):
+                pass
+            if not call_type:
+                call_type = str(entry.get("type", "") or "")
+        _fb_usage[str(biz_id)] = {
+            **peak,
+            "estimated_time_to_regain_access": regain,
+            "type": call_type,
+            "observed_at": now,
+        }
+
+
+def _peak_regain_minutes() -> int:
+    """Largest `estimated_time_to_regain_access` across all businesses
+    in the last snapshot. Returned to the client alongside rate-limit
+    errors so the UI can say "try again in N minutes" instead of a
+    generic "rate limited" message.
+    """
+    if not _fb_usage:
+        return 0
+    return max(
+        int(u.get("estimated_time_to_regain_access", 0) or 0) for u in _fb_usage.values()
+    )
 
 
 def _cache_key(token: str, path: str, params: dict, *, kind: str = "single") -> str:
@@ -296,15 +378,15 @@ def _cache_get(key: str) -> Any:
     entry = _fb_cache.get(key)
     if entry is None:
         return None
-    inserted_at, data = entry
-    if (time.monotonic() - inserted_at) > _CACHE_TTL_SECONDS:
+    inserted_at, data, ttl = entry
+    if (time.monotonic() - inserted_at) > ttl:
         _fb_cache.pop(key, None)
         _fb_cache_locks.pop(key, None)
         return None
     return data
 
 
-def _cache_put(key: str, data: Any) -> None:
+def _cache_put(key: str, data: Any, ttl: float = _CACHE_TTL_SECONDS) -> None:
     # Best-effort eviction: cap cache at 500 entries to avoid runaway
     # memory growth across long-running sessions.
     if len(_fb_cache) > 500:
@@ -313,7 +395,7 @@ def _cache_put(key: str, data: Any) -> None:
         for k, _ in oldest:
             _fb_cache.pop(k, None)
             _fb_cache_locks.pop(k, None)
-    _fb_cache[key] = (time.monotonic(), data)
+    _fb_cache[key] = (time.monotonic(), data, ttl)
 
 
 def _cache_lock(key: str) -> asyncio.Lock:
@@ -588,6 +670,10 @@ async def _fb_fetch_and_cache(
         except httpx.RequestError as e:
             # Includes ConnectError, ProxyError, NetworkError, etc.
             raise HTTPException(status_code=502, detail=f"Cannot reach Facebook API: {type(e).__name__}: {e}")
+    # Record rate-limit usage regardless of success/error — the header
+    # is present on error responses too and is how we know when it's
+    # safe to retry.
+    _parse_bucu_header(r.headers.get("x-business-use-case-usage"))
     # Try to parse JSON response
     try:
         body = r.json()
@@ -636,14 +722,21 @@ async def fb_post(
     return result
 
 
-async def fb_get_paginated(path: str, params: Optional[dict] = None) -> List[dict]:
+async def fb_get_paginated(
+    path: str,
+    params: Optional[dict] = None,
+    *,
+    ttl: float = _CACHE_TTL_SECONDS,
+) -> List[dict]:
     """Paginate through a FB Graph API endpoint that returns {data:[], paging:{next}}.
     Always raises HTTPException on failure (never lets httpx errors bubble up as 500).
 
-    Final result lists are cached in-memory for 60 seconds (per token + path
-    + initial params). Subsequent calls within the TTL window return without
-    hitting Facebook at all — a major speedup for the heavy
-    /api/accounts and /api/accounts/{id}/campaigns endpoints.
+    Final result lists are cached in-memory for ``ttl`` seconds (default 60s,
+    per token + path + initial params). Subsequent calls within the TTL window
+    return without hitting Facebook at all — a major speedup for the heavy
+    /api/accounts and /api/accounts/{id}/campaigns endpoints. Endpoints whose
+    underlying data changes very slowly (e.g. the ad-account list) pass a
+    longer TTL to stay further below FB's per-account rate limit.
 
     Uses the same per-key stampede lock as :func:`_fb_request` so a
     burst of concurrent cache misses only pays for one FB call.
@@ -666,11 +759,11 @@ async def fb_get_paginated(path: str, params: Optional[dict] = None) -> List[dic
         cached = _cache_get(cache_key)
         if cached is not None:
             return cached
-        return await _fb_get_paginated_fetch(path, params, token, cache_key)
+        return await _fb_get_paginated_fetch(path, params, token, cache_key, ttl)
 
 
 async def _fb_get_paginated_fetch(
-    path: str, params: dict, token: str, cache_key: str
+    path: str, params: dict, token: str, cache_key: str, ttl: float = _CACHE_TTL_SECONDS
 ) -> List[dict]:
     """Walk FB paging.next until exhausted. Per-page GETs use the
     **bulk** timeout (20s) because this function backs the heavy
@@ -685,6 +778,10 @@ async def _fb_get_paginated_fetch(
     while next_url:
         data: Optional[dict] = None
         last_exc: Optional[HTTPException] = None
+        # Per FB best practices, ads-specific account throttles
+        # (80000-80014) must NOT be retried — continuing calls
+        # extends the lockout. Flag is set inline when we see one.
+        no_retry = False
         for attempt in range(_FB_MAX_RETRIES + 1):
             try:
                 async with _fb_semaphore:
@@ -699,6 +796,7 @@ async def _fb_get_paginated_fetch(
                     detail=f"Cannot reach Facebook API: {type(e).__name__}: {e}",
                 )
             else:
+                _parse_bucu_header(r.headers.get("x-business-use-case-usage"))
                 try:
                     data = r.json()
                 except Exception:
@@ -712,20 +810,34 @@ async def _fb_get_paginated_fetch(
                     err = data["error"] if isinstance(data["error"], dict) else {}
                     msg = err.get("message", "Facebook API error")
                     code = err.get("code")
-                    # Code 4 / 17 / 32 / 613 are FB rate-limit codes — treat
-                    # as transient so we retry once.
+                    # Code 4 / 17 / 32 / 613 are app/user/page-level
+                    # rate-limit codes — treat as transient so we
+                    # retry once. Code 80000-80014 are ads-specific
+                    # ad-account throttles; per FB best practices we
+                    # do NOT retry them (continuing calls extends the
+                    # lockout) — surface 429 with the wait time and
+                    # let the frontend show "try again in N minutes".
                     transient_fb_codes = {4, 17, 32, 613}
-                    http_status = 429 if code in transient_fb_codes else 400
-                    last_exc = HTTPException(
-                        status_code=http_status,
-                        detail=f"{msg} [code={code}]" if code else msg,
-                    )
+                    is_ads_throttle = isinstance(code, int) and 80000 <= code <= 80014
+                    if code in transient_fb_codes:
+                        http_status = 429
+                    elif is_ads_throttle:
+                        http_status = 429
+                    else:
+                        http_status = 400
+                    detail = f"{msg} [code={code}]" if code else msg
+                    if is_ads_throttle:
+                        no_retry = True
+                        wait_min = _peak_regain_minutes()
+                        if wait_min:
+                            detail = f"{detail} [retry_after_minutes={wait_min}]"
+                    last_exc = HTTPException(status_code=http_status, detail=detail)
                     data = None
             if data is not None:
                 last_exc = None
                 break  # success, stop retrying
             # Decide whether to retry this failure
-            if last_exc is None or not _is_transient_fb_error(last_exc):
+            if no_retry or last_exc is None or not _is_transient_fb_error(last_exc):
                 break
             if attempt >= _FB_MAX_RETRIES:
                 break
@@ -741,7 +853,7 @@ async def _fb_get_paginated_fetch(
         items.extend(data.get("data", []))
         next_url = data.get("paging", {}).get("next")
         page_params = {}  # next_url already contains all params
-    _cache_put(cache_key, items)
+    _cache_put(cache_key, items, ttl)
     return items
 
 
@@ -1123,16 +1235,31 @@ async def quick_launch_campaign(payload: CampaignCreate):
 
 @app.get("/api/accounts")
 async def get_accounts():
-    accounts = await fb_get_paginated("me/adaccounts", {
-        "fields": "id,name,account_status,currency,timezone_name,business,campaigns.limit(0).summary(true)",
-        "limit": "500",
-    })
-    # Flatten the nested graph api summary into a simple integer for the frontend
-    for acc in accounts:
-        if "campaigns" in acc and "summary" in acc["campaigns"]:
-            acc["campaign_count"] = acc["campaigns"]["summary"].get("total_count", 0)
-            del acc["campaigns"]
+    # The `campaigns.limit(0).summary(true)` subfield was removed: FB
+    # computes that summary per-account which was the main trigger for
+    # 80004 (per-ad-account throttling) under cold-load bursts. The
+    # frontend doesn't actually use `campaign_count`.
+    accounts = await fb_get_paginated(
+        "me/adaccounts",
+        {
+            "fields": "id,name,account_status,currency,timezone_name,business",
+            "limit": "500",
+        },
+        ttl=_ACCOUNTS_CACHE_TTL_SECONDS,
+    )
     return {"data": accounts}
+
+
+@app.get("/api/fb-usage")
+async def get_fb_usage():
+    """Latest parsed `X-Business-Use-Case-Usage` snapshot.
+
+    Populated as a side-effect of every FB call. Entries expire on
+    their own (FB re-sends the header on subsequent calls with fresh
+    numbers); we don't age them out on our side because "last known
+    value" is what the UI wants anyway.
+    """
+    return {"data": _fb_usage, "peak_regain_minutes": _peak_regain_minutes()}
 
 
 # ── 行銷活動 ─────────────────────────────────────────────────────────
