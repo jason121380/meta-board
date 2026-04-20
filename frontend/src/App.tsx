@@ -6,6 +6,7 @@ import { SettingsProvider } from "@/providers/SettingsProvider";
 import { router } from "@/router";
 import { hydrateAllStores, installStorageSync } from "@/stores";
 import { LoginView } from "@/views/login/LoginView";
+import { ShareReportPage } from "@/views/report/ShareReportPage";
 import { useEffect } from "react";
 import { RouterProvider } from "react-router-dom";
 
@@ -31,6 +32,18 @@ export function App() {
     const cleanup = installStorageSync();
     return cleanup;
   }, []);
+
+  // Public share-report route — bypasses the FB auth gate entirely.
+  // The backend endpoints use a server-side shared token, so link
+  // recipients can view the report without logging in themselves.
+  if (typeof window !== "undefined" && window.location.pathname.startsWith("/r/")) {
+    return (
+      <>
+        <ShareReportPage />
+        <ToastHost />
+      </>
+    );
+  }
 
   return (
     <FbAuthProvider>
