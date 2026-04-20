@@ -122,5 +122,4 @@ export interface FbAccount {
   currency?: string;
   timezone_name?: string;
   business?: FbBusiness;
-  campaign_count?: number;
 }
