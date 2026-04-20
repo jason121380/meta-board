@@ -1,10 +1,12 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
+import { useNicknames } from "@/api/hooks/useNicknames";
 import { AcctSidebarToggle } from "@/components/AcctSidebarToggle";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
 import { MobileAccountPicker } from "@/components/MobileAccountPicker";
 import { Topbar } from "@/layout/Topbar";
 import { useAccountsStore } from "@/stores/accountsStore";
+import { useFinanceStore } from "@/stores/financeStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useEffect, useMemo, useState } from "react";
 import { AccountPanel } from "../dashboard/AccountPanel";
@@ -23,6 +25,18 @@ export function HistoryView() {
   const allAccounts = accountsQuery.data ?? [];
   const visibleAccounts = useAccountsStore((s) => s.visibleAccounts)(allAccounts);
   const settingsReady = useUiStore((s) => s.settingsReady);
+
+  // Nicknames are shared team-wide and already persisted via
+  // SettingsProvider → financeStore. Reuse the Finance view's
+  // 顯示暱稱 flag so toggling it in either view keeps the two
+  // consistent (same data, same preference).
+  const nicknamesQuery = useNicknames();
+  const nicknames = nicknamesQuery.data ?? {};
+  const showNicknames = useFinanceStore((s) => s.showNicknames);
+  const setShowNicknames = useFinanceStore((s) => s.setShowNicknames);
+
+  const [search, setSearch] = useState("");
+  const [hideZero, setHideZero] = useState(true);
 
   // Local selection state — this view intentionally does NOT reuse the
   // dashboard's activeIds so navigating between them doesn't stomp on
@@ -81,11 +95,31 @@ export function HistoryView() {
 
         <div className="min-w-0 flex-1 p-3 md:p-4">
           <div className="overflow-hidden rounded-2xl border border-border bg-white">
-            <div className="border-b border-border bg-white px-4 py-3">
-              <div className="text-[13px] font-semibold text-ink">近 6 個月廣告花費</div>
-              <div className="mt-0.5 text-[11px] text-gray-500">
-                以行銷活動為單位,橫向比較本月與前 5 個完整月份的花費
-              </div>
+            <div className="flex flex-wrap items-center gap-2 border-b border-border bg-white px-3 py-2.5 md:gap-2.5 md:px-5">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.currentTarget.value)}
+                placeholder="搜尋活動名稱..."
+                className="h-10 min-w-[140px] flex-1 rounded-lg border-[1.5px] border-border px-3 text-[13px] outline-none focus:border-orange md:h-8 md:px-2.5"
+              />
+              <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-gray-500">
+                <input
+                  type="checkbox"
+                  className="custom-cb"
+                  checked={showNicknames}
+                  onChange={(e) => setShowNicknames(e.currentTarget.checked)}
+                />
+                顯示暱稱
+              </label>
+              <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-gray-500">
+                <input
+                  type="checkbox"
+                  className="custom-cb"
+                  checked={hideZero}
+                  onChange={(e) => setHideZero(e.currentTarget.checked)}
+                />
+                有花費
+              </label>
             </div>
 
             <div className="w-full overflow-x-auto">
@@ -109,7 +143,14 @@ export function HistoryView() {
               ) : rows.length === 0 ? (
                 <EmptyState>近 6 個月無花費紀錄</EmptyState>
               ) : (
-                <HistoryTable months={months} rows={rows} />
+                <HistoryTable
+                  months={months}
+                  rows={rows}
+                  search={search}
+                  hideZero={hideZero}
+                  showNicknames={showNicknames}
+                  nicknames={nicknames}
+                />
               )}
             </div>
           </div>
