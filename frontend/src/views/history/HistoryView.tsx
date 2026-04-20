@@ -84,7 +84,11 @@ export function HistoryView() {
             setSelectedId(id);
           }}
           includeAllOption={false}
-          className="bg-transparent px-0 py-0"
+          // Default MobileAccountPicker uses `mr-auto` so the picker
+          // sits on the LEFT (to leave room for a DatePicker on the
+          // right). 歷史花費 has no DatePicker, so override to align
+          // the picker to the right edge instead.
+          className="ml-auto mr-0 bg-transparent px-0 py-0"
         />
       </Topbar>
 
@@ -129,11 +133,7 @@ export function HistoryView() {
 
             <div className="w-full overflow-x-auto">
               {!settingsReady ? (
-                <LoadingState
-                  title="載入歷史花費中..."
-                  loaded={loadedCount}
-                  total={totalCount}
-                />
+                <LoadingState title="載入歷史花費中..." loaded={loadedCount} total={totalCount} />
               ) : visibleAccounts.length === 0 ? (
                 <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
               ) : !selectedId ? (

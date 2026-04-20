@@ -1,9 +1,9 @@
 import type { NicknameMap } from "@/api/hooks/useNicknames";
 import { FbCampaignLink } from "@/components/FbCampaignLink";
 import { NicknameEditModal } from "@/components/NicknameEditModal";
+import { toast } from "@/components/Toast";
 import { fM } from "@/lib/format";
 import { buildShareUrl } from "@/lib/shareReport";
-import { toast } from "@/components/Toast";
 import { formatNickname } from "@/views/finance/financeData";
 import { useMemo, useState } from "react";
 import type { HistoryRow, MonthCol } from "./historyData";
@@ -49,9 +49,17 @@ export function HistoryTable({
     store: string;
     designer: string;
   } | null>(null);
+  // Sort by campaign name / nickname label. `null` = natural order
+  // (the order the API returned, which is spend-desc within each
+  // month aggregation). Clicking the 行銷活動 header cycles
+  // null → asc → desc → null.
+  const [nameSort, setNameSort] = useState<"asc" | "desc" | null>(null);
+  const cycleNameSort = () => {
+    setNameSort((prev) => (prev === null ? "asc" : prev === "asc" ? "desc" : null));
+  };
   const visibleRows = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return rows.filter((r) => {
+    const filtered = rows.filter((r) => {
       if (hideZero && r.total <= 0) return false;
       if (term) {
         const nick = formatNickname(nicknames[r.campaignId]) ?? "";
@@ -60,7 +68,16 @@ export function HistoryTable({
       }
       return true;
     });
-  }, [rows, search, hideZero, nicknames]);
+    if (nameSort !== null) {
+      const labelOf = (r: HistoryRow) => {
+        const nick = formatNickname(nicknames[r.campaignId]);
+        return (showNicknames && nick ? nick : r.campaignName) ?? "";
+      };
+      filtered.sort((a, b) => labelOf(a).localeCompare(labelOf(b), "zh-TW"));
+      if (nameSort === "desc") filtered.reverse();
+    }
+    return filtered;
+  }, [rows, search, hideZero, nicknames, nameSort, showNicknames]);
 
   const totals = monthTotals(visibleRows, months);
   const grandTotal = Object.values(totals).reduce((a, b) => a + b, 0);
@@ -83,158 +100,182 @@ export function HistoryTable({
           initialDesigner={editing.designer}
         />
       )}
-    <table className="w-full border-collapse text-[13px]">
-      <thead>
-        <tr className="border-b border-border bg-white">
-          <th className="bg-white px-3 py-2.5 text-left text-[12px] font-semibold text-ink">
-            行銷活動
-          </th>
-          {months.map((m) => (
-            <th
-              key={m.key}
-              className="whitespace-nowrap px-3 py-2.5 text-right text-[12px] font-semibold text-ink"
-            >
-              <div>{m.label}</div>
-              {m.hint && <div className="text-[10px] font-normal text-gray-300">{m.hint}</div>}
+      <table className="w-full border-collapse text-[13px]">
+        <thead>
+          <tr className="border-b border-border bg-white">
+            <th className="bg-white px-3 py-2.5 text-left text-[12px] font-semibold text-ink">
+              <button
+                type="button"
+                onClick={cycleNameSort}
+                className="inline-flex cursor-pointer items-center gap-1 bg-transparent text-ink hover:text-orange"
+                aria-label="依活動名稱排序"
+                aria-sort={
+                  nameSort === "asc" ? "ascending" : nameSort === "desc" ? "descending" : "none"
+                }
+              >
+                行銷活動
+                <SortIcon dir={nameSort} />
+              </button>
             </th>
-          ))}
-          <th className="whitespace-nowrap px-3 py-2.5 text-right text-[12px] font-semibold text-orange">
-            合計
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {visibleRows.map((row) => {
-          const nickLabel = formatNickname(nicknames[row.campaignId]);
-          const display = showNicknames && nickLabel ? nickLabel : row.campaignName;
-          return (
-          <tr
-            key={row.campaignId}
-            className="border-b border-border bg-white hover:bg-orange-bg"
-          >
-            <td
-              className="bg-inherit px-3 py-2 text-[13px] font-medium text-ink"
-              title={row.campaignName}
-            >
-              <div className="flex items-center gap-1.5">
-                <span className="min-w-0 max-w-[240px] flex-1 truncate">{display}</span>
-                <button
-                  type="button"
-                  title="編輯暱稱"
-                  aria-label={`編輯暱稱 ${row.campaignName}`}
-                  onClick={() =>
-                    setEditing({
-                      id: row.campaignId,
-                      name: row.campaignName,
-                      store: nicknames[row.campaignId]?.store ?? "",
-                      designer: nicknames[row.campaignId]?.designer ?? "",
-                    })
-                  }
-                  className="shrink-0 cursor-pointer text-gray-300 hover:text-orange"
+            {months.map((m) => (
+              <th
+                key={m.key}
+                className="whitespace-nowrap px-3 py-2.5 text-right text-[12px] font-semibold text-ink"
+              >
+                <div>{m.label}</div>
+                {m.hint && <div className="text-[10px] font-normal text-gray-300">{m.hint}</div>}
+              </th>
+            ))}
+            <th className="whitespace-nowrap px-3 py-2.5 text-right text-[12px] font-semibold text-orange">
+              合計
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {visibleRows.map((row) => {
+            const nickLabel = formatNickname(nicknames[row.campaignId]);
+            const display = showNicknames && nickLabel ? nickLabel : row.campaignName;
+            return (
+              <tr
+                key={row.campaignId}
+                className="border-b border-border bg-white hover:bg-orange-bg"
+              >
+                <td
+                  className="bg-inherit px-3 py-2 text-[13px] font-medium text-ink"
+                  title={row.campaignName}
                 >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
-                  </svg>
-                </button>
-                <FbCampaignLink
-                  campaignId={row.campaignId}
-                  accountId={accountId ?? undefined}
-                  campaignName={row.campaignName}
-                  businessId={businessId}
-                />
-                {accountId && (
-                  <button
-                    type="button"
-                    title="報告"
-                    aria-label={`報告 ${row.campaignName}`}
-                    onClick={async () => {
-                      const url = buildShareUrl({
-                        campaignId: row.campaignId,
-                        accountId,
-                        hideMoney: true,
-                        datePreset: "this_month",
-                      });
-                      try {
-                        await navigator.clipboard.writeText(url);
-                        toast("已複製分享連結", "success", 2500);
-                      } catch {
-                        /* clipboard unavailable */
+                  <div className="flex items-center gap-1.5">
+                    <span className="min-w-0 max-w-[240px] flex-1 truncate">{display}</span>
+                    <button
+                      type="button"
+                      title="編輯暱稱"
+                      aria-label={`編輯暱稱 ${row.campaignName}`}
+                      onClick={() =>
+                        setEditing({
+                          id: row.campaignId,
+                          name: row.campaignName,
+                          store: nicknames[row.campaignId]?.store ?? "",
+                          designer: nicknames[row.campaignId]?.designer ?? "",
+                        })
                       }
-                      window.open(url, "_blank", "noopener,noreferrer");
-                    }}
-                    className="shrink-0 cursor-pointer text-gray-300 hover:text-orange"
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
+                      className="shrink-0 cursor-pointer text-gray-300 hover:text-orange"
                     >
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                      <line x1="8" y1="13" x2="16" y2="13" />
-                      <line x1="8" y1="17" x2="16" y2="17" />
-                      <line x1="8" y1="9" x2="10" y2="9" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            </td>
-            {months.map((m) => {
-              const v = row.spendByMonth[m.key] ?? 0;
-              return (
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                      </svg>
+                    </button>
+                    <FbCampaignLink
+                      campaignId={row.campaignId}
+                      accountId={accountId ?? undefined}
+                      campaignName={row.campaignName}
+                      businessId={businessId}
+                    />
+                    {accountId && (
+                      <button
+                        type="button"
+                        title="報告"
+                        aria-label={`報告 ${row.campaignName}`}
+                        onClick={async () => {
+                          const url = buildShareUrl({
+                            campaignId: row.campaignId,
+                            accountId,
+                            hideMoney: true,
+                            datePreset: "this_month",
+                          });
+                          try {
+                            await navigator.clipboard.writeText(url);
+                            toast("已複製分享連結", "success", 2500);
+                          } catch {
+                            /* clipboard unavailable */
+                          }
+                          window.open(url, "_blank", "noopener,noreferrer");
+                        }}
+                        className="shrink-0 cursor-pointer text-gray-300 hover:text-orange"
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                          <line x1="8" y1="13" x2="16" y2="13" />
+                          <line x1="8" y1="17" x2="16" y2="17" />
+                          <line x1="8" y1="9" x2="10" y2="9" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </td>
+                {months.map((m) => {
+                  const v = row.spendByMonth[m.key] ?? 0;
+                  return (
+                    <td key={m.key} className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                      {v > 0 ? `$${fM(v)}` : <span className="text-gray-300">—</span>}
+                    </td>
+                  );
+                })}
+                <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums text-orange">
+                  ${fM(row.total)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        {visibleRows.length > 0 && (
+          <tfoot>
+            <tr className="border-t-2 border-border bg-bg">
+              <td className="bg-bg px-3 py-2.5 text-[12px] font-semibold text-ink">合計</td>
+              {months.map((m) => (
                 <td
                   key={m.key}
-                  className="whitespace-nowrap px-3 py-2 text-right tabular-nums"
+                  className="whitespace-nowrap px-3 py-2.5 text-right text-[12px] font-semibold tabular-nums text-ink"
                 >
-                  {v > 0 ? `$${fM(v)}` : <span className="text-gray-300">—</span>}
+                  ${fM(totals[m.key] ?? 0)}
                 </td>
-              );
-            })}
-            <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums text-orange">
-              ${fM(row.total)}
-            </td>
-          </tr>
-          );
-        })}
-      </tbody>
-      {visibleRows.length > 0 && (
-        <tfoot>
-          <tr className="border-t-2 border-border bg-bg">
-            <td className="bg-bg px-3 py-2.5 text-[12px] font-semibold text-ink">
-              合計
-            </td>
-            {months.map((m) => (
-              <td
-                key={m.key}
-                className="whitespace-nowrap px-3 py-2.5 text-right text-[12px] font-semibold tabular-nums text-ink"
-              >
-                ${fM(totals[m.key] ?? 0)}
+              ))}
+              <td className="whitespace-nowrap px-3 py-2.5 text-right text-[12px] font-semibold tabular-nums text-orange">
+                ${fM(grandTotal)}
               </td>
-            ))}
-            <td className="whitespace-nowrap px-3 py-2.5 text-right text-[12px] font-semibold tabular-nums text-orange">
-              ${fM(grandTotal)}
-            </td>
-          </tr>
-        </tfoot>
-      )}
-    </table>
+            </tr>
+          </tfoot>
+        )}
+      </table>
     </>
+  );
+}
+
+function SortIcon({ dir }: { dir: "asc" | "desc" | null }) {
+  // Double chevron with one side dimmed when inactive, both dimmed
+  // when no sort is applied. Keeps the header height stable across
+  // the three states (no "column shifts when you click it" jank).
+  const upOn = dir === "asc";
+  const downOn = dir === "desc";
+  const neither = dir === null;
+  return (
+    <svg width="10" height="12" viewBox="0 0 10 12" aria-hidden="true" className="shrink-0">
+      <path d="M5 1 L9 5 L1 5 Z" fill={upOn ? "currentColor" : neither ? "#CCCCCC" : "#DDDDDD"} />
+      <path
+        d="M5 11 L9 7 L1 7 Z"
+        fill={downOn ? "currentColor" : neither ? "#CCCCCC" : "#DDDDDD"}
+      />
+    </svg>
   );
 }
