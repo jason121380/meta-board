@@ -22,6 +22,11 @@ const config: Config = {
           DEFAULT: "#FF6B2C",
           dark: "#E55A1C",
           bg: "#FFF5F0",
+          // Softer warm-white used as a faint row background behind
+          // third-level creatives in the dashboard tree. Keep separate
+          // from `orange.bg` so row states (loading / empty) can step
+          // through two distinct tints.
+          soft: "#FFFCFA",
           border: "#FFE8D9",
           muted: "#B07A50",
         },
@@ -47,6 +52,10 @@ const config: Config = {
         red: {
           DEFAULT: "#C62828",
           bg: "#FFEBEE",
+          // Hover tint for danger buttons — one step darker than
+          // `red.bg` so the button visibly reacts on hover without
+          // losing the soft-red identity.
+          bgHover: "#FFCDD2",
         },
         yellow: {
           DEFAULT: "#E65100",
@@ -72,7 +81,11 @@ const config: Config = {
         md: "0 4px 24px rgba(0,0,0,0.08)",
       },
       spacing: {
-        sidebar: "220px",
+        // Single source of truth for the desktop left-sidebar width.
+        // Sidebar + Shell both read it via `w-sidebar` / `ml-sidebar`.
+        // Mobile (<768px) uses a 280px drawer width declared in
+        // globals.css and is unaffected by this token.
+        sidebar: "180px",
       },
       fontSize: {
         xxs: ["10px", { lineHeight: "1.3" }],

@@ -1,10 +1,11 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useAdsets } from "@/api/hooks/useAdsets";
-import { useEntityStatusMutation } from "@/api/hooks/useEntityMutations";
+import { mutationErrorMessage, useEntityStatusMutation } from "@/api/hooks/useEntityMutations";
 import { Badge } from "@/components/Badge";
 import { confirm } from "@/components/ConfirmDialog";
 import { FbCampaignLink } from "@/components/FbCampaignLink";
 import { Spinner } from "@/components/Spinner";
+import { toast } from "@/components/Toast";
 import { Toggle } from "@/components/Toggle";
 import type { DateConfig } from "@/lib/datePicker";
 import { fM, fN, fP } from "@/lib/format";
@@ -69,8 +70,9 @@ function CampaignRowInner({
     if (!ok) return;
     try {
       await mutation.mutateAsync({ kind: "campaign", id: campaign.id, status });
-    } catch {
-      /* query refetch handles revert */
+      toast(`已${action}行銷活動`, "success");
+    } catch (e) {
+      toast(`${action}行銷活動失敗：${mutationErrorMessage(e)}`, "error", 4500);
     }
   };
 
@@ -146,7 +148,17 @@ function CampaignRowInner({
                 onOpenBudget({ kind: "campaign", id: campaign.id, name: campaign.name })
               }
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
                 <line x1="12" y1="1" x2="12" y2="23" />
                 <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
               </svg>
@@ -158,7 +170,17 @@ function CampaignRowInner({
               className="cursor-pointer border-0 bg-transparent p-1 text-gray-400 hover:text-orange outline-none"
               onClick={() => setReportOpen(true)}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                 <polyline points="14 2 14 8 20 8" />
                 <line x1="8" y1="13" x2="16" y2="13" />
@@ -169,12 +191,7 @@ function CampaignRowInner({
           </div>
         </td>
       </tr>
-      <ReportModal
-        open={reportOpen}
-        onOpenChange={setReportOpen}
-        campaign={campaign}
-        date={date}
-      />
+      <ReportModal open={reportOpen} onOpenChange={setReportOpen} campaign={campaign} date={date} />
       {expanded && (
         <CampaignAdsets
           query={adsetsQuery}

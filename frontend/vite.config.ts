@@ -29,6 +29,11 @@ export default defineConfig({
         display: "standalone",
         orientation: "any",
         start_url: "/",
+        // Explicit scope avoids older iOS Safari defaulting the PWA
+        // scope to the manifest path and refusing to control routes
+        // like /analytics or /r/:id. Modern browsers infer this from
+        // start_url anyway, so it's belt-and-suspenders.
+        scope: "/",
         icons: [
           {
             src: "/icon-192.png",
@@ -49,13 +54,15 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
-            // Network-first for API so cached insights never stale out.
+            // API calls bypass the SW cache entirely. React Query
+            // already owns application-level caching with proper
+            // invalidation on mutations; a second SW cache in front
+            // of it could serve a stale campaign list right after a
+            // PAUSE toggle (NetworkFirst falls back to stale-cache on
+            // a slow network even when the POST succeeded), which is
+            // the "關掉廣告沒反應" symptom we hit in production.
             urlPattern: /\/api\//,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "api-cache",
-              networkTimeoutSeconds: 10,
-            },
+            handler: "NetworkOnly",
           },
           {
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//,

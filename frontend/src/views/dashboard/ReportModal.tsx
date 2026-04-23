@@ -80,9 +80,7 @@ export function ReportModal({
         campaign={campaign}
         adsets={adsetsQuery.data ?? null}
         adsetsLoading={adsetsQuery.isLoading || adsetsQuery.isPending}
-        adsetsError={
-          adsetsQuery.error instanceof Error ? adsetsQuery.error.message : null
-        }
+        adsetsError={adsetsQuery.error instanceof Error ? adsetsQuery.error.message : null}
         hideMoney={hideMoney}
         dateLabel={toLabel(date)}
       />

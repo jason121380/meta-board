@@ -98,4 +98,3 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   return <>{children}</>;
 }
-

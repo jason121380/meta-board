@@ -70,9 +70,7 @@ export function ShareReportPage() {
               campaign={campaign}
               adsets={adsetsQuery.data ?? null}
               adsetsLoading={adsetsQuery.isLoading}
-              adsetsError={
-                adsetsQuery.error instanceof Error ? adsetsQuery.error.message : null
-              }
+              adsetsError={adsetsQuery.error instanceof Error ? adsetsQuery.error.message : null}
               hideMoney={hideMoney}
               dateLabel={toLabel(date)}
             />

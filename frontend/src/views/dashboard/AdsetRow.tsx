@@ -1,8 +1,9 @@
 import { useCreatives } from "@/api/hooks/useCreatives";
-import { useEntityStatusMutation } from "@/api/hooks/useEntityMutations";
+import { mutationErrorMessage, useEntityStatusMutation } from "@/api/hooks/useEntityMutations";
 import { Badge } from "@/components/Badge";
 import { confirm } from "@/components/ConfirmDialog";
 import { Spinner } from "@/components/Spinner";
+import { toast } from "@/components/Toast";
 import { Toggle } from "@/components/Toggle";
 import type { DateConfig } from "@/lib/datePicker";
 import { fM, fN, fP } from "@/lib/format";
@@ -53,8 +54,9 @@ function AdsetRowInner({ adset, multiAcct, colCount, date, onOpenBudget }: Adset
     if (!ok) return;
     try {
       await mutation.mutateAsync({ kind: "adset", id: adset.id, status });
-    } catch {
-      /* swallow — query refetch will sync eventually */
+      toast(`已${action}廣告組合`, "success");
+    } catch (e) {
+      toast(`${action}廣告組合失敗：${mutationErrorMessage(e)}`, "error", 4500);
     }
   };
 
@@ -113,7 +115,17 @@ function AdsetRowInner({ adset, multiAcct, colCount, date, onOpenBudget }: Adset
               className="cursor-pointer border-0 bg-transparent p-1 text-gray-400 hover:text-orange outline-none"
               onClick={() => onOpenBudget({ kind: "adset", id: adset.id, name: adset.name })}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
                 <line x1="12" y1="1" x2="12" y2="23" />
                 <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
               </svg>
@@ -142,7 +154,7 @@ function AdsetCreatives({
   if (query.isLoading || query.isPending) {
     return (
       <tr className="creative-row">
-        <td colSpan={colCount} style={{ background: "#FFFCFA" }}>
+        <td colSpan={colCount} className="bg-orange-soft">
           <div className="flex items-center gap-2.5 pl-[72px] pr-6 py-3 text-[13px] font-semibold text-orange">
             <Spinner size={16} /> 載入廣告中...
           </div>
@@ -153,7 +165,7 @@ function AdsetCreatives({
   if (query.isError) {
     return (
       <tr className="creative-row">
-        <td colSpan={colCount} style={{ background: "#FFF5F0" }}>
+        <td colSpan={colCount} className="bg-orange-bg">
           <div className="pl-[72px] pr-6 py-3 text-[13px] font-semibold text-red">
             無法載入廣告：{query.error instanceof Error ? query.error.message : "未知錯誤"}
           </div>
@@ -165,7 +177,7 @@ function AdsetCreatives({
   if (data.length === 0) {
     return (
       <tr className="creative-row">
-        <td colSpan={colCount} style={{ background: "#FFFCFA" }}>
+        <td colSpan={colCount} className="bg-orange-soft">
           <div className="pl-[72px] pr-6 py-3 text-[13px] font-medium text-gray-500">
             此廣告組合下沒有廣告
           </div>

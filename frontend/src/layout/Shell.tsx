@@ -14,8 +14,12 @@ import { Sidebar } from "./Sidebar";
  * by 100dvh so mobile Safari's address bar doesn't push the bottom of
  * the view off-screen:
  *   .layout   { display: flex; height: 100dvh; overflow: hidden; }
- *   .main     { margin-left: 220px; flex: 1; height: 100dvh;
+ *   .main     { margin-left: 180px; flex: 1; height: 100dvh;
  *                overflow: hidden; flex-direction: column; }
+ *
+ * Desktop sidebar width is the `sidebar` spacing token
+ * (tailwind.config.ts) — kept as a single source of truth so
+ * `w-sidebar` / `ml-sidebar` stay in sync.
  *
  * Mobile (<= 768px): the sidebar slides off-screen and the main
  * content fills the full width. A hamburger button in the topbar
@@ -66,7 +70,7 @@ export function Shell() {
           tab bar visually eats ~22px of the last row on iPhones with
           a home indicator. Desktop env() resolves to 0 and md:pb-0
           wipes the floor-60 anyway. */}
-      <main className="shell-main ml-[180px] flex h-[100dvh] flex-1 flex-col overflow-x-hidden overflow-y-auto bg-bg pb-[calc(60px+env(safe-area-inset-bottom))] md:pb-0">
+      <main className="shell-main ml-sidebar flex h-[100dvh] flex-1 flex-col overflow-x-hidden overflow-y-auto bg-bg pb-[calc(60px+env(safe-area-inset-bottom))] md:pb-0">
         <MobileToggleContext.Provider value={() => setMobileOpen((v) => !v)}>
           {preloadDone && <Outlet />}
         </MobileToggleContext.Provider>

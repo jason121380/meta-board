@@ -28,7 +28,7 @@ const buttonVariants = cva(
           "bg-transparent text-ink border-border",
           "hover:bg-orange-bg hover:text-orange hover:border-orange-border",
         ],
-        danger: ["bg-red-bg text-red border-transparent", "hover:bg-[#FFCDD2]"],
+        danger: ["bg-red-bg text-red border-transparent", "hover:bg-red-bgHover"],
       },
       size: {
         md: "h-9 px-[18px] text-[13px]",

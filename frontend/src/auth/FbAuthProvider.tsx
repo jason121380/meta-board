@@ -137,7 +137,7 @@ export function FbAuthProvider({ children }: { children: ReactNode }) {
         const result = await api.auth.setToken(token);
         // Cache token locally to survive refreshes without relying on FB cookies
         localStorage.setItem("meta_dash_fb_token", token);
-        
+
         const name = result.name ?? "User";
         const id = result.id ?? "";
         const pictureUrl = result.pictureUrl;
