@@ -5,8 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 
 /**
- * Left sidebar — 220px fixed, 60px logo header, nav items, user
- * dropdown at the bottom that opens upward.
+ * Left sidebar — 180px fixed on desktop (`w-sidebar`, see
+ * tailwind.config spacing), 280px drawer on mobile (globals.css
+ * @media override). 60px logo header, nav items, user dropdown at
+ * the bottom that opens upward.
  *
  * Layout and behavior ported from the original template.
  * Five visible nav items: 儀表板 / 數據分析 / 警示列表 / 費用中心 / 設定.
@@ -195,7 +197,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       // in on mobile. Desktop env() resolves to 0, so no change.
       style={{ paddingTop: "env(safe-area-inset-top)" }}
       className={cn(
-        "shell-sidebar fixed inset-y-0 left-0 z-[100] flex w-[180px] flex-col overflow-y-auto border-r border-border bg-white",
+        "shell-sidebar fixed inset-y-0 left-0 z-[100] flex w-sidebar flex-col overflow-y-auto border-r border-border bg-white",
       )}
       onClick={() => {
         // Tapping a link inside the sidebar triggers a route change

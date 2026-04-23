@@ -176,7 +176,7 @@
     padding: 6px 14px;
     vertical-align: middle;
   }
-  
+
   table.tree tr.campaign-row {
     background: var(--white);
   }
@@ -279,14 +279,15 @@
  * Rather than re-declaring every Tailwind utility class, we target
  * the semantic anchors placed on key layout nodes:
  *   .shell-root    → outermost layout flex
- *   .shell-sidebar → 220px fixed sidebar
+ *   .shell-sidebar → 180px fixed sidebar (desktop; see tailwind
+ *                    spacing.sidebar token), 280px drawer on mobile
  *   .shell-main    → right-side content pane
  *   .shell-hamburger → mobile-only toggle button in Topbar
  *
  * On mobile:
  *   - The sidebar slides off-screen and animates back in when
  *     `data-mobile-open="true"` (set by Shell state)
- *   - The main content loses its 220px left margin
+ *   - The main content loses its 180px left margin
  *   - The hamburger button appears in every Topbar
  *   - Flex layouts that use side-by-side panels (dashboard / alerts
  *     / finance / settings) aren't broken: they each use their own

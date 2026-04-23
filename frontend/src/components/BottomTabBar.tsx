@@ -276,10 +276,20 @@ export function BottomTabBar() {
   return (
     <>
       <nav
-        className="btm-tab-bar fixed inset-x-0 bottom-0 z-[200] border-t border-border bg-white/95 backdrop-blur-md md:hidden"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        // Explicit 60px intrinsic height keeps this in sync with the
+        // `pb-[calc(60px+safe-area)]` reserved in Shell. Without it,
+        // the bar leans on icon + padding to derive its own height
+        // and any future icon resize would leak under the main view.
+        className="btm-tab-bar fixed inset-x-0 bottom-0 z-[200] h-[60px] border-t border-border bg-white/95 backdrop-blur-md md:hidden"
+        style={{
+          paddingBottom: "env(safe-area-inset-bottom)",
+          // The 60px height covers the tappable row; the safe-area
+          // inset extends the bar below it into the home-indicator
+          // zone so the border/backdrop visually fill the notch.
+          height: "calc(60px + env(safe-area-inset-bottom))",
+        }}
       >
-        <div className="flex">
+        <div className="flex h-[60px]">
           {TABS.map((tab) => {
             const active = pathname.startsWith(tab.path);
             return (

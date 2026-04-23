@@ -50,9 +50,7 @@ export function ReportContent({
               {campaign.objective}
             </span>
           )}
-          {dateLabel && (
-            <span className="ml-auto text-[11px] text-gray-500">{dateLabel}</span>
-          )}
+          {dateLabel && <span className="ml-auto text-[11px] text-gray-500">{dateLabel}</span>}
         </div>
         <div className="text-[15px] font-bold text-ink md:text-base">{campaign.name}</div>
         {campaign._accountName && (
@@ -116,10 +114,7 @@ export function ReportContent({
                   const am = getMsgCount(a);
                   return (
                     <tr key={a.id} className="border-b border-border hover:bg-orange-bg">
-                      <td
-                        className="max-w-[220px] truncate px-3 py-2 text-ink"
-                        title={a.name}
-                      >
+                      <td className="max-w-[220px] truncate px-3 py-2 text-ink" title={a.name}>
                         {a.name}
                       </td>
                       <td className="px-3 py-2">
@@ -130,9 +125,7 @@ export function ReportContent({
                       <td className="px-3 py-2 text-right tabular-nums">{fN(ai.clicks)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{fP(ai.ctr)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{money(ai.cpc)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {am > 0 ? fN(am) : "—"}
-                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">{am > 0 ? fN(am) : "—"}</td>
                     </tr>
                   );
                 })}

@@ -171,13 +171,13 @@ export function DataPreloader({ onComplete }: { onComplete: () => void }) {
   // Display = max(real, time) — real progress always wins when it
   // jumps ahead (batch completes), time fills the gaps in between.
   const pct = Math.round(Math.max(realPct, timePct));
-  
+
   // To keep the illusion intact, the accompanying text "(X / Y)" must
   // smoothly match the fake percentage rather than staying frozen at
   // the real loaded count.
   const displayLoaded = Math.min(
     progress.total,
-    Math.max(progress.loaded, Math.round((pct / 100) * progress.total))
+    Math.max(progress.loaded, Math.round((pct / 100) * progress.total)),
   );
 
   if (done) return null;

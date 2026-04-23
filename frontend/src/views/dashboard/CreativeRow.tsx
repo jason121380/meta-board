@@ -1,6 +1,7 @@
-import { useEntityStatusMutation } from "@/api/hooks/useEntityMutations";
+import { mutationErrorMessage, useEntityStatusMutation } from "@/api/hooks/useEntityMutations";
 import { Badge } from "@/components/Badge";
 import { confirm } from "@/components/ConfirmDialog";
+import { toast } from "@/components/Toast";
 import { Toggle } from "@/components/Toggle";
 import { isFrontPostCreative } from "@/lib/fbLinks";
 import { fM, fN, fP } from "@/lib/format";
@@ -51,8 +52,9 @@ function CreativeRowInner({ creative, multiAcct }: CreativeRowProps) {
     if (!ok) return;
     try {
       await mutation.mutateAsync({ kind: "creative", id: creative.id, status });
-    } catch {
-      /* error toast TBD — for now swallow and let the query refetch */
+      toast(`已${action}廣告`, "success");
+    } catch (e) {
+      toast(`${action}廣告失敗：${mutationErrorMessage(e)}`, "error", 4500);
     }
   };
 

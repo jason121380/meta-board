@@ -179,7 +179,9 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
                       <span
                         className={cn(
                           "min-w-0 flex-1 truncate",
-                          multiAcct ? "max-w-[160px] md:max-w-[260px]" : "max-w-[200px] md:max-w-[300px]",
+                          multiAcct
+                            ? "max-w-[160px] md:max-w-[260px]"
+                            : "max-w-[200px] md:max-w-[300px]",
                         )}
                       >
                         {(() => {

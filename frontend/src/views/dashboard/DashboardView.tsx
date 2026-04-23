@@ -204,9 +204,6 @@ export function DashboardView() {
         </div>
       </Topbar>
 
-
-
-
       <div className="flex min-w-0 items-start md:flex-row">
         {/* Desktop sidebar (≥768px) */}
         <div className="hidden md:flex">
@@ -217,7 +214,6 @@ export function DashboardView() {
             onSelect={(account) => setActiveIds([account.id])}
           />
         </div>
-
 
         <div className="min-w-0 flex-1">
           {!statsCollapsed && (
