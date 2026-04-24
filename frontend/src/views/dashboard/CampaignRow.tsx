@@ -1,6 +1,7 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useAdsets } from "@/api/hooks/useAdsets";
 import { mutationErrorMessage, useEntityStatusMutation } from "@/api/hooks/useEntityMutations";
+import { useLinePushConfigs } from "@/api/hooks/useLinePush";
 import { Badge } from "@/components/Badge";
 import { confirm } from "@/components/ConfirmDialog";
 import { FbCampaignLink } from "@/components/FbCampaignLink";
@@ -15,6 +16,7 @@ import type { FbCampaign } from "@/types/fb";
 import { memo, useState } from "react";
 import { AdsetRow } from "./AdsetRow";
 import type { BudgetModalTarget } from "./BudgetModal";
+import { LinePushModal } from "./LinePushModal";
 import { ReportModal } from "./ReportModal";
 
 export interface CampaignRowProps {
@@ -56,6 +58,13 @@ function CampaignRowInner({
   const accountsQuery = useAccounts();
   const businessId = accountsQuery.data?.find((a) => a.id === campaign._accountId)?.business?.id;
   const [reportOpen, setReportOpen] = useState(false);
+  const [linePushOpen, setLinePushOpen] = useState(false);
+  // Lightly-cached query (30s staleTime) so the LINE icon can light
+  // up orange when the campaign already has at least one active
+  // pairing. Only fetched when the row is mounted, i.e. when the
+  // parent TreeTable decides to render it.
+  const linePushConfigs = useLinePushConfigs(campaign.id);
+  const hasActivePush = (linePushConfigs.data ?? []).some((c) => c.enabled);
 
   const ins = getIns(campaign);
   const msgs = getMsgCount(campaign);
@@ -165,6 +174,29 @@ function CampaignRowInner({
             </button>
             <button
               type="button"
+              title={hasActivePush ? "LINE 推播已啟用" : "LINE 推播設定"}
+              aria-label="LINE 推播設定"
+              className={`cursor-pointer border-0 bg-transparent p-1 outline-none hover:text-orange ${
+                hasActivePush ? "text-orange" : "text-gray-400"
+              }`}
+              onClick={() => setLinePushOpen(true)}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+              </svg>
+            </button>
+            <button
+              type="button"
               title="報告"
               aria-label="報告"
               className="cursor-pointer border-0 bg-transparent p-1 text-gray-400 hover:text-orange outline-none"
@@ -192,6 +224,7 @@ function CampaignRowInner({
         </td>
       </tr>
       <ReportModal open={reportOpen} onOpenChange={setReportOpen} campaign={campaign} date={date} />
+      <LinePushModal open={linePushOpen} onOpenChange={setLinePushOpen} campaign={campaign} />
       {expanded && (
         <CampaignAdsets
           query={adsetsQuery}

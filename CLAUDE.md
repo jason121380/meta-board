@@ -24,6 +24,9 @@ Connects to Facebook Marketing API v21.0 to manage 80+ ad accounts across multip
     - `campaign_nicknames` (campaign_id → store, designer) — shared team-wide
     - `user_settings` (fb_user_id, key, value JSONB) — per-user: `selected_accounts`, `account_order`
     - `shared_settings` (key, value JSONB) — team-wide: `finance_row_markups`, `finance_pinned_ids`, `finance_default_markup`, `finance_show_nicknames`
+    - `line_groups` (group_id PK, label, joined_at, left_at) — auto-upserted by the `/api/line/webhook` route on LINE `join`/`leave` events
+    - `campaign_line_push_configs` (campaign ↔ group pairings: frequency, weekdays/month_day, hour/minute, date_range, enabled, next_run_at, fail_count) — partial index on `(next_run_at) WHERE enabled` for the scheduler tick
+    - `line_push_logs` (per-push audit rows, success/error/preview)
   - **Browser localStorage** — ephemeral UI state only:
     - `fb_active_accounts` (dashboard current selection — intentionally NOT synced)
     - `filter_active_only`, date-picker preferences, sidebar collapse state
@@ -47,6 +50,10 @@ Connects to Facebook Marketing API v21.0 to manage 80+ ad accounts across multip
 ## Environment Variables
 
 ```
+LINE_CHANNEL_ACCESS_TOKEN — LINE Messaging API channel access token (required for push)
+LINE_CHANNEL_SECRET       — LINE channel secret (verifies X-Line-Signature on /api/line/webhook)
+LINE_MOCK                 — Set to "1" to print push payloads instead of calling LINE (dev)
+SCHEDULER_TZ              — IANA zone for HH:MM in push configs (default Asia/Taipei)
 FB_APP_ID       — Facebook App ID (2780372365654462)
 FB_APP_SECRET   — Facebook App Secret
 FB_ACCESS_TOKEN — Long-lived user access token (fallback, overridden by FB Login)
