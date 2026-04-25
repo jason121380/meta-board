@@ -10,6 +10,7 @@ import { queryClient } from "@/lib/queryClient";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { LineGroupsModal } from "./LineGroupsModal";
 import {
   countChecked,
   groupAccountsByBusiness,
@@ -45,6 +46,7 @@ export function SettingsView() {
   );
   const [search, setSearch] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [lineGroupsOpen, setLineGroupsOpen] = useState(false);
 
   // Auto-select the first BM group when the list loads and nothing
   // is selected yet — same pattern as Dashboard's auto-select.
@@ -128,8 +130,16 @@ export function SettingsView() {
   return (
     <>
       <Topbar title="設定">
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500">
+        <div className="flex items-center gap-2 md:gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLineGroupsOpen(true)}
+            className="hidden md:inline-flex"
+          >
+            LINE 群組
+          </Button>
+          <span className="hidden text-xs text-gray-500 md:inline">
             已選 {pendingCount} / {totalCount} 個帳戶
           </span>
           <Button variant="primary" size="sm" onClick={save}>
@@ -137,6 +147,7 @@ export function SettingsView() {
           </Button>
         </div>
       </Topbar>
+      <LineGroupsModal open={lineGroupsOpen} onOpenChange={setLineGroupsOpen} />
 
       <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
         {/* Left: BM panel — full-width horizontal scroll on mobile,
