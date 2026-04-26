@@ -236,7 +236,7 @@ const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(function 
 
       {/* Basic data table */}
       <div className="mt-5">
-        <SectionTitle>基礎數據</SectionTitle>
+        <SectionTitle>數據總覽</SectionTitle>
         <table className="mt-2 w-full border-collapse text-[12px]">
           <thead>
             <tr className="bg-orange-bg">
