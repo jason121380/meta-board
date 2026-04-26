@@ -153,7 +153,9 @@ export function ReportContent({
         </div>
       )}
 
-      {/* Adsets — auto-expanded */}
+      {/* Adsets — auto-expanded. Hide zero-spend ones (paused or
+          never delivered) since their entire row would be a wall of
+          em-dashes that adds noise without insight. */}
       <div className="flex flex-col gap-3">
         <div className="text-[15px] font-bold text-ink">廣告組合表現</div>
         {adsetsLoading ? (
@@ -164,21 +166,27 @@ export function ReportContent({
           <div className="rounded-xl border border-border bg-white px-3 py-4 text-[13px] text-red">
             載入失敗:{adsetsError}
           </div>
-        ) : !adsets || adsets.length === 0 ? (
-          <div className="rounded-xl border border-border bg-white px-3 py-4 text-[13px] text-gray-300">
-            無廣告組合
-          </div>
         ) : (
-          adsets.map((a) => (
-            <AdsetCard
-              key={a.id}
-              adset={a}
-              date={date}
-              hideMoney={hideMoney}
-              money={money}
-              trafficMode={trafficMode}
-            />
-          ))
+          (() => {
+            const visible = (adsets ?? []).filter((a) => num(getIns(a).spend) > 0);
+            if (visible.length === 0) {
+              return (
+                <div className="rounded-xl border border-border bg-white px-3 py-4 text-[13px] text-gray-300">
+                  此區間無花費的廣告組合
+                </div>
+              );
+            }
+            return visible.map((a) => (
+              <AdsetCard
+                key={a.id}
+                adset={a}
+                date={date}
+                hideMoney={hideMoney}
+                money={money}
+                trafficMode={trafficMode}
+              />
+            ));
+          })()
         )}
       </div>
     </div>
@@ -275,18 +283,22 @@ function AdCards({
   // Rank ads within this adset:
   //   - traffic mode → CTR (higher is better)
   //   - else: msgCost (lower) when any has messages, fallback to CTR
-  const scored: ScoredAd[] = ads.map((ad) => {
-    const ains = getIns(ad);
-    const m = getMsgCount(ad);
-    const sp = num(ains.spend);
-    return {
-      ad,
-      spend: sp,
-      msgs: m,
-      msgCost: m > 0 ? sp / m : Number.POSITIVE_INFINITY,
-      ctr: num(ains.ctr),
-    };
-  });
+  // Zero-spend ads are filtered out — they'd be a row of em-dashes
+  // contributing no information to the report.
+  const scored: ScoredAd[] = ads
+    .map((ad) => {
+      const ains = getIns(ad);
+      const m = getMsgCount(ad);
+      const sp = num(ains.spend);
+      return {
+        ad,
+        spend: sp,
+        msgs: m,
+        msgCost: m > 0 ? sp / m : Number.POSITIVE_INFINITY,
+        ctr: num(ains.ctr),
+      };
+    })
+    .filter((s) => s.spend > 0);
 
   const hasMsgPool = !trafficMode && scored.some((s) => s.msgs > 0);
   let bestId: string | null = null;
@@ -313,9 +325,9 @@ function AdCards({
           載入失敗:
           {adsQuery.error instanceof Error ? adsQuery.error.message : "未知錯誤"}
         </div>
-      ) : ads.length === 0 ? (
+      ) : scored.length === 0 ? (
         <div className="rounded-lg border border-border bg-bg px-3 py-3 text-[13px] text-gray-300">
-          無素材
+          此區間無花費的素材
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">

@@ -2,13 +2,11 @@ import type { LinePushConfig, LinePushDateRange } from "@/api/client";
 import {
   useLineGroupPushConfigs,
   useLineGroups,
-  useRefreshLineGroupName,
   useUpdateLineGroupLabel,
 } from "@/api/hooks/useLinePush";
-import { Button } from "@/components/Button";
 import { toast } from "@/components/Toast";
 import { cn } from "@/lib/cn";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GroupPushConfigModal } from "./GroupPushConfigModal";
 
 type EditTarget = {
@@ -53,15 +51,30 @@ interface LineGroup {
  * the inline `LineGroupsModal` (Dashboard / legacy entry) and the
  * standalone `LinePushSettingsView` page.
  *
- * Table layout (no per-row card chrome):
- *   群組(主名稱 + ID + 弱化暱稱輸入) | 已設定的推播 | 操作
+ * Two-column table (no per-row "重新抓取" action — the lifespan
+ * backfill on startup keeps `group_name` filled in automatically):
+ *   群組(主名稱 + ID + 弱化暱稱輸入) | 已設定的推播
+ *
+ * Top-of-page search filters by group_name / label / group_id —
+ * essential when the bot is in dozens of groups.
  */
 export function LineGroupsContent() {
   const groupsQuery = useLineGroups();
   const renameMutation = useUpdateLineGroupLabel();
-  const refreshNameMutation = useRefreshLineGroupName();
   const groups = groupsQuery.data ?? [];
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return groups;
+    return groups.filter(
+      (g) =>
+        (g.group_name ?? "").toLowerCase().includes(q) ||
+        (g.label ?? "").toLowerCase().includes(q) ||
+        g.group_id.toLowerCase().includes(q),
+    );
+  }, [groups, query]);
 
   if (groupsQuery.isLoading) {
     return (
@@ -82,68 +95,71 @@ export function LineGroupsContent() {
 
   return (
     <>
+      <div className="mb-3 flex items-center gap-2">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.currentTarget.value)}
+          placeholder="搜尋群組名稱、暱稱或 ID"
+          className="h-9 w-full rounded-lg border border-border bg-white px-3 text-[13px] outline-none focus:border-orange"
+        />
+        <span className="shrink-0 text-[11px] text-gray-300">
+          {filtered.length} / {groups.length}
+        </span>
+      </div>
       <div className="overflow-x-auto rounded-xl border border-border bg-white">
-        <table className="w-full min-w-[520px] border-collapse text-[13px]">
+        <table className="w-full min-w-[480px] border-collapse text-[13px]">
           <thead className="border-b border-border bg-bg text-left">
             <tr>
               <th className="px-3 py-2 font-semibold text-gray-500">群組</th>
               <th className="px-3 py-2 font-semibold text-gray-500">已設定的推播</th>
-              <th className="w-[110px] px-3 py-2 text-right font-semibold text-gray-500">操作</th>
             </tr>
           </thead>
           <tbody>
-            {groups.map((g) => {
-              const displayName = g.group_name?.trim() || g.label?.trim() || g.group_id;
-              return (
-                <GroupRow
-                  key={g.group_id}
-                  group={g}
-                  saving={renameMutation.isPending}
-                  refreshing={refreshNameMutation.isPending}
-                  onSave={async (label) => {
-                    try {
-                      await renameMutation.mutateAsync({ groupId: g.group_id, label });
-                      toast("已更新群組暱稱", "success");
-                    } catch (e) {
-                      toast(
-                        `更新失敗：${e instanceof Error ? e.message : String(e)}`,
-                        "error",
-                        4500,
-                      );
+            {filtered.length === 0 ? (
+              <tr>
+                <td className="px-3 py-4 text-center text-[12px] text-gray-300" colSpan={2}>
+                  無符合搜尋條件的群組
+                </td>
+              </tr>
+            ) : (
+              filtered.map((g) => {
+                const displayName = g.group_name?.trim() || g.label?.trim() || g.group_id;
+                return (
+                  <GroupRow
+                    key={g.group_id}
+                    group={g}
+                    saving={renameMutation.isPending}
+                    onSave={async (label) => {
+                      try {
+                        await renameMutation.mutateAsync({ groupId: g.group_id, label });
+                        toast("已更新群組暱稱", "success");
+                      } catch (e) {
+                        toast(
+                          `更新失敗:${e instanceof Error ? e.message : String(e)}`,
+                          "error",
+                          4500,
+                        );
+                      }
+                    }}
+                    onAddPush={() =>
+                      setEditTarget({
+                        groupId: g.group_id,
+                        groupDisplayName: displayName,
+                        editing: null,
+                      })
                     }
-                  }}
-                  onRefreshName={async () => {
-                    try {
-                      const res = await refreshNameMutation.mutateAsync(g.group_id);
-                      toast(
-                        res.group_name ? `已更新群組名稱:${res.group_name}` : "群組名稱為空",
-                        "success",
-                      );
-                    } catch (e) {
-                      toast(
-                        `抓取失敗:${e instanceof Error ? e.message : String(e)}`,
-                        "error",
-                        4500,
-                      );
+                    onEditPush={(cfg) =>
+                      setEditTarget({
+                        groupId: g.group_id,
+                        groupDisplayName: displayName,
+                        editing: cfg,
+                      })
                     }
-                  }}
-                  onAddPush={() =>
-                    setEditTarget({
-                      groupId: g.group_id,
-                      groupDisplayName: displayName,
-                      editing: null,
-                    })
-                  }
-                  onEditPush={(cfg) =>
-                    setEditTarget({
-                      groupId: g.group_id,
-                      groupDisplayName: displayName,
-                      editing: cfg,
-                    })
-                  }
-                />
-              );
-            })}
+                  />
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
@@ -165,19 +181,15 @@ export function LineGroupsContent() {
 function GroupRow({
   group,
   onSave,
-  onRefreshName,
   onAddPush,
   onEditPush,
   saving,
-  refreshing,
 }: {
   group: LineGroup;
   onSave: (label: string) => Promise<void> | void;
-  onRefreshName: () => Promise<void> | void;
   onAddPush: () => void;
   onEditPush: (cfg: LinePushConfig) => void;
   saving: boolean;
-  refreshing: boolean;
 }) {
   const [draft, setDraft] = useState(group.label ?? "");
   useEffect(() => {
@@ -237,20 +249,6 @@ function GroupRow({
           onEdit={onEditPush}
           onAdd={left ? undefined : onAddPush}
         />
-      </td>
-
-      {/* 操作 */}
-      <td className="px-3 py-2.5 text-right">
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={refreshing || left}
-          onClick={() => onRefreshName()}
-          className="px-2 text-[11px]"
-          title="從 LINE 重新抓取群組名稱"
-        >
-          {refreshing ? "抓取中..." : "重新抓取"}
-        </Button>
       </td>
     </tr>
   );
