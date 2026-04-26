@@ -9,6 +9,13 @@ import { Button } from "@/components/Button";
 import { toast } from "@/components/Toast";
 import { cn } from "@/lib/cn";
 import { useEffect, useState } from "react";
+import { GroupPushConfigModal } from "./GroupPushConfigModal";
+
+type EditTarget = {
+  groupId: string;
+  groupDisplayName: string;
+  editing: LinePushConfig | null;
+} | null;
 
 const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -52,6 +59,7 @@ export function LineGroupsContent() {
   const renameMutation = useUpdateLineGroupLabel();
   const refreshNameMutation = useRefreshLineGroupName();
   const groups = groupsQuery.data ?? [];
+  const [editTarget, setEditTarget] = useState<EditTarget>(null);
 
   if (groupsQuery.isLoading) {
     return (
@@ -71,46 +79,84 @@ export function LineGroupsContent() {
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-white">
-      <table className="w-full min-w-[520px] border-collapse text-[13px]">
-        <thead className="border-b border-border bg-bg text-left">
-          <tr>
-            <th className="px-3 py-2 font-semibold text-gray-500">群組</th>
-            <th className="px-3 py-2 font-semibold text-gray-500">已設定的推播</th>
-            <th className="w-[110px] px-3 py-2 text-right font-semibold text-gray-500">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {groups.map((g) => (
-            <GroupRow
-              key={g.group_id}
-              group={g}
-              saving={renameMutation.isPending}
-              refreshing={refreshNameMutation.isPending}
-              onSave={async (label) => {
-                try {
-                  await renameMutation.mutateAsync({ groupId: g.group_id, label });
-                  toast("已更新群組暱稱", "success");
-                } catch (e) {
-                  toast(`更新失敗：${e instanceof Error ? e.message : String(e)}`, "error", 4500);
-                }
-              }}
-              onRefreshName={async () => {
-                try {
-                  const res = await refreshNameMutation.mutateAsync(g.group_id);
-                  toast(
-                    res.group_name ? `已更新群組名稱：${res.group_name}` : "群組名稱為空",
-                    "success",
-                  );
-                } catch (e) {
-                  toast(`抓取失敗：${e instanceof Error ? e.message : String(e)}`, "error", 4500);
-                }
-              }}
-            />
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <div className="overflow-x-auto rounded-xl border border-border bg-white">
+        <table className="w-full min-w-[520px] border-collapse text-[13px]">
+          <thead className="border-b border-border bg-bg text-left">
+            <tr>
+              <th className="px-3 py-2 font-semibold text-gray-500">群組</th>
+              <th className="px-3 py-2 font-semibold text-gray-500">已設定的推播</th>
+              <th className="w-[110px] px-3 py-2 text-right font-semibold text-gray-500">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((g) => {
+              const displayName = g.group_name?.trim() || g.label?.trim() || g.group_id;
+              return (
+                <GroupRow
+                  key={g.group_id}
+                  group={g}
+                  saving={renameMutation.isPending}
+                  refreshing={refreshNameMutation.isPending}
+                  onSave={async (label) => {
+                    try {
+                      await renameMutation.mutateAsync({ groupId: g.group_id, label });
+                      toast("已更新群組暱稱", "success");
+                    } catch (e) {
+                      toast(
+                        `更新失敗：${e instanceof Error ? e.message : String(e)}`,
+                        "error",
+                        4500,
+                      );
+                    }
+                  }}
+                  onRefreshName={async () => {
+                    try {
+                      const res = await refreshNameMutation.mutateAsync(g.group_id);
+                      toast(
+                        res.group_name ? `已更新群組名稱:${res.group_name}` : "群組名稱為空",
+                        "success",
+                      );
+                    } catch (e) {
+                      toast(
+                        `抓取失敗:${e instanceof Error ? e.message : String(e)}`,
+                        "error",
+                        4500,
+                      );
+                    }
+                  }}
+                  onAddPush={() =>
+                    setEditTarget({
+                      groupId: g.group_id,
+                      groupDisplayName: displayName,
+                      editing: null,
+                    })
+                  }
+                  onEditPush={(cfg) =>
+                    setEditTarget({
+                      groupId: g.group_id,
+                      groupDisplayName: displayName,
+                      editing: cfg,
+                    })
+                  }
+                />
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {editTarget && (
+        <GroupPushConfigModal
+          open={!!editTarget}
+          onOpenChange={(o) => {
+            if (!o) setEditTarget(null);
+          }}
+          groupId={editTarget.groupId}
+          groupDisplayName={editTarget.groupDisplayName}
+          editing={editTarget.editing}
+        />
+      )}
+    </>
   );
 }
 
@@ -118,12 +164,16 @@ function GroupRow({
   group,
   onSave,
   onRefreshName,
+  onAddPush,
+  onEditPush,
   saving,
   refreshing,
 }: {
   group: LineGroup;
   onSave: (label: string) => Promise<void> | void;
   onRefreshName: () => Promise<void> | void;
+  onAddPush: () => void;
+  onEditPush: (cfg: LinePushConfig) => void;
   saving: boolean;
   refreshing: boolean;
 }) {
@@ -180,7 +230,11 @@ function GroupRow({
 
       {/* 推播設定 */}
       <td className="px-3 py-2.5">
-        <GroupPushConfigsList groupId={group.group_id} />
+        <GroupPushConfigsList
+          groupId={group.group_id}
+          onEdit={onEditPush}
+          onAdd={left ? undefined : onAddPush}
+        />
       </td>
 
       {/* 操作 */}
@@ -200,39 +254,73 @@ function GroupRow({
   );
 }
 
-function GroupPushConfigsList({ groupId }: { groupId: string }) {
+function GroupPushConfigsList({
+  groupId,
+  onEdit,
+  onAdd,
+}: {
+  groupId: string;
+  onEdit: (cfg: LinePushConfig) => void;
+  /** Optional: omit when the bot has left the group (cannot create new). */
+  onAdd?: () => void;
+}) {
   const query = useLineGroupPushConfigs(groupId);
   const configs = query.data ?? [];
 
-  if (query.isLoading) {
-    return <div className="text-[11px] text-gray-300">載入中...</div>;
-  }
-  if (configs.length === 0) {
-    return <div className="text-[11px] text-gray-300">尚無推播設定</div>;
-  }
-
   return (
-    <ul className="flex flex-col gap-1">
-      {configs.map((cfg) => {
-        const name = cfg.campaign_nickname?.trim() || cfg.campaign_id;
-        const dateLabel = DATE_RANGE_LABELS[cfg.date_range] ?? cfg.date_range;
-        const rule = formatPushRule(cfg);
-        return (
-          <li key={cfg.id} className={cn("flex flex-col gap-0.5", !cfg.enabled && "opacity-60")}>
-            <div className="flex items-center gap-2">
-              <span className="truncate text-[12px] font-semibold text-ink">{name}</span>
-              {!cfg.enabled && (
-                <span className="shrink-0 rounded-full bg-red-bg px-1.5 py-[1px] text-[10px] font-semibold text-red">
-                  已停用
-                </span>
-              )}
-            </div>
-            <div className="text-[11px] text-gray-500">
-              {rule} · {dateLabel}
-            </div>
-          </li>
-        );
-      })}
-    </ul>
+    <div className="flex flex-col gap-1.5">
+      {query.isLoading ? (
+        <div className="text-[11px] text-gray-300">載入中...</div>
+      ) : configs.length === 0 ? (
+        <div className="text-[11px] text-gray-300">尚無推播設定</div>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {configs.map((cfg) => {
+            const name = cfg.campaign_nickname?.trim() || cfg.campaign_id;
+            const dateLabel = DATE_RANGE_LABELS[cfg.date_range] ?? cfg.date_range;
+            const rule = formatPushRule(cfg);
+            return (
+              <li
+                key={cfg.id}
+                className={cn(
+                  "group/row flex items-start justify-between gap-2 rounded-md px-1 py-0.5 hover:bg-bg",
+                  !cfg.enabled && "opacity-60",
+                )}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[12px] font-semibold text-ink">{name}</span>
+                    {!cfg.enabled && (
+                      <span className="shrink-0 rounded-full bg-red-bg px-1.5 py-[1px] text-[10px] font-semibold text-red">
+                        已停用
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-gray-500">
+                    {rule} · {dateLabel}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onEdit(cfg)}
+                  className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-gray-500 hover:border-orange hover:text-orange"
+                >
+                  編輯
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {onAdd && (
+        <button
+          type="button"
+          onClick={onAdd}
+          className="self-start rounded-md border border-dashed border-border px-2 py-0.5 text-[11px] text-gray-500 hover:border-orange hover:text-orange"
+        >
+          + 新增推播
+        </button>
+      )}
+    </div>
   );
 }

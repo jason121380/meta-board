@@ -15,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const GROUPS_KEY = ["lineGroups"] as const;
 const CONFIGS_KEY = (campaignId: string) => ["linePush", "configs", campaignId] as const;
+const GROUP_CONFIGS_PREFIX = ["lineGroupConfigs"] as const;
 
 export function useLineGroups() {
   return useQuery({
@@ -73,6 +74,10 @@ export function useSaveLinePushConfig() {
     mutationFn: (payload: LinePushConfigInput) => api.linePush.upsertConfig(payload),
     onSuccess: (_res, payload) => {
       qc.invalidateQueries({ queryKey: CONFIGS_KEY(payload.campaign_id) });
+      // Invalidate group-keyed lists too — same config row also lives
+      // under "this group's configs". We don't know which group_id was
+      // affected (could be a re-bind), so blanket-invalidate.
+      qc.invalidateQueries({ queryKey: GROUP_CONFIGS_PREFIX });
     },
   });
 }
@@ -83,6 +88,7 @@ export function useDeleteLinePushConfig(campaignId: string) {
     mutationFn: (id: string) => api.linePush.deleteConfig(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: CONFIGS_KEY(campaignId) });
+      qc.invalidateQueries({ queryKey: GROUP_CONFIGS_PREFIX });
     },
   });
 }
