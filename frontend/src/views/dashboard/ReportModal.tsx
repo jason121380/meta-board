@@ -6,18 +6,16 @@ import type { DateConfig } from "@/lib/datePicker";
 import { toLabel } from "@/lib/datePicker";
 import { buildShareUrl } from "@/lib/shareReport";
 import type { FbCampaign } from "@/types/fb";
-import { useState } from "react";
 import { ReportContent } from "./ReportContent";
 
 /**
  * Campaign report modal — summary + adset breakdown for a single
- * campaign, with:
- *   - 不顯示金額 toggle (top-right, default ON)
- *   - 複製分享連結 button (bottom) that copies a /r/:campaignId URL
- *     and opens it in a new tab
+ * campaign. The 不顯示金額 toggle was removed per design feedback;
+ * money is always visible in the dashboard view (admins only).
  *
- * The share link encodes only the campaign id + account id + hide
- * flag + date preset. The public page re-fetches live data on load.
+ * Footer has a 複製分享連結 button that copies a /r/:campaignId URL
+ * and opens it in a new tab. The public share page re-fetches live
+ * data on load.
  */
 export function ReportModal({
   open,
@@ -30,8 +28,6 @@ export function ReportModal({
   campaign: FbCampaign | null;
   date: DateConfig;
 }) {
-  const [hideMoney, setHideMoney] = useState(true);
-
   const adsetsQuery = useAdsets(campaign?.id ?? null, date, open && !!campaign);
 
   if (!campaign) return null;
@@ -40,7 +36,7 @@ export function ReportModal({
     const url = buildShareUrl({
       campaignId: campaign.id,
       accountId: campaign._accountId ?? "",
-      hideMoney,
+      hideMoney: false,
       datePreset: date.preset !== "custom" ? date.preset : undefined,
     });
     try {
@@ -58,17 +54,6 @@ export function ReportModal({
       onOpenChange={onOpenChange}
       title="行銷活動報告"
       subtitle={toLabel(date)}
-      titleAction={
-        <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[12px] text-gray-500">
-          <input
-            type="checkbox"
-            className="custom-cb"
-            checked={hideMoney}
-            onChange={(e) => setHideMoney(e.currentTarget.checked)}
-          />
-          不顯示金額
-        </label>
-      }
       width={780}
       footer={
         <Button variant="primary" size="sm" onClick={onShare}>
@@ -81,7 +66,7 @@ export function ReportModal({
         adsets={adsetsQuery.data ?? null}
         adsetsLoading={adsetsQuery.isLoading || adsetsQuery.isPending}
         adsetsError={adsetsQuery.error instanceof Error ? adsetsQuery.error.message : null}
-        hideMoney={hideMoney}
+        hideMoney={false}
         dateLabel={toLabel(date)}
         date={date}
       />
