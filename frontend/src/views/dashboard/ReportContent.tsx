@@ -1,5 +1,6 @@
 import { useReportAds } from "@/api/hooks/useReportCampaign";
 import { Badge } from "@/components/Badge";
+import { CreativePreviewModal } from "@/components/CreativePreviewModal";
 import type { DateConfig } from "@/lib/datePicker";
 import { fF, fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
@@ -252,7 +253,9 @@ function AdRow({
   money: (v: number | string | null | undefined) => string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const ai = getIns(ad);
+  const thumb = ad.creative?.thumbnail_url;
 
   return (
     <Fragment>
@@ -261,8 +264,36 @@ function AdRow({
         onClick={() => setExpanded((v) => !v)}
       >
         <td className="px-1 py-2 text-center text-[14px] text-gray-500">{expanded ? "−" : "+"}</td>
-        <td className="max-w-[220px] truncate px-3 py-2 text-ink" title={ad.name}>
-          {ad.name}
+        <td className="max-w-[260px] px-3 py-2 text-ink">
+          <div className="flex items-center gap-2">
+            {thumb ? (
+              // Raw URL — JSX `src=` is an attribute binding, do NOT
+              // wrap in escHtml() (would double-encode `&` and break
+              // FB's signed CDN URL → 403). See commit d720fa2.
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewOpen(true);
+                }}
+                className="shrink-0 cursor-zoom-in"
+                aria-label="放大預覽"
+              >
+                <img
+                  src={thumb}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="h-[36px] w-[36px] rounded border border-border object-cover hover:border-orange"
+                />
+              </button>
+            ) : (
+              <div className="h-[36px] w-[36px] shrink-0 rounded border border-border bg-bg" />
+            )}
+            <span className="truncate" title={ad.name}>
+              {ad.name}
+            </span>
+          </div>
         </td>
         <td className="px-3 py-2 text-right tabular-nums">{money(ai.spend)}</td>
         <td className="px-3 py-2 text-right tabular-nums">{fN(ai.impressions)}</td>
@@ -283,6 +314,7 @@ function AdRow({
           </td>
         </tr>
       )}
+      {previewOpen && <CreativePreviewModal creative={ad} onClose={() => setPreviewOpen(false)} />}
     </Fragment>
   );
 }
