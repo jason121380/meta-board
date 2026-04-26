@@ -1,7 +1,21 @@
 import { api } from "@/api/client";
 import type { DateConfig } from "@/lib/datePicker";
-import type { FbAdset, FbCampaign } from "@/types/fb";
+import type { FbAdset, FbCampaign, FbCreativeEntity } from "@/types/fb";
 import { useQuery } from "@tanstack/react-query";
+
+/** Lazy fetch of ads inside a single adset for the report's 3rd-level
+ *  expansion. Same shared-token pattern as `useReportCampaign`. */
+export function useReportAds(adsetId: string | null, date: DateConfig, enabled: boolean) {
+  return useQuery({
+    queryKey: ["report-ads", adsetId, date] as const,
+    queryFn: async (): Promise<FbCreativeEntity[]> => {
+      if (!adsetId) return [];
+      return (await api.adsets.creatives(adsetId, date)).data ?? [];
+    },
+    enabled: enabled && !!adsetId,
+    staleTime: 60_000,
+  });
+}
 
 /**
  * Fetch a single campaign + its adsets for the public share page.

@@ -1618,6 +1618,73 @@ async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Opti
     raise HTTPException(status_code=502, detail="Failed to load ads from Facebook API")
 
 
+# ── Insights breakdowns (for the share / dashboard report) ────
+#
+# A single helper covers both adset and ad levels. FB Graph API
+# accepts ``breakdowns=`` on the entity's insights edge directly, so
+# we just proxy with the right path. Permitted dimensions are
+# whitelisted to avoid arbitrary FB params being passed through.
+
+_BREAKDOWN_DIMS = {
+    "age",
+    "gender",
+    "region",
+    "publisher_platform",
+}
+
+
+@app.get("/api/breakdown")
+async def get_insights_breakdown(
+    level: str,
+    id: str,
+    dim: str,
+    date_preset: str = "last_30d",
+    time_range: Optional[str] = None,
+):
+    """Return per-bucket insights for a given adset/ad ID, broken
+    down by `dim` (age / gender / region / publisher_platform).
+
+    Result rows include `key` (the bucket label) plus the standard
+    spend / impressions / clicks / ctr / cpc and a derived `msgs`
+    count (mirrors `_extract_msg_count` so message-driven UIs match
+    the rest of the dashboard).
+    """
+    if level not in ("adset", "ad"):
+        raise HTTPException(status_code=400, detail="Invalid level")
+    if dim not in _BREAKDOWN_DIMS:
+        raise HTTPException(status_code=400, detail="Invalid breakdown dim")
+
+    fields = "spend,impressions,clicks,ctr,cpc,cpm,actions"
+    params: dict[str, Any] = {
+        "fields": fields,
+        "breakdowns": dim,
+        "limit": "200",
+    }
+    if time_range:
+        params["time_range"] = time_range
+    else:
+        params["date_preset"] = date_preset
+
+    rows = await fb_get_paginated(f"{id}/insights", params)
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        out.append(
+            {
+                "key": str(r.get(dim, "")) or "—",
+                "spend": r.get("spend"),
+                "impressions": r.get("impressions"),
+                "clicks": r.get("clicks"),
+                "ctr": r.get("ctr"),
+                "cpc": r.get("cpc"),
+                "cpm": r.get("cpm"),
+                "msgs": _extract_msg_count(r.get("actions")),
+            }
+        )
+    return {"data": out, "level": level, "dim": dim}
+
+
 @app.get("/api/videos/{video_id}/source")
 async def get_video_source(video_id: str):
     """Fetch the playable source URL + poster for a FB video asset.

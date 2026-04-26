@@ -300,6 +300,33 @@ export const api = {
       ),
   },
 
+  breakdown: {
+    /** Per-bucket insights for adset / ad, broken down by a single
+     *  dimension (age / gender / region / publisher_platform). */
+    list: (
+      level: "adset" | "ad",
+      id: string,
+      dim: "age" | "gender" | "region" | "publisher_platform",
+      date: DateConfig,
+    ) =>
+      request<{
+        data: Array<{
+          key: string;
+          spend: string | number | null;
+          impressions: string | number | null;
+          clicks: string | number | null;
+          ctr: string | number | null;
+          cpc: string | number | null;
+          cpm: string | number | null;
+          msgs: number;
+        }>;
+        level: "adset" | "ad";
+        dim: string;
+      }>("GET", "/api/breakdown", {
+        query: { level, id, dim, ...dateParams(date) },
+      }),
+  },
+
   videos: {
     /** Resolve a FB video asset id to its playable source URL and
      * poster frame. Only called lazily when a preview modal opens. */
