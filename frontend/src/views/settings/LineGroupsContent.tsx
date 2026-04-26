@@ -44,10 +44,8 @@ interface LineGroup {
  * the inline `LineGroupsModal` (Dashboard / legacy entry) and the
  * standalone `LinePushSettingsView` page.
  *
- * Display priority (top to bottom):
- *   1. group_name — real LINE-side display name (from API summary)
- *   2. label      — user-editable nickname (input field)
- *   3. group_id   — system identifier (small mono, secondary)
+ * Table layout (no per-row card chrome):
+ *   群組(主名稱 + ID + 弱化暱稱輸入) | 已設定的推播 | 操作
  */
 export function LineGroupsContent() {
   const groupsQuery = useLineGroups();
@@ -55,23 +53,34 @@ export function LineGroupsContent() {
   const refreshNameMutation = useRefreshLineGroupName();
   const groups = groupsQuery.data ?? [];
 
+  if (groupsQuery.isLoading) {
+    return (
+      <div className="rounded-xl border border-border bg-bg px-3 py-4 text-center text-[13px] text-gray-500">
+        載入中...
+      </div>
+    );
+  }
+
+  if (groupsQuery.isSuccess && groups.length === 0) {
+    return (
+      <div className="rounded-xl bg-orange-bg px-3 py-3 text-[13px] text-ink">
+        尚未偵測到任何 LINE 群組。請把 LINE 官方帳號加入您要推播的群組,bot 會在收到 join
+        事件時自動把群組登錄進來。
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-3">
-      {groupsQuery.isLoading && (
-        <div className="rounded-xl border border-border bg-bg px-3 py-4 text-center text-[13px] text-gray-500">
-          載入中...
-        </div>
-      )}
-
-      {groupsQuery.isSuccess && groups.length === 0 && (
-        <div className="rounded-xl bg-orange-bg px-3 py-3 text-[13px] text-ink">
-          尚未偵測到任何 LINE 群組。請把 LINE 官方帳號加入您要推播的群組,bot 會在收到 join
-          事件時自動把群組登錄進來。
-        </div>
-      )}
-
-      {groups.length > 0 && (
-        <div className="flex flex-col gap-2">
+    <div className="overflow-x-auto rounded-xl border border-border bg-white">
+      <table className="w-full min-w-[520px] border-collapse text-[13px]">
+        <thead className="border-b border-border bg-bg text-left">
+          <tr>
+            <th className="px-3 py-2 font-semibold text-gray-500">群組</th>
+            <th className="px-3 py-2 font-semibold text-gray-500">已設定的推播</th>
+            <th className="w-[110px] px-3 py-2 text-right font-semibold text-gray-500">操作</th>
+          </tr>
+        </thead>
+        <tbody>
           {groups.map((g) => (
             <GroupRow
               key={g.group_id}
@@ -99,8 +108,8 @@ export function LineGroupsContent() {
               }}
             />
           ))}
-        </div>
-      )}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -129,23 +138,53 @@ function GroupRow({
   const hasName = !!group.group_name?.trim();
 
   return (
-    <div className={cn("rounded-xl border border-border bg-white px-3 py-3", left && "opacity-60")}>
-      {/* 1. Real LINE group display name — primary, bold */}
-      <div className="flex items-center gap-2">
-        <div
-          className={cn(
-            "flex-1 truncate text-[14px] font-bold",
-            hasName ? "text-ink" : "text-gray-300",
-          )}
-          title={displayName}
-        >
-          {displayName}
-        </div>
-        {left && (
-          <span className="rounded-full bg-red-bg px-1.5 py-[1px] text-[10px] font-semibold text-red">
-            已退出
+    <tr className={cn("border-b border-border last:border-b-0 align-top", left && "opacity-60")}>
+      {/* 群組欄: 名稱(主) + ID(mono 小) + 暱稱(弱化 inline) */}
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <span
+            className={cn("truncate font-bold", hasName ? "text-ink" : "text-gray-300")}
+            title={displayName}
+          >
+            {displayName}
           </span>
-        )}
+          {left && (
+            <span className="rounded-full bg-red-bg px-1.5 py-[1px] text-[10px] font-semibold text-red">
+              已退出
+            </span>
+          )}
+        </div>
+        <div className="mt-0.5 truncate font-mono text-[10px] text-gray-300">{group.group_id}</div>
+        {/* Nickname — visually de-emphasised: small inline row, no border on input */}
+        <div className="mt-1 flex items-center gap-1">
+          <span className="shrink-0 text-[10px] text-gray-300">暱稱</span>
+          <input
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.currentTarget.value)}
+            placeholder="—"
+            className="h-6 w-32 rounded border-0 bg-bg px-1.5 text-[11px] text-gray-500 outline-none focus:bg-white focus:ring-1 focus:ring-orange"
+          />
+          {dirty && (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => onSave(draft.trim())}
+              className="text-[10px] font-semibold text-orange disabled:opacity-50"
+            >
+              儲存
+            </button>
+          )}
+        </div>
+      </td>
+
+      {/* 推播設定 */}
+      <td className="px-3 py-2.5">
+        <GroupPushConfigsList groupId={group.group_id} />
+      </td>
+
+      {/* 操作 */}
+      <td className="px-3 py-2.5 text-right">
         <Button
           variant="ghost"
           size="sm"
@@ -156,35 +195,8 @@ function GroupRow({
         >
           {refreshing ? "抓取中..." : "重新抓取"}
         </Button>
-      </div>
-
-      {/* 2. User-editable nickname (label) */}
-      <div className="mt-2 flex items-center gap-2">
-        <input
-          type="text"
-          value={draft}
-          onChange={(e) => setDraft(e.currentTarget.value)}
-          placeholder="自訂暱稱（選填，例：客戶 A 群組）"
-          className="h-9 flex-1 rounded-lg border border-border px-2.5 text-[13px] outline-none focus:border-orange"
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={!dirty || saving}
-          onClick={() => onSave(draft.trim())}
-        >
-          儲存
-        </Button>
-      </div>
-
-      {/* 3. group_id — secondary, mono small */}
-      <div className="mt-1.5 text-[11px] text-gray-300">
-        <span className="font-mono">{group.group_id}</span>
-      </div>
-
-      {/* 4. Push configs targeting this group */}
-      <GroupPushConfigsList groupId={group.group_id} />
-    </div>
+      </td>
+    </tr>
   );
 }
 
@@ -192,43 +204,35 @@ function GroupPushConfigsList({ groupId }: { groupId: string }) {
   const query = useLineGroupPushConfigs(groupId);
   const configs = query.data ?? [];
 
+  if (query.isLoading) {
+    return <div className="text-[11px] text-gray-300">載入中...</div>;
+  }
+  if (configs.length === 0) {
+    return <div className="text-[11px] text-gray-300">尚無推播設定</div>;
+  }
+
   return (
-    <div className="mt-3 border-t border-border pt-2.5">
-      <div className="text-[11px] font-semibold text-gray-500">已設定的推播</div>
-      {query.isLoading ? (
-        <div className="mt-1 text-[11px] text-gray-300">載入中...</div>
-      ) : configs.length === 0 ? (
-        <div className="mt-1 text-[11px] text-gray-300">尚無推播設定</div>
-      ) : (
-        <ul className="mt-1.5 flex flex-col gap-1">
-          {configs.map((cfg) => {
-            const name = cfg.campaign_nickname?.trim() || cfg.campaign_id;
-            const dateLabel = DATE_RANGE_LABELS[cfg.date_range] ?? cfg.date_range;
-            const rule = formatPushRule(cfg);
-            return (
-              <li
-                key={cfg.id}
-                className={cn(
-                  "flex flex-col gap-0.5 rounded-lg bg-bg px-2.5 py-1.5",
-                  !cfg.enabled && "opacity-60",
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="flex-1 truncate text-[12px] font-semibold text-ink">{name}</span>
-                  {!cfg.enabled && (
-                    <span className="shrink-0 rounded-full bg-red-bg px-1.5 py-[1px] text-[10px] font-semibold text-red">
-                      已停用
-                    </span>
-                  )}
-                </div>
-                <div className="text-[11px] text-gray-500">
-                  {rule} · {dateLabel}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
+    <ul className="flex flex-col gap-1">
+      {configs.map((cfg) => {
+        const name = cfg.campaign_nickname?.trim() || cfg.campaign_id;
+        const dateLabel = DATE_RANGE_LABELS[cfg.date_range] ?? cfg.date_range;
+        const rule = formatPushRule(cfg);
+        return (
+          <li key={cfg.id} className={cn("flex flex-col gap-0.5", !cfg.enabled && "opacity-60")}>
+            <div className="flex items-center gap-2">
+              <span className="truncate text-[12px] font-semibold text-ink">{name}</span>
+              {!cfg.enabled && (
+                <span className="shrink-0 rounded-full bg-red-bg px-1.5 py-[1px] text-[10px] font-semibold text-red">
+                  已停用
+                </span>
+              )}
+            </div>
+            <div className="text-[11px] text-gray-500">
+              {rule} · {dateLabel}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
