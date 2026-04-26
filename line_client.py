@@ -143,9 +143,8 @@ def build_flex_report(
     """Build a LINE Flex Message bubble for a campaign report.
 
     Header layout:
-        LURE META · 廣告成效報告   (small overline)
-        {title}                    (campaign nickname or name — main)
-        {subtitle}                 (e.g. "報告區間: 4/1 - 4/25")
+        {title}      (campaign nickname or name — main)
+        {subtitle}   (e.g. "報告區間: 4/1 - 4/25")
 
     `kpis` is a list of (label, value) tuples rendered as a grid of
     rows in the body. Colours match the dashboard's orange branding
@@ -193,19 +192,11 @@ def build_flex_report(
             "contents": [
                 {
                     "type": "text",
-                    "text": "LURE META · 廣告成效報告",
-                    "size": "xs",
-                    "color": "#FFE8D9",
-                    "weight": "bold",
-                },
-                {
-                    "type": "text",
                     "text": title,
                     "size": "lg",
                     "color": "#FFFFFF",
                     "weight": "bold",
                     "wrap": True,
-                    "margin": "sm",
                 },
                 {
                     "type": "text",
