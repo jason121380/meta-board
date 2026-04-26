@@ -23,9 +23,17 @@ export interface StoreSortState {
   dir: StoreSortDir;
 }
 
+export interface DesignerBreakdown {
+  name: string;
+  spendPlus: number;
+}
+
 export interface StoreRow {
   store: string;
-  designers: string[];
+  /** Per-designer breakdown of spend+%. Sorted by spendPlus desc so the
+   *  biggest contributor reads first in the UI. Designers with empty
+   *  names are bucketed under "—" so we don't drop their spend. */
+  designers: DesignerBreakdown[];
   spend: number;
   spendPlus: number;
   campaignCount: number;
@@ -37,36 +45,54 @@ export function buildStoreRows(
   rowMarkups: Record<string, number>,
   defaultMarkup: number,
 ): StoreRow[] {
-  const map = new Map<string, StoreRow>();
+  // Two-level aggregation: store → designer → spendPlus
+  const stores = new Map<
+    string,
+    {
+      store: string;
+      designers: Map<string, number>;
+      spend: number;
+      spendPlus: number;
+      campaignCount: number;
+    }
+  >();
+
   for (const camp of campaigns) {
     const nick = nicknames[camp.id];
     const store = (nick?.store ?? "").trim();
     // 沒設定店家 → 不算進此頁(此頁的目的就是看每個店家的花費)
     if (!store) continue;
-    const designer = (nick?.designer ?? "").trim();
+    const designer = (nick?.designer ?? "").trim() || "—";
     const sp = spendOf(camp);
     const m = markupFor(camp.id, rowMarkups, defaultMarkup);
     const plus = spendPlus(sp, m);
 
-    const existing = map.get(store);
-    if (!existing) {
-      map.set(store, {
+    let bucket = stores.get(store);
+    if (!bucket) {
+      bucket = {
         store,
-        designers: designer ? [designer] : [],
-        spend: sp,
-        spendPlus: plus,
-        campaignCount: 1,
-      });
-      continue;
+        designers: new Map<string, number>(),
+        spend: 0,
+        spendPlus: 0,
+        campaignCount: 0,
+      };
+      stores.set(store, bucket);
     }
-    existing.spend += sp;
-    existing.spendPlus += plus;
-    existing.campaignCount += 1;
-    if (designer && !existing.designers.includes(designer)) {
-      existing.designers.push(designer);
-    }
+    bucket.spend += sp;
+    bucket.spendPlus += plus;
+    bucket.campaignCount += 1;
+    bucket.designers.set(designer, (bucket.designers.get(designer) ?? 0) + plus);
   }
-  return Array.from(map.values());
+
+  return Array.from(stores.values()).map((b) => ({
+    store: b.store,
+    designers: Array.from(b.designers.entries())
+      .map(([name, spendPlus]) => ({ name, spendPlus }))
+      .sort((a, b) => b.spendPlus - a.spendPlus),
+    spend: b.spend,
+    spendPlus: b.spendPlus,
+    campaignCount: b.campaignCount,
+  }));
 }
 
 export function sortStoreRows(rows: StoreRow[], sort: StoreSortState): StoreRow[] {
@@ -90,7 +116,7 @@ export function filterStoreRows(rows: StoreRow[], search: string, hideZero: bool
     if (hideZero && r.spendPlus <= 0) return false;
     if (q) {
       const inStore = r.store.toLowerCase().includes(q);
-      const inDesigner = r.designers.some((d) => d.toLowerCase().includes(q));
+      const inDesigner = r.designers.some((d) => d.name.toLowerCase().includes(q));
       if (!inStore && !inDesigner) return false;
     }
     return true;

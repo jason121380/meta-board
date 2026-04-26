@@ -153,13 +153,15 @@ function Field({
   placeholder?: string;
 }) {
   return (
-    <label className="flex flex-col gap-1">
+    // min-w-0 + w-full 確保 <input> 在 grid/flex cell 裡會跟著縮小,
+    // 不會用瀏覽器 <input> 預設的 ~200px 寬度撐爆容器。
+    <label className="flex min-w-0 flex-col gap-1">
       <span className="text-[11px] font-semibold text-gray-500">{label}</span>
       <input
         value={value}
         onChange={(e) => onChange(e.currentTarget.value)}
         placeholder={placeholder}
-        className="h-10 rounded-lg border-[1.5px] border-border bg-white px-3 text-[13px] outline-none focus:border-orange md:h-9"
+        className="h-10 w-full min-w-0 rounded-lg border-[1.5px] border-border bg-white px-3 text-[13px] outline-none focus:border-orange md:h-9"
       />
     </label>
   );
@@ -176,7 +178,7 @@ function AccountRow({
 }) {
   return (
     <div className="flex flex-col gap-2.5 border-b border-border px-4 py-3 last:border-b-0 md:flex-row md:items-end md:gap-3 md:px-5">
-      <div className="grid grid-cols-1 gap-2.5 md:flex-1 md:grid-cols-[1.2fr_1fr_1fr_1fr_1fr]">
+      <div className="grid min-w-0 grid-cols-1 gap-2.5 md:flex-1 md:grid-cols-[1.2fr_1fr_1fr_1fr_1fr]">
         <Field label="別名" value={account.alias} onChange={(v) => onUpdate({ alias: v })} />
         <Field label="銀行" value={account.bank} onChange={(v) => onUpdate({ bank: v })} />
         <Field label="分行" value={account.branch} onChange={(v) => onUpdate({ branch: v })} />
