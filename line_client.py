@@ -138,6 +138,7 @@ def build_flex_report(
     title: str,
     subtitle: str,
     kpis: list[tuple[str, str]],
+    objective_label: str = "",
     recommendations: Optional[List[str]] = None,
     report_url: Optional[str] = None,
     alt_text: Optional[str] = None,
@@ -148,6 +149,7 @@ def build_flex_report(
         Header (orange)
             {title}                 (campaign nickname or name)
             {subtitle}              (e.g. "報告區間: 4/1 - 4/25")
+            [目標 · {objective}]    (small chip, when objective_label set)
 
         Body (white)
             {kpi_rows}              (花費 / 曝光 / ... / 私訊成本)
@@ -256,6 +258,19 @@ def build_flex_report(
                     "margin": "xs",
                     "wrap": True,
                 },
+                *(
+                    [
+                        {
+                            "type": "text",
+                            "text": f"目標 · {objective_label}",
+                            "size": "xs",
+                            "color": "#FFE8D9",
+                            "margin": "sm",
+                        }
+                    ]
+                    if objective_label
+                    else []
+                ),
             ],
         },
         "body": {
