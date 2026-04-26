@@ -217,6 +217,7 @@ export function FinanceView() {
                   multiAcct={selectedId === null}
                   search={search}
                   hideZero={hideZero}
+                  date={date}
                 />
               )}
             </div>

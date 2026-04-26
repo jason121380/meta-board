@@ -3,12 +3,14 @@ import { useNicknames } from "@/api/hooks/useNicknames";
 import { FbCampaignLink } from "@/components/FbCampaignLink";
 import { NicknameEditModal } from "@/components/NicknameEditModal";
 import { cn } from "@/lib/cn";
+import type { DateConfig } from "@/lib/datePicker";
 import { fM } from "@/lib/format";
 import { spendOf } from "@/lib/insights";
 import { useFinanceStore } from "@/stores/financeStore";
 import { useUiStore } from "@/stores/uiStore";
 import type { FbCampaign, FbEntityStatus } from "@/types/fb";
 import { useMemo, useState } from "react";
+import { InvoiceModal } from "./InvoiceModal";
 import {
   type FinSortKey,
   type FinSortState,
@@ -40,9 +42,10 @@ export interface FinanceTableProps {
   multiAcct: boolean;
   search: string;
   hideZero: boolean;
+  date: DateConfig;
 }
 
-export function FinanceTable({ campaigns, multiAcct, search, hideZero }: FinanceTableProps) {
+export function FinanceTable({ campaigns, multiAcct, search, hideZero, date }: FinanceTableProps) {
   const rowMarkups = useFinanceStore((s) => s.rowMarkups);
   const defaultMarkup = useFinanceStore((s) => s.defaultMarkup);
   const setRowMarkup = useFinanceStore((s) => s.setRowMarkup);
@@ -62,6 +65,7 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
     store: string;
     designer: string;
   } | null>(null);
+  const [invoicing, setInvoicing] = useState<{ campaign: FbCampaign; markup: number } | null>(null);
 
   const accountsQuery = useAccounts();
   const businessIdFor = (acctId: string | undefined) =>
@@ -110,6 +114,15 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
           initialDesigner={editing.designer}
         />
       )}
+      <InvoiceModal
+        open={invoicing !== null}
+        onOpenChange={(o) => {
+          if (!o) setInvoicing(null);
+        }}
+        campaign={invoicing?.campaign ?? null}
+        date={date}
+        markup={invoicing?.markup ?? 0}
+      />
       {/* min-w-[640px] on mobile (was 720px) packs columns tighter so
           more fit in the viewport before horizontal scroll kicks in;
           desktop (md:) keeps the original 720px target. */}
@@ -132,13 +145,16 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
             <th className="sticky top-0 z-[1] w-9 border-b border-border bg-bg px-1.5 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.5px] text-gray-300 md:w-12 md:px-3.5 md:py-2.5">
               Pin
             </th>
+            <th className="sticky top-0 z-[1] w-9 border-b border-border bg-bg px-1.5 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.5px] text-gray-300 md:w-12 md:px-3.5 md:py-2.5">
+              請款單
+            </th>
           </tr>
         </thead>
         <tbody>
           {visible.length === 0 ? (
             <tr>
               <td
-                colSpan={multiAcct ? 8 : 7}
+                colSpan={multiAcct ? 9 : 8}
                 className="px-5 py-10 text-center text-xs text-gray-300"
               >
                 無花費資料
@@ -261,6 +277,32 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
                       <span aria-hidden="true">📌</span>
                     </button>
                   </td>
+                  <td className="px-1.5 text-center md:px-3.5">
+                    <button
+                      type="button"
+                      title="下載請款單"
+                      aria-label={`下載 ${camp.name} 的請款單`}
+                      onClick={() => setInvoicing({ campaign: camp, markup: m })}
+                      className="inline-flex h-[30px] w-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-gray-300 hover:text-orange active:scale-90"
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="9" y1="14" x2="15" y2="14" />
+                        <line x1="9" y1="18" x2="13" y2="18" />
+                      </svg>
+                    </button>
+                  </td>
                 </tr>
               );
             })
@@ -285,6 +327,7 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero }: Finance
               <td className="px-1.5 py-2 text-right text-[12px] font-bold tabular-nums text-orange md:px-3.5 md:py-2.5 md:text-[13px]">
                 ${fM(plusSum)}
               </td>
+              <td />
               <td />
             </tr>
           )}

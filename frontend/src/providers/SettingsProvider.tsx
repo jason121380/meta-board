@@ -2,6 +2,7 @@ import { useSharedSettings, useUserSettings } from "@/api/hooks/useSettings";
 import { useFbAuth } from "@/auth/FbAuthProvider";
 import { setAccountsUserId, useAccountsStore } from "@/stores/accountsStore";
 import { useFinanceStore } from "@/stores/financeStore";
+import { type PaymentAccount, usePaymentStore } from "@/stores/paymentStore";
 import { useUiStore } from "@/stores/uiStore";
 import { type ReactNode, useEffect, useState } from "react";
 
@@ -75,6 +76,25 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       defaultMarkup,
       showNicknames,
     });
+
+    const paymentAccounts: PaymentAccount[] = Array.isArray(s.payment_accounts)
+      ? (s.payment_accounts as unknown[]).flatMap((raw) => {
+          if (!raw || typeof raw !== "object") return [];
+          const r = raw as Record<string, unknown>;
+          const id = typeof r.id === "string" ? r.id : "";
+          if (!id) return [];
+          return [
+            {
+              id,
+              bank: typeof r.bank === "string" ? r.bank : "",
+              branch: typeof r.branch === "string" ? r.branch : "",
+              holder: typeof r.holder === "string" ? r.holder : "",
+              accountNo: typeof r.accountNo === "string" ? r.accountNo : "",
+            },
+          ];
+        })
+      : [];
+    usePaymentStore.getState().hydrateFromServer(paymentAccounts);
 
     setSeeded(true);
     setSettingsReady(true);
