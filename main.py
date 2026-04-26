@@ -2220,28 +2220,67 @@ def _evaluate_alert_recommendations(
     cpc: float,
     frequency: float,
 ) -> list[str]:
-    """Mirror of frontend `alertsData.computeAlertBuckets()` rules,
-    flattened into bullet-style optimisation suggestions for the LINE
-    flex report. Same priority/warning thresholds as the dashboard's
-    警示列表, in zh-TW.
+    """產生 LINE flex 報告的優化建議。私訊優先,CPC/頻次依私訊狀態調整。
 
-    Returns at most 5 suggestions (one per rule that fires).
+    私訊成本分段:
+        < $100  非常好(以私訊為主軸,忽略 CPC)
+        100~200 平均值,不評論
+        200~300 偏高,待觀察
+        > $300  太高,需優化(連同 CPC 對比評論,忽略頻次)
+
+    CPC 分段(只在沒有私訊資料,或私訊成本太高時引用):
+        ≤ $4    好,不評論
+        4~5     偏高,待觀察
+        5~6     可以優化
+        > $6    太高,需調整
+
+    頻次警示:
+        > 5 + spend > $1000  過高
+        > 4 + spend >  $500  偏高
+        但私訊成本 > $300 時整段略過,訊息聚焦私訊問題本身。
     """
     out: list[str] = []
-    # P2: msgCost > $200 → 私訊成本過高
-    if msgs > 0 and msg_cost > 200:
-        out.append(f"私訊成本 ${msg_cost:.0f} 過高,建議檢視私訊轉換流程或更換素材")
-    # P3 / W3: CPC bands
-    if cpc > 5:
-        out.append(f"CPC ${cpc:.2f} 過高,建議優化受眾或調整素材")
-    elif cpc > 4:
-        out.append(f"CPC ${cpc:.2f} 偏高,可觀察素材成效")
-    # P4: frequency > 5 + spend > $1000
-    # W4: frequency 4–5    + spend > $500
-    if frequency > 5 and spend > 1000:
-        out.append(f"頻次 {frequency:.1f} 過高,建議擴大受眾避免廣告疲勞")
-    elif frequency > 4 and spend > 500:
-        out.append(f"頻次 {frequency:.1f} 偏高,需留意素材疲勞")
+    has_msg = msgs > 0
+    skip_frequency = False
+
+    if has_msg:
+        if msg_cost < 100:
+            # 非常好 → 以私訊為主,不評論 CPC
+            out.append(f"私訊成本 ${msg_cost:.0f} 非常好,持續以私訊轉換為主軸")
+        elif msg_cost <= 200:
+            # 100~200 平均值,不評論
+            pass
+        elif msg_cost <= 300:
+            # 200~300 偏高待觀察
+            out.append(f"私訊成本 ${msg_cost:.0f} 偏高,待觀察")
+        else:
+            # > 300 太高需要優化 → 先看 CPC 是否不錯再評論;忽略頻次
+            skip_frequency = True
+            if cpc <= 4:
+                out.append(
+                    f"私訊成本 ${msg_cost:.0f} 太高、但 CPC ${cpc:.2f} 表現不錯,"
+                    "建議檢視私訊回覆流程或落地頁轉換"
+                )
+            else:
+                out.append(
+                    f"私訊成本 ${msg_cost:.0f} 太高、CPC ${cpc:.2f} 也偏高,"
+                    "建議從受眾與素材整體優化"
+                )
+    else:
+        # 沒有私訊資料才獨立評論 CPC
+        if cpc > 6:
+            out.append(f"CPC ${cpc:.2f} 太高,需要調整")
+        elif cpc > 5:
+            out.append(f"CPC ${cpc:.2f} 可以優化")
+        elif cpc > 4:
+            out.append(f"CPC ${cpc:.2f} 偏高,待觀察")
+        # ≤ 4 不評論
+
+    if not skip_frequency:
+        if frequency > 5 and spend > 1000:
+            out.append(f"頻次 {frequency:.1f} 過高,建議擴大受眾避免廣告疲勞")
+        elif frequency > 4 and spend > 500:
+            out.append(f"頻次 {frequency:.1f} 偏高,需留意素材疲勞")
     return out
 
 
