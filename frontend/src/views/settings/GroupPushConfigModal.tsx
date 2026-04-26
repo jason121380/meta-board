@@ -518,7 +518,15 @@ function SearchableCombobox<T>({
           <div className="px-1 pb-1 text-[11px] text-gray-300">
             {filtered.length} / {items.length}
           </div>
-          <div className="max-h-[260px] overflow-y-auto">
+          <div
+            // 行動裝置:Popover 開在 bottom-sheet Modal 內時,沒設
+            // touch-action / overscroll-behavior 會讓內部捲動被外層
+            // modal 攔截,使用者捲不動清單。`pan-y` 明確告訴瀏覽器
+            // 此區允許垂直手勢;`contain` 讓捲動到頂/底時不再傳播
+            // 給外層,避免 Modal 跟著上下滑。
+            className="max-h-[260px] overflow-y-auto overscroll-contain"
+            style={{ touchAction: "pan-y", WebkitOverflowScrolling: "touch" }}
+          >
             {filtered.length === 0 ? (
               <div className="px-2 py-3 text-center text-[12px] text-gray-300">無符合的項目</div>
             ) : (
