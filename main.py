@@ -52,6 +52,10 @@ _fb_semaphore: asyncio.Semaphore = asyncio.Semaphore(40)
 # next_run_at has passed. 3 failures in a row flips `enabled=false`
 # so a broken token doesn't spam the log forever.
 _scheduler_task: Optional[asyncio.Task] = None
+# Background fire-and-forget tasks (e.g. one-shot LINE group name
+# backfill on startup). We hold strong refs so asyncio doesn't gc
+# them mid-run. Tasks self-discard via `add_done_callback`.
+_bg_tasks: "set[asyncio.Task]" = set()
 SCHEDULER_TICK_SECONDS = 60
 SCHEDULER_FAIL_THRESHOLD = 3
 SCHEDULER_TZ_NAME = os.getenv("SCHEDULER_TZ", "Asia/Taipei")
@@ -303,6 +307,12 @@ async def lifespan(app: FastAPI):
             f" tz={SCHEDULER_TZ_NAME}",
             flush=True,
         )
+        # One-shot backfill of legacy line_groups rows whose group_name
+        # is empty (joined before that column existed). Runs in the
+        # background so startup isn't blocked by LINE API latency.
+        bf = asyncio.create_task(_backfill_line_group_names())
+        _bg_tasks.add(bf)
+        bf.add_done_callback(_bg_tasks.discard)
     else:
         print("[startup] scheduler: SKIPPED (no DB)", flush=True)
 
@@ -2152,6 +2162,56 @@ def _date_range_concrete(date_range: str) -> str:
     return ""
 
 
+async def _backfill_line_group_names() -> None:
+    """One-shot startup task: pull `groupName` from LINE for any
+    `line_groups` rows where the bot is still in the group
+    (`left_at IS NULL`) but `group_name` is empty (e.g. joined before
+    that column existed). Failures are logged, never raised — this is
+    a best-effort backfill.
+    """
+    if _db_pool is None or _http_client is None:
+        return
+    try:
+        async with _db_pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT group_id FROM line_groups
+                WHERE left_at IS NULL AND COALESCE(group_name, '') = ''
+                ORDER BY joined_at DESC
+                """
+            )
+        if not rows:
+            return
+        print(
+            f"[startup] backfill: {len(rows)} LINE group name(s) to fetch",
+            flush=True,
+        )
+        for r in rows:
+            gid = r["group_id"]
+            summary = await line_client.get_group_summary(_http_client, gid)
+            if not summary:
+                continue
+            name = (summary.get("groupName") or "").strip()
+            if not name:
+                continue
+            try:
+                async with _db_pool.acquire() as conn:
+                    await conn.execute(
+                        """
+                        UPDATE line_groups SET group_name = $1
+                        WHERE group_id = $2 AND COALESCE(group_name, '') = ''
+                        """,
+                        name,
+                        gid,
+                    )
+                print(f"[startup] backfill: {gid} → {name!r}", flush=True)
+            except Exception as exc:
+                print(f"[startup] backfill update failed {gid}: {exc}", flush=True)
+        print("[startup] backfill: done", flush=True)
+    except Exception as exc:
+        print(f"[startup] backfill error: {exc}", flush=True)
+
+
 async def _campaign_nickname_display(campaign_id: str) -> str:
     """Return "店家 · 設計師" / 店家 / 設計師 if either is set, else ''.
 
@@ -2348,6 +2408,45 @@ async def set_line_group_label(group_id: str, payload: LineGroupLabelPayload):
         if result.endswith("0"):
             raise HTTPException(status_code=404, detail="Group not found")
     return {"ok": True, "group_id": group_id, "label": label}
+
+
+@app.get("/api/line-groups/{group_id}/push-configs")
+async def list_group_push_configs(group_id: str):
+    """List push configs that target this LINE group, joined with the
+    campaign nickname (店家 · 設計師) so the UI can show "this group
+    receives X campaigns" without making the user open every campaign.
+
+    The FB-side campaign name is NOT included — fetching it would
+    require an FB Graph API call per row, and operators usually pin
+    a nickname anyway. Falls back to campaign_id when the nickname
+    is empty.
+    """
+    if _db_pool is None:
+        return {"data": []}
+    async with _db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT pc.*, n.store, n.designer
+            FROM campaign_line_push_configs pc
+            LEFT JOIN campaign_nicknames n ON n.campaign_id = pc.campaign_id
+            WHERE pc.group_id = $1
+            ORDER BY pc.created_at ASC
+            """,
+            group_id,
+        )
+    out = []
+    for r in rows:
+        d = _config_row_to_dict(r)
+        store = (r["store"] or "").strip() if r["store"] is not None else ""
+        designer = (r["designer"] or "").strip() if r["designer"] is not None else ""
+        if store and designer:
+            d["campaign_nickname"] = f"{store} · {designer}"
+        elif store or designer:
+            d["campaign_nickname"] = store or designer
+        else:
+            d["campaign_nickname"] = ""
+        out.append(d)
+    return {"data": out}
 
 
 @app.post("/api/line-groups/{group_id}/refresh-name")

@@ -443,6 +443,12 @@ export const api = {
       request<{ ok: boolean }>("POST", `/api/line-groups/${encodeURIComponent(groupId)}`, {
         body: { label },
       }),
+    /** List push configs targeting this group (with campaign nickname joined). */
+    listGroupConfigs: (groupId: string) =>
+      request<{ data: Array<LinePushConfig & { campaign_nickname: string }> }>(
+        "GET",
+        `/api/line-groups/${encodeURIComponent(groupId)}/push-configs`,
+      ),
     /** Re-fetch a group's display name from LINE (manual backfill / rename pickup). */
     refreshGroupName: (groupId: string) =>
       request<{ ok: boolean; group_name: string }>(
