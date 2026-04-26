@@ -70,5 +70,35 @@ function AuthGate() {
       </SettingsProvider>
     );
   }
+  // While the FB SDK is still resolving the cached token (status:
+  // "checking"), don't fall through to LoginView — that page's
+  // METADASH-by-LURE branding looks like a forced re-login to users
+  // who already have a valid session in localStorage. A small
+  // centered spinner is more accurate: we're just verifying the
+  // cached credential. After lazy-route reloads (e.g. clicking a
+  // newly-deployed page that triggers withReloadOnChunkError), this
+  // is the brief moment between page load and exchangeToken success.
+  // Only show LoginView for the genuine "unauth" state.
+  if (status === "checking" && hasCachedToken()) {
+    return (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-bg">
+        <div className="flex flex-col items-center gap-3 text-[13px] text-gray-300">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-orange border-t-transparent" />
+          <span>載入中...</span>
+        </div>
+      </div>
+    );
+  }
   return <LoginView />;
+}
+
+/** Cheap synchronous check for the cached FB token written by
+ *  FbAuthProvider.exchangeToken on every successful login. */
+function hasCachedToken(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return !!localStorage.getItem("meta_dash_fb_token");
+  } catch {
+    return false;
+  }
 }

@@ -524,8 +524,21 @@ function SearchableCombobox<T>({
             // modal 攔截,使用者捲不動清單。`pan-y` 明確告訴瀏覽器
             // 此區允許垂直手勢;`contain` 讓捲動到頂/底時不再傳播
             // 給外層,避免 Modal 跟著上下滑。
+            //
+            // 桌面:某些情況下 Radix Dialog 會把 wheel 事件擋下,
+            // 我們直接接管 wheel 事件、手動更新 scrollTop,並
+            // stopPropagation 確保事件不會冒泡到外層 modal。
             className="max-h-[260px] overflow-y-auto overscroll-contain"
             style={{ touchAction: "pan-y", WebkitOverflowScrolling: "touch" }}
+            onWheel={(e) => {
+              const el = e.currentTarget;
+              const max = el.scrollHeight - el.clientHeight;
+              const next = Math.max(0, Math.min(max, el.scrollTop + e.deltaY));
+              if (next !== el.scrollTop) {
+                el.scrollTop = next;
+                e.stopPropagation();
+              }
+            }}
           >
             {filtered.length === 0 ? (
               <div className="px-2 py-3 text-center text-[12px] text-gray-300">無符合的項目</div>

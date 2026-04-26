@@ -117,8 +117,17 @@ export function Modal({
               </div>
               {titleAction && <div className="shrink-0">{titleAction}</div>}
               {!hideClose && (
-                <Dialog.Close
+                // 直接呼叫 onOpenChange(false) 取代 <Dialog.Close>。
+                // Dialog.Close 透過 React context 找最近的 Dialog.Root,
+                // 在 share 頁的 ShareModeAuthProvider context 切換 +
+                // nested modal (報告 modal 內再開素材預覽 modal)場景
+                // 下會出現點擊無反應的問題。直接綁 onClick 跳過
+                // Radix 內部 context 解析,確保任何 wrapper 結構下
+                // 都能可靠關閉。
+                <button
+                  type="button"
                   aria-label="關閉"
+                  onClick={() => onOpenChange(false)}
                   className="-mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-bg hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange/40 md:-mr-3"
                 >
                   <svg
@@ -135,7 +144,7 @@ export function Modal({
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
-                </Dialog.Close>
+                </button>
               )}
             </div>
           )}
