@@ -2212,6 +2212,67 @@ async def _backfill_line_group_names() -> None:
         print(f"[startup] backfill error: {exc}", flush=True)
 
 
+def _evaluate_alert_recommendations(
+    *,
+    spend: float,
+    msgs: int,
+    msg_cost: float,
+    cpc: float,
+    frequency: float,
+) -> list[str]:
+    """Mirror of frontend `alertsData.computeAlertBuckets()` rules,
+    flattened into bullet-style optimisation suggestions for the LINE
+    flex report. Same priority/warning thresholds as the dashboard's
+    警示列表, in zh-TW.
+
+    Returns at most 5 suggestions (one per rule that fires).
+    """
+    out: list[str] = []
+    # P2: msgCost > $200 → 私訊成本過高
+    if msgs > 0 and msg_cost > 200:
+        out.append(f"私訊成本 ${msg_cost:.0f} 過高,建議檢視私訊轉換流程或更換素材")
+    # P3 / W3: CPC bands
+    if cpc > 5:
+        out.append(f"CPC ${cpc:.2f} 過高,建議優化受眾或調整素材")
+    elif cpc > 4:
+        out.append(f"CPC ${cpc:.2f} 偏高,可觀察素材成效")
+    # P4: frequency > 5 + spend > $1000
+    # W4: frequency 4–5    + spend > $500
+    if frequency > 5 and spend > 1000:
+        out.append(f"頻次 {frequency:.1f} 過高,建議擴大受眾避免廣告疲勞")
+    elif frequency > 4 and spend > 500:
+        out.append(f"頻次 {frequency:.1f} 偏高,需留意素材疲勞")
+    return out
+
+
+# Map a push-time date_range to a public-share-page DatePreset. Some
+# values aren't supported by the share page (last_14d, month_to_yesterday)
+# so we fall back to the closest available preset.
+_SHARE_DATE_PRESET = {
+    "yesterday": "yesterday",
+    "last_7d": "last_7d",
+    "last_14d": "last_30d",
+    "last_30d": "last_30d",
+    "this_month": "this_month",
+    "month_to_yesterday": "this_month",
+}
+
+PUBLIC_SITE_URL = os.getenv("PUBLIC_SITE_URL", "").rstrip("/")
+
+
+def _share_url_for_config(account_id: str, campaign_id: str, date_range: str) -> Optional[str]:
+    """Build the public /r/<campaign_id> share URL when PUBLIC_SITE_URL
+    is configured. Returns None otherwise — the caller will simply omit
+    the "查看完整報告" footer button."""
+    if not PUBLIC_SITE_URL:
+        return None
+    preset = _SHARE_DATE_PRESET.get(date_range, "this_month")
+    from urllib.parse import quote, urlencode
+
+    qs = urlencode({"acct": account_id, "date": preset})
+    return f"{PUBLIC_SITE_URL}/r/{quote(campaign_id, safe='')}?{qs}"
+
+
 async def _campaign_nickname_display(campaign_id: str) -> str:
     """Return "店家 · 設計師" / 店家 / 設計師 if either is set, else ''.
 
@@ -2256,26 +2317,37 @@ async def _build_flex_for_config(cfg: dict) -> dict:
 
     ins_list = (camp.get("insights") or {}).get("data") or []
     ins = ins_list[0] if ins_list else {}
-    spend = ins.get("spend") or 0
+    try:
+        spend_f = float(ins.get("spend") or 0)
+    except (TypeError, ValueError):
+        spend_f = 0.0
+    try:
+        cpc_f = float(ins.get("cpc") or 0)
+    except (TypeError, ValueError):
+        cpc_f = 0.0
+    try:
+        freq_f = float(ins.get("frequency") or 0)
+    except (TypeError, ValueError):
+        freq_f = 0.0
     msgs = _extract_msg_count(ins.get("actions"))
+    msg_cost_f = (spend_f / msgs) if msgs > 0 else 0.0
 
     # 私訊成本：spend / msgs，無資料時顯示 "—"。
-    msg_cost_str = "—"
-    if msgs > 0:
-        try:
-            msg_cost_str = _fmt_money(float(spend) / msgs)
-        except (TypeError, ValueError):
-            msg_cost_str = "—"
+    msg_cost_str = _fmt_money(msg_cost_f) if msgs > 0 else "—"
 
     kpis: list[tuple[str, str]] = [
-        ("花費", _fmt_money(spend)),
+        ("花費", _fmt_money(spend_f)),
         ("曝光", _fmt_int(ins.get("impressions"))),
         ("點擊", _fmt_int(ins.get("clicks"))),
         ("CTR", _fmt_pct(ins.get("ctr"))),
-        ("CPC", _fmt_money(ins.get("cpc"))),
+        ("CPC", _fmt_money(cpc_f)),
         ("私訊數", _fmt_int(msgs) if msgs > 0 else "—"),
         ("私訊成本", msg_cost_str),
     ]
+
+    recommendations = _evaluate_alert_recommendations(
+        spend=spend_f, msgs=msgs, msg_cost=msg_cost_f, cpc=cpc_f, frequency=freq_f
+    )
 
     # Title: campaign nickname (store · designer) if set, else FB name.
     nickname = await _campaign_nickname_display(campaign_id)
@@ -2283,10 +2355,14 @@ async def _build_flex_for_config(cfg: dict) -> dict:
     concrete_range = _date_range_concrete(date_range)
     subtitle = f"報告區間: {concrete_range}" if concrete_range else _date_range_label(date_range)
 
+    report_url = _share_url_for_config(account_id, campaign_id, date_range)
+
     return line_client.build_flex_report(
         title=title,
         subtitle=subtitle,
         kpis=kpis,
+        recommendations=recommendations,
+        report_url=report_url,
         alt_text=f"{title} {concrete_range or _date_range_label(date_range)}",
     )
 
