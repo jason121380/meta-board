@@ -83,6 +83,7 @@ export function ReportModal({
         adsetsError={adsetsQuery.error instanceof Error ? adsetsQuery.error.message : null}
         hideMoney={hideMoney}
         dateLabel={toLabel(date)}
+        date={date}
       />
     </Modal>
   );
