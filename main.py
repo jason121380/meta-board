@@ -2373,6 +2373,52 @@ async def _backfill_line_group_names() -> None:
         print(f"[startup] backfill error: {exc}", flush=True)
 
 
+_OBJECTIVE_LABELS = {
+    "OUTCOME_AWARENESS": "知名度",
+    "OUTCOME_TRAFFIC": "流量",
+    "OUTCOME_ENGAGEMENT": "互動",
+    "OUTCOME_LEADS": "開發潛在顧客",
+    "OUTCOME_APP_PROMOTION": "應用程式推廣",
+    "OUTCOME_SALES": "銷售業績",
+    "BRAND_AWARENESS": "品牌知名度",
+    "REACH": "觸及人數",
+    "LINK_CLICKS": "連結點擊",
+    "VIDEO_VIEWS": "影片觀看",
+    "POST_ENGAGEMENT": "貼文互動",
+    "PAGE_LIKES": "粉絲專頁讚數",
+    "EVENT_RESPONSES": "活動回應",
+    "LEAD_GENERATION": "開發潛在顧客",
+    "MESSAGES": "訊息",
+    "CONVERSIONS": "轉換次數",
+    "CATALOG_SALES": "目錄銷售",
+    "STORE_VISITS": "來店造訪",
+    "APP_INSTALLS": "應用程式安裝",
+}
+
+# 流量類目標 — 私訊指標對這些 campaign 是雜訊。對齊 frontend
+# `lib/recommendations.ts` 的 TRAFFIC_OBJECTIVES。
+_TRAFFIC_OBJECTIVES = {
+    "OUTCOME_TRAFFIC",
+    "LINK_CLICKS",
+    "OUTCOME_AWARENESS",
+    "BRAND_AWARENESS",
+    "REACH",
+    "VIDEO_VIEWS",
+    "POST_ENGAGEMENT",
+    "PAGE_LIKES",
+}
+
+
+def _translate_objective(raw: Optional[str]) -> str:
+    if not raw:
+        return ""
+    return _OBJECTIVE_LABELS.get(raw, raw)
+
+
+def _is_traffic_objective(raw: Optional[str]) -> bool:
+    return raw is not None and raw in _TRAFFIC_OBJECTIVES
+
+
 def _evaluate_alert_recommendations(
     *,
     spend: float,
@@ -2380,6 +2426,7 @@ def _evaluate_alert_recommendations(
     msg_cost: float,
     cpc: float,
     frequency: float,
+    objective: Optional[str] = None,
 ) -> list[str]:
     """產生 LINE flex 報告的優化建議。私訊優先,CPC/頻次依私訊狀態調整。
 
@@ -2399,9 +2446,13 @@ def _evaluate_alert_recommendations(
         > 5 + spend > $1000  過高
         > 4 + spend >  $500  偏高
         但私訊成本 > $300 時整段略過,訊息聚焦私訊問題本身。
+
+    流量類目標 (objective in _TRAFFIC_OBJECTIVES) 完全跳過私訊邏輯,
+    因為這些 campaign 不是私訊優化的,msgCost 是雜訊。
     """
     out: list[str] = []
-    has_msg = msgs > 0
+    traffic_mode = _is_traffic_objective(objective)
+    has_msg = (not traffic_mode) and msgs > 0
     skip_frequency = False
 
     if has_msg:
@@ -2442,6 +2493,11 @@ def _evaluate_alert_recommendations(
             out.append(f"頻次 {frequency:.1f} 過高,建議擴大受眾避免廣告疲勞")
         elif frequency > 4 and spend > 500:
             out.append(f"頻次 {frequency:.1f} 偏高,需留意素材疲勞")
+
+    # 規則皆未觸發但 campaign 有花費 → 給正面評語,避免「優化建議」區
+    # 整段空白看起來像是建議引擎壞掉。
+    if not out and spend > 0:
+        out.append("整體表現穩定,持續觀察素材成效")
     return out
 
 
@@ -2532,21 +2588,34 @@ async def _build_flex_for_config(cfg: dict) -> dict:
     msgs = _extract_msg_count(ins.get("actions"))
     msg_cost_f = (spend_f / msgs) if msgs > 0 else 0.0
 
-    # 私訊成本：spend / msgs，無資料時顯示 "—"。
-    msg_cost_str = _fmt_money(msg_cost_f) if msgs > 0 else "—"
+    objective = camp.get("objective")
+    traffic_mode = _is_traffic_objective(objective)
+    objective_label = _translate_objective(objective)
 
+    # 流量類目標下私訊指標是雜訊,KPI 區直接省略。
     kpis: list[tuple[str, str]] = [
         ("花費", _fmt_money(spend_f)),
         ("曝光", _fmt_int(ins.get("impressions"))),
         ("點擊", _fmt_int(ins.get("clicks"))),
         ("CTR", _fmt_pct(ins.get("ctr"))),
         ("CPC", _fmt_money(cpc_f)),
-        ("私訊數", _fmt_int(msgs) if msgs > 0 else "—"),
-        ("私訊成本", msg_cost_str),
     ]
+    if not traffic_mode:
+        msg_cost_str = _fmt_money(msg_cost_f) if msgs > 0 else "—"
+        kpis.extend(
+            [
+                ("私訊數", _fmt_int(msgs) if msgs > 0 else "—"),
+                ("私訊成本", msg_cost_str),
+            ]
+        )
 
     recommendations = _evaluate_alert_recommendations(
-        spend=spend_f, msgs=msgs, msg_cost=msg_cost_f, cpc=cpc_f, frequency=freq_f
+        spend=spend_f,
+        msgs=msgs,
+        msg_cost=msg_cost_f,
+        cpc=cpc_f,
+        frequency=freq_f,
+        objective=objective,
     )
 
     # Title: campaign nickname (store · designer) if set, else FB name.
@@ -2560,6 +2629,7 @@ async def _build_flex_for_config(cfg: dict) -> dict:
     return line_client.build_flex_report(
         title=title,
         subtitle=subtitle,
+        objective_label=objective_label,
         kpis=kpis,
         recommendations=recommendations,
         report_url=report_url,

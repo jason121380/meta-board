@@ -81,5 +81,12 @@ export function buildCampaignRecommendations(m: CampaignMetricsForRec): string[]
       out.push(`頻次 ${m.frequency.toFixed(1)} 偏高,需留意素材疲勞`);
     }
   }
+
+  // No specific rule fired but the campaign has spend → give a positive
+  // status read so the report doesn't look like the recommendation
+  // engine is broken. Skipping when spend is 0 (no insights to react to).
+  if (out.length === 0 && m.spend > 0) {
+    out.push("整體表現穩定,持續觀察素材成效");
+  }
   return out;
 }

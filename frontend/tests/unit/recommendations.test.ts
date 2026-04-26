@@ -178,7 +178,19 @@ describe("buildCampaignRecommendations — 組合情境", () => {
     expect(out).toHaveLength(1);
   });
 
-  it("無花費無私訊 CPC 0 → 完全空", () => {
+  it("有花費但所有規則都未觸發 → fallback 正面評語", () => {
+    const out = buildCampaignRecommendations({
+      spend: 1000,
+      msgs: 0,
+      msgCost: 0,
+      cpc: 3, // ≤ 4 不觸發
+      frequency: 1, // 不觸發
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("整體表現穩定");
+  });
+
+  it("無花費無私訊 CPC 0 → 完全空(沒 spend 不給 fallback)", () => {
     const out = buildCampaignRecommendations(base);
     expect(out).toHaveLength(0);
   });
