@@ -3,7 +3,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Modal } from "@/components/Modal";
 import { Spinner } from "@/components/Spinner";
 import { toast } from "@/components/Toast";
-import { type DateConfig, toLabel } from "@/lib/datePicker";
+import { type DateConfig, resolveRange } from "@/lib/datePicker";
 import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount, spendOf } from "@/lib/insights";
 import { type PaymentAccount, usePaymentStore } from "@/stores/paymentStore";
@@ -57,7 +57,8 @@ export function InvoiceModal({ open, onOpenChange, campaign, date, markup }: Inv
         cacheBust: true,
       });
       const safeName = campaign.name.replace(/[\\/:*?"<>|]/g, "_");
-      const safeDate = toLabel(date).replace(/[/ ~]/g, "_");
+      const { start, end } = resolveRange(date);
+      const safeDate = start === end ? start : `${start}_${end}`;
       const a = document.createElement("a");
       a.href = dataUrl;
       a.download = `請款單_${safeName}_${safeDate}.jpg`;
@@ -205,6 +206,7 @@ const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(function 
   const plus = spendPlus(spend, markup);
   const today = new Date();
   const issueDate = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, "0")}/${String(today.getDate()).padStart(2, "0")}`;
+  const dateRangeLabel = concreteRangeLabel(date);
 
   return (
     <div
@@ -220,11 +222,13 @@ const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(function 
           <div className="text-[11px] font-semibold uppercase tracking-[1px] text-orange">
             LURE META PLATFORM
           </div>
-          <div className="mt-1 text-[24px] font-bold leading-tight">廣告投放請款單</div>
+          <div className="mt-1 text-[24px] font-bold leading-tight">
+            廣告投放總覽 {dateRangeLabel}
+          </div>
         </div>
         <div className="text-right text-[11px] text-gray-500">
           <div>開立日期:{issueDate}</div>
-          <div>結算期間:{toLabel(date)}</div>
+          <div>結算期間:{dateRangeLabel}</div>
         </div>
       </div>
 
@@ -339,4 +343,20 @@ function PayRow({
       </td>
     </tr>
   );
+}
+
+/** "M/D - M/D" 格式;start === end 時只顯示一個日期。 */
+function concreteRangeLabel(date: DateConfig): string {
+  const { start, end } = resolveRange(date);
+  const parse = (iso: string) => {
+    const parts = iso.split("-");
+    return {
+      m: Number.parseInt(parts[1] ?? "0", 10),
+      d: Number.parseInt(parts[2] ?? "0", 10),
+    };
+  };
+  const s = parse(start);
+  const e = parse(end);
+  if (start === end) return `${s.m}/${s.d}`;
+  return `${s.m}/${s.d} - ${e.m}/${e.d}`;
 }
