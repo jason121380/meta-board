@@ -297,6 +297,28 @@ async def lifespan(app: FastAPI):
     else:
         print("[startup] DB: SKIPPED (DATABASE_URL not set)", flush=True)
 
+    # Restore the persisted FB runtime token (if any) so the public
+    # share page survives server restarts. The DB row is upserted by
+    # /api/auth/token whenever an admin logs in. Until then, calls
+    # fall back to FB_ACCESS_TOKEN from .env.
+    if _db_pool is not None:
+        try:
+            async with _db_pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT value FROM shared_settings WHERE key = $1",
+                    "_fb_runtime_token",
+                )
+            if row:
+                v = row["value"]
+                if isinstance(v, str):
+                    v = _json.loads(v)
+                if isinstance(v, dict) and v.get("token"):
+                    global _runtime_token
+                    _runtime_token = v["token"]
+                    print("[startup] runtime FB token: restored from PG", flush=True)
+        except Exception as exc:
+            print(f"[startup] runtime token restore failed: {exc}", flush=True)
+
     # Start the LINE push scheduler loop only when the DB is available.
     # Without DB there's nothing to schedule off, so skip silently.
     global _scheduler_task
@@ -1089,6 +1111,40 @@ async def manifest_webmanifest():
 class TokenPayload(BaseModel):
     token: str
 
+
+async def _persist_runtime_token(token: Optional[str]) -> None:
+    """Save / clear the runtime FB token to PG so that a server
+    restart (e.g. Zeabur redeploy) doesn't break the public share
+    page until an admin re-logs in.
+
+    Stored under the `_fb_runtime_token` key — the underscore prefix
+    is the convention `get_shared_settings` uses to keep internal
+    rows from leaking to the frontend.
+    """
+    if _db_pool is None:
+        return
+    try:
+        async with _db_pool.acquire() as conn:
+            if token:
+                await conn.execute(
+                    """
+                    INSERT INTO shared_settings (key, value, updated_at)
+                    VALUES ($1, $2::jsonb, NOW())
+                    ON CONFLICT (key) DO UPDATE
+                    SET value = EXCLUDED.value, updated_at = NOW()
+                    """,
+                    "_fb_runtime_token",
+                    _json.dumps({"token": token}),
+                )
+            else:
+                await conn.execute(
+                    "DELETE FROM shared_settings WHERE key = $1",
+                    "_fb_runtime_token",
+                )
+    except Exception as exc:
+        print(f"[token] persist failed: {exc}", flush=True)
+
+
 @app.post("/api/auth/token")
 async def set_token(payload: TokenPayload):
     global _runtime_token
@@ -1097,15 +1153,20 @@ async def set_token(payload: TokenPayload):
         # Get basic profile
         me = await fb_get("me", {"fields": "id,name,picture"})
         pic = me.get("picture", {}).get("data", {}).get("url")
+        # Only persist after the token verifies — avoids storing
+        # garbage that would 401 every share-page viewer.
+        await _persist_runtime_token(payload.token)
         return {"ok": True, "name": me.get("name"), "id": me.get("id"), "pictureUrl": pic}
     except Exception as e:
         _runtime_token = None
         raise HTTPException(status_code=400, detail=str(e))
 
+
 @app.delete("/api/auth/token")
 async def clear_token():
     global _runtime_token
     _runtime_token = None
+    await _persist_runtime_token(None)
     return {"ok": True}
 
 @app.get("/api/auth/me")
@@ -1271,10 +1332,13 @@ async def get_shared_settings():
         return {"data": {}}
     async with _db_pool.acquire() as conn:
         rows = await conn.fetch("SELECT key, value FROM shared_settings")
+    # Underscore-prefixed keys (e.g. _fb_runtime_token) are server
+    # internal — never leak them to the frontend.
     return {
         "data": {
             r["key"]: (json.loads(r["value"]) if isinstance(r["value"], str) else r["value"])
             for r in rows
+            if not r["key"].startswith("_")
         }
     }
 
