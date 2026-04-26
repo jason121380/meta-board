@@ -134,20 +134,24 @@ def verify_webhook_signature(body: bytes, signature: Optional[str]) -> bool:
 
 
 def build_flex_report(
-    campaign_name: str,
-    account_name: str,
-    date_label: str,
-    kpis: list[tuple[str, str]],
     *,
+    title: str,
+    subtitle: str,
+    kpis: list[tuple[str, str]],
     alt_text: Optional[str] = None,
 ) -> dict:
     """Build a LINE Flex Message bubble for a campaign report.
 
-    `kpis` is a list of (label, value) tuples, rendered as a grid of
+    Header layout:
+        LURE META · 廣告成效報告   (small overline)
+        {title}                    (campaign nickname or name — main)
+        {subtitle}                 (e.g. "報告區間: 4/1 - 4/25")
+
+    `kpis` is a list of (label, value) tuples rendered as a grid of
     rows in the body. Colours match the dashboard's orange branding
     (#FF6B2C) so the message feels consistent with the web UI.
     """
-    alt = alt_text or f"{campaign_name} 報告（{date_label}）"
+    alt = alt_text or f"{title}（{subtitle}）"
 
     kpi_rows: list[dict[str, Any]] = []
     for label, value in kpis:
@@ -189,14 +193,14 @@ def build_flex_report(
             "contents": [
                 {
                     "type": "text",
-                    "text": "LURE META · 行銷活動報告",
+                    "text": "LURE META · 廣告成效報告",
                     "size": "xs",
                     "color": "#FFE8D9",
                     "weight": "bold",
                 },
                 {
                     "type": "text",
-                    "text": campaign_name,
+                    "text": title,
                     "size": "lg",
                     "color": "#FFFFFF",
                     "weight": "bold",
@@ -205,7 +209,7 @@ def build_flex_report(
                 },
                 {
                     "type": "text",
-                    "text": account_name,
+                    "text": subtitle,
                     "size": "xs",
                     "color": "#FFE8D9",
                     "margin": "xs",
@@ -219,13 +223,6 @@ def build_flex_report(
             "spacing": "sm",
             "paddingAll": "16px",
             "contents": [
-                {
-                    "type": "text",
-                    "text": f"資料區間：{date_label}",
-                    "size": "xs",
-                    "color": "#888888",
-                },
-                {"type": "separator", "margin": "md", "color": "#F0F0F0"},
                 *kpi_rows,
             ],
         },
