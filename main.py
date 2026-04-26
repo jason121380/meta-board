@@ -2385,7 +2385,7 @@ def _evaluate_alert_recommendations(
 
     私訊成本分段:
         < $100  非常好(以私訊為主軸,忽略 CPC)
-        100~200 平均值,不評論
+        100~200 平均值,維持現狀
         200~300 偏高,待觀察
         > $300  太高,需優化(連同 CPC 對比評論,忽略頻次)
 
@@ -2409,8 +2409,8 @@ def _evaluate_alert_recommendations(
             # 非常好 → 以私訊為主,不評論 CPC
             out.append(f"私訊成本 ${msg_cost:.0f} 非常好,持續以私訊轉換為主軸")
         elif msg_cost <= 200:
-            # 100~200 平均值,不評論
-            pass
+            # 100~200 平均值 → 維持現狀提示
+            out.append(f"私訊成本 ${msg_cost:.0f} 為平均值,維持現狀即可")
         elif msg_cost <= 300:
             # 200~300 偏高待觀察
             out.append(f"私訊成本 ${msg_cost:.0f} 偏高,待觀察")
