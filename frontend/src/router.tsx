@@ -28,6 +28,7 @@ const importFinance = () => import("@/views/finance/FinanceView");
 const importHistory = () => import("@/views/history/HistoryView");
 const importLaunch = () => import("@/views/launch/QuickLaunchView");
 const importSettings = () => import("@/views/settings/SettingsView");
+const importLinePush = () => import("@/views/settings/LinePushSettingsView");
 const importEngineering = () => import("@/views/engineering/EngineeringView");
 
 /**
@@ -88,6 +89,9 @@ const QuickLaunchView = lazy(() =>
 const SettingsView = lazy(() =>
   withReloadOnChunkError(importSettings)().then((m) => ({ default: m.SettingsView })),
 );
+const LinePushSettingsView = lazy(() =>
+  withReloadOnChunkError(importLinePush)().then((m) => ({ default: m.LinePushSettingsView })),
+);
 const EngineeringView = lazy(() =>
   withReloadOnChunkError(importEngineering)().then((m) => ({ default: m.EngineeringView })),
 );
@@ -113,6 +117,9 @@ export const prefetchView = (path: string): void => {
     case "/settings":
       void importSettings();
       return;
+    case "/line-push":
+      void importLinePush();
+      return;
     case "/engineering":
       void importEngineering();
       return;
@@ -135,6 +142,7 @@ export const router = createBrowserRouter([
       { path: "history", element: lazyView(<HistoryView />) },
       { path: "launch", element: lazyView(<QuickLaunchView />) },
       { path: "settings", element: lazyView(<SettingsView />) },
+      { path: "line-push", element: lazyView(<LinePushSettingsView />) },
       { path: "engineering", element: lazyView(<EngineeringView />) },
       { path: "*", element: <Navigate to="/dashboard" replace /> },
     ],

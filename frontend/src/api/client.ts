@@ -426,6 +426,7 @@ export const api = {
       request<{
         data: Array<{
           group_id: string;
+          group_name: string;
           label: string;
           joined_at: string | null;
           left_at: string | null;
@@ -436,6 +437,12 @@ export const api = {
       request<{ ok: boolean }>("POST", `/api/line-groups/${encodeURIComponent(groupId)}`, {
         body: { label },
       }),
+    /** Re-fetch a group's display name from LINE (manual backfill / rename pickup). */
+    refreshGroupName: (groupId: string) =>
+      request<{ ok: boolean; group_name: string }>(
+        "POST",
+        `/api/line-groups/${encodeURIComponent(groupId)}/refresh-name`,
+      ),
     /** List push configs for a single campaign (omit campaignId to list all). */
     listConfigs: (campaignId?: string) =>
       request<{ data: LinePushConfig[] }>("GET", "/api/line-push/configs", {

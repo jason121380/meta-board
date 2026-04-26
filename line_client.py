@@ -22,6 +22,7 @@ from typing import Any, List, Optional
 import httpx
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
+LINE_GROUP_SUMMARY_URL = "https://api.line.me/v2/bot/group/{group_id}/summary"
 
 
 def _access_token() -> str:
@@ -81,6 +82,40 @@ async def line_push(
         except Exception:
             detail = resp.text[:400]
         raise LinePushError(resp.status_code, detail)
+
+
+async def get_group_summary(
+    client: httpx.AsyncClient,
+    group_id: str,
+) -> Optional[dict]:
+    """Fetch a group's display name + picture URL from LINE.
+
+    Returns ``{"groupId", "groupName", "pictureUrl"}`` on success,
+    or ``None`` if the bot has no permission / group is gone / token
+    is missing. Errors are logged but never raised — the caller
+    treats a missing summary as "name unknown" and keeps going.
+    """
+    if _mock_enabled():
+        return {"groupId": group_id, "groupName": f"Mock Group {group_id[:6]}", "pictureUrl": ""}
+
+    token = _access_token()
+    if not token:
+        return None
+
+    try:
+        resp = await client.get(
+            LINE_GROUP_SUMMARY_URL.format(group_id=group_id),
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+        if resp.status_code >= 300:
+            return None
+        body = resp.json()
+        if not isinstance(body, dict):
+            return None
+        return body
+    except Exception:
+        return None
 
 
 def verify_webhook_signature(body: bytes, signature: Optional[str]) -> bool:
