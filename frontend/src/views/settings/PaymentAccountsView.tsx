@@ -175,17 +175,43 @@ function AccountRow({
   onRemove: () => void;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-2.5 border-b border-border px-4 py-3 last:border-b-0 md:grid-cols-[1.2fr_1fr_1fr_1fr_1fr_auto] md:items-end md:px-5">
-      <Field label="別名" value={account.alias} onChange={(v) => onUpdate({ alias: v })} />
-      <Field label="銀行" value={account.bank} onChange={(v) => onUpdate({ bank: v })} />
-      <Field label="分行" value={account.branch} onChange={(v) => onUpdate({ branch: v })} />
-      <Field label="戶名" value={account.holder} onChange={(v) => onUpdate({ holder: v })} />
-      <Field label="帳號" value={account.accountNo} onChange={(v) => onUpdate({ accountNo: v })} />
-      <div className="flex justify-end md:pb-[1px]">
-        <Button variant="danger" size="sm" onClick={onRemove}>
-          刪除
-        </Button>
+    <div className="flex flex-col gap-2.5 border-b border-border px-4 py-3 last:border-b-0 md:flex-row md:items-end md:gap-3 md:px-5">
+      <div className="grid grid-cols-1 gap-2.5 md:flex-1 md:grid-cols-[1.2fr_1fr_1fr_1fr_1fr]">
+        <Field label="別名" value={account.alias} onChange={(v) => onUpdate({ alias: v })} />
+        <Field label="銀行" value={account.bank} onChange={(v) => onUpdate({ bank: v })} />
+        <Field label="分行" value={account.branch} onChange={(v) => onUpdate({ branch: v })} />
+        <Field label="戶名" value={account.holder} onChange={(v) => onUpdate({ holder: v })} />
+        <Field
+          label="帳號"
+          value={account.accountNo}
+          onChange={(v) => onUpdate({ accountNo: v })}
+        />
       </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        title="刪除"
+        aria-label={`刪除 ${account.alias || account.bank || "帳戶"}`}
+        className="flex h-9 w-9 shrink-0 items-center justify-center self-end rounded-full text-red transition hover:bg-red-bg active:scale-90 md:mb-[1px]"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+          <path d="M10 11v6" />
+          <path d="M14 11v6" />
+          <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+        </svg>
+      </button>
     </div>
   );
 }
