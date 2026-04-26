@@ -20,6 +20,9 @@ interface Props {
   id: string;
   date: DateConfig;
   hideMoney: boolean;
+  /** Traffic-oriented campaigns ignore message metrics — winner is
+   *  picked by CTR / impressions only. */
+  ignoreMsgs?: boolean;
 }
 
 /**
@@ -35,11 +38,19 @@ interface Props {
  *   - else → highest spend / impression bucket (the "where the
  *     money/eyeballs are going" fallback)
  */
-export function BreakdownInsightStrip({ level, id, date, hideMoney }: Props) {
+export function BreakdownInsightStrip({ level, id, date, hideMoney, ignoreMsgs = false }: Props) {
   return (
     <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
       {DIMS.map((dim) => (
-        <DimCard key={dim} level={level} id={id} dim={dim} date={date} hideMoney={hideMoney} />
+        <DimCard
+          key={dim}
+          level={level}
+          id={id}
+          dim={dim}
+          date={date}
+          hideMoney={hideMoney}
+          ignoreMsgs={ignoreMsgs}
+        />
       ))}
     </div>
   );
@@ -51,17 +62,19 @@ function DimCard({
   dim,
   date,
   hideMoney,
+  ignoreMsgs,
 }: {
   level: BreakdownLevel;
   id: string;
   dim: BreakdownDim;
   date: DateConfig;
   hideMoney: boolean;
+  ignoreMsgs: boolean;
 }) {
   const query = useBreakdown(level, id, dim, date, true);
   const rows = query.data ?? [];
 
-  const winner = pickWinner(rows);
+  const winner = pickWinner(rows, { ignoreMsgs });
   const label = BREAKDOWN_DIM_LABELS[dim];
 
   if (query.isLoading) {
@@ -74,15 +87,15 @@ function DimCard({
   const detail = formatDetail(winner.row, winner.metric, hideMoney);
 
   return (
-    <div className="rounded-lg border border-border bg-white px-3 py-2">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">{label}</div>
+    <div className="rounded-lg border border-border bg-white px-3.5 py-2.5">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{label}</div>
       <div
-        className={cn("mt-1 truncate text-[14px] font-bold text-orange")}
+        className={cn("mt-1 truncate text-[16px] font-bold text-orange")}
         title={translateBucket(dim, winner.row.key)}
       >
         {translateBucket(dim, winner.row.key)}
       </div>
-      <div className="truncate text-[11px] text-gray-500" title={detail}>
+      <div className="truncate text-[12px] text-gray-500" title={detail}>
         {detail}
       </div>
     </div>
@@ -91,9 +104,9 @@ function DimCard({
 
 function PlaceholderCard({ label, text }: { label: string; text: string }) {
   return (
-    <div className="rounded-lg border border-border bg-white px-3 py-2">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">{label}</div>
-      <div className="mt-1 text-[14px] font-bold text-gray-300">{text}</div>
+    <div className="rounded-lg border border-border bg-white px-3.5 py-2.5">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="mt-1 text-[16px] font-bold text-gray-300">{text}</div>
     </div>
   );
 }
@@ -110,11 +123,13 @@ export type WinnerMetric = "msgCost" | "ctr" | "impressions";
 
 export function pickWinner(
   rows: BreakdownRow[] | undefined,
+  opts: { ignoreMsgs?: boolean } = {},
 ): { row: BreakdownRow; metric: WinnerMetric } | null {
   if (!rows || rows.length === 0) return null;
 
-  // Prefer cost-per-message when ANY bucket has messages.
-  const msgPool = rows.filter((r) => r.msgs > 0);
+  // Prefer cost-per-message when ANY bucket has messages — unless the
+  // caller is in traffic-objective mode and wants msg metrics ignored.
+  const msgPool = opts.ignoreMsgs ? [] : rows.filter((r) => r.msgs > 0);
   if (msgPool.length > 0) {
     const winner = msgPool.reduce(
       (best, r) => (num(r.spend) / r.msgs < num(best.spend) / best.msgs ? r : best),

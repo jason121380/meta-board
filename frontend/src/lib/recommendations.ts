@@ -14,11 +14,35 @@ export interface CampaignMetricsForRec {
   msgCost: number;
   cpc: number;
   frequency: number;
+  /** Optional FB objective. When present and traffic-oriented (e.g.
+   *  OUTCOME_TRAFFIC), the rule engine skips message-based logic
+   *  altogether — these campaigns aren't optimised for messages so a
+   *  high msgCost is uninformative. */
+  objective?: string | null;
+}
+
+const TRAFFIC_OBJECTIVES = new Set([
+  "OUTCOME_TRAFFIC",
+  "LINK_CLICKS",
+  "OUTCOME_AWARENESS",
+  "BRAND_AWARENESS",
+  "REACH",
+  "VIDEO_VIEWS",
+  "POST_ENGAGEMENT",
+  "PAGE_LIKES",
+]);
+
+/** Returns true when the campaign objective is traffic / awareness
+ *  oriented — for these objectives the message metrics are noise. */
+export function isTrafficObjective(objective: string | undefined | null): boolean {
+  if (!objective) return false;
+  return TRAFFIC_OBJECTIVES.has(objective);
 }
 
 export function buildCampaignRecommendations(m: CampaignMetricsForRec): string[] {
   const out: string[] = [];
-  const hasMsg = m.msgs > 0;
+  const trafficMode = isTrafficObjective(m.objective);
+  const hasMsg = !trafficMode && m.msgs > 0;
   let skipFrequency = false;
 
   if (hasMsg) {

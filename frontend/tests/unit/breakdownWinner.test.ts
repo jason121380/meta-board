@@ -61,4 +61,14 @@ describe("pickWinner — 受眾洞察 winner 選擇", () => {
     expect(w?.row.key).toBe("Facebook");
     expect(w?.metric).toBe("msgCost");
   });
+
+  it("ignoreMsgs=true (流量目標) → 跳過 msgCost,改用 CTR", () => {
+    const rows = [
+      row("Facebook", 100, 10000, 5.0, 5), // 有私訊但要忽略
+      row("Instagram", 100, 10000, 10.0, 0), // CTR 較高 ← winner
+    ];
+    const w = pickWinner(rows, { ignoreMsgs: true });
+    expect(w?.row.key).toBe("Instagram");
+    expect(w?.metric).toBe("ctr");
+  });
 });
