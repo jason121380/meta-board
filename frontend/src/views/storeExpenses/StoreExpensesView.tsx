@@ -16,12 +16,23 @@ import { useFinanceStore } from "@/stores/financeStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useMemo, useState } from "react";
 import {
+  type DesignerBreakdown,
   type StoreSortKey,
   type StoreSortState,
   buildStoreRows,
   filterStoreRows,
   sortStoreRows,
 } from "./storeExpensesData";
+
+/** 會計科目固定值 — 此頁所有列都填這兩個 */
+const SUBJECT = "代收轉付";
+const SUB_SUBJECT = "廣告代操";
+
+/** 設計師欄純文字版本(Excel 用):「name $1,234、name $567」 */
+function formatDesignersText(designers: DesignerBreakdown[]): string {
+  if (designers.length === 0) return "—";
+  return designers.map((d) => `${d.name} $${fM(d.spendPlus)}`).join("、");
+}
 
 /**
  * 店家花費 — aggregates spend+markup across ALL enabled ad accounts,
@@ -89,13 +100,19 @@ export function StoreExpensesView() {
       // exports — keeps it out of the initial app bundle.
       const xlsx = await import("xlsx");
       const aoa: Array<Array<string | number>> = [
-        ["店家", "設計師", "花費+%"],
-        ...visibleRows.map((r) => [r.store, r.designers.join("、") || "—", r.spendPlus]),
-        ["合計", "", totalPlus],
+        ["花費+%", "店家", "科目", "子科目", "設計師"],
+        ...visibleRows.map((r) => [
+          r.spendPlus,
+          r.store,
+          SUBJECT,
+          SUB_SUBJECT,
+          formatDesignersText(r.designers),
+        ]),
+        [totalPlus, "合計", "", "", ""],
       ];
       const ws = xlsx.utils.aoa_to_sheet(aoa);
       // Column widths for a readable Excel layout
-      ws["!cols"] = [{ wch: 24 }, { wch: 24 }, { wch: 14 }];
+      ws["!cols"] = [{ wch: 14 }, { wch: 24 }, { wch: 12 }, { wch: 12 }, { wch: 32 }];
       const wb = xlsx.utils.book_new();
       xlsx.utils.book_append_sheet(wb, ws, "店家花費");
       const dateLabel = toLabel(date).replace(/[/ ~]/g, "_");
@@ -174,19 +191,9 @@ export function StoreExpensesView() {
                 此區間沒有任何已設定店家暱稱的行銷活動,請先到費用中心或儀表板編輯活動暱稱
               </EmptyState>
             ) : (
-              <table className="w-full min-w-[480px] border-collapse text-[12px] md:text-[13px]">
+              <table className="w-full min-w-[640px] border-collapse text-[12px] md:text-[13px]">
                 <thead>
                   <tr className="bg-bg">
-                    <SortHeader
-                      label="店家"
-                      sortKey="store"
-                      active={sort.key === "store"}
-                      dir={sort.dir}
-                      onSort={onSort}
-                    />
-                    <th className="sticky top-0 z-[1] border-b border-border bg-bg px-1.5 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.5px] text-gray-300 md:px-3.5 md:py-2.5">
-                      設計師
-                    </th>
                     <SortHeader
                       label="花費+%"
                       sortKey="plus"
@@ -195,18 +202,37 @@ export function StoreExpensesView() {
                       onSort={onSort}
                       right
                     />
+                    <SortHeader
+                      label="店家"
+                      sortKey="store"
+                      active={sort.key === "store"}
+                      dir={sort.dir}
+                      onSort={onSort}
+                    />
+                    <th className="sticky top-0 z-[1] border-b border-border bg-bg px-1.5 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.5px] text-gray-300 md:px-3.5 md:py-2.5">
+                      科目
+                    </th>
+                    <th className="sticky top-0 z-[1] border-b border-border bg-bg px-1.5 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.5px] text-gray-300 md:px-3.5 md:py-2.5">
+                      子科目
+                    </th>
+                    <th className="sticky top-0 z-[1] border-b border-border bg-bg px-1.5 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.5px] text-gray-300 md:px-3.5 md:py-2.5">
+                      設計師
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {visibleRows.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="px-5 py-10 text-center text-xs text-gray-300">
+                      <td colSpan={5} className="px-5 py-10 text-center text-xs text-gray-300">
                         無符合條件的資料
                       </td>
                     </tr>
                   ) : (
                     visibleRows.map((row) => (
                       <tr key={row.store} className="border-b border-border bg-white">
+                        <td className="px-1.5 py-2 text-right font-semibold tabular-nums text-orange md:px-3.5 md:py-2.5">
+                          ${fM(row.spendPlus)}
+                        </td>
                         <td className="px-1.5 py-2 font-medium md:px-3.5 md:py-2.5">
                           <div className="flex items-center gap-1.5">
                             <span className="truncate" title={row.store}>
@@ -217,25 +243,26 @@ export function StoreExpensesView() {
                             </span>
                           </div>
                         </td>
+                        <td className="px-1.5 py-2 text-gray-500 md:px-3.5 md:py-2.5">{SUBJECT}</td>
                         <td className="px-1.5 py-2 text-gray-500 md:px-3.5 md:py-2.5">
-                          {row.designers.length > 0 ? row.designers.join("、") : "—"}
+                          {SUB_SUBJECT}
                         </td>
-                        <td className="px-1.5 py-2 text-right font-semibold tabular-nums text-orange md:px-3.5 md:py-2.5">
-                          ${fM(row.spendPlus)}
+                        <td className="px-1.5 py-2 text-gray-500 md:px-3.5 md:py-2.5">
+                          <DesignerCell designers={row.designers} />
                         </td>
                       </tr>
                     ))
                   )}
                   {visibleRows.length > 0 && (
                     <tr className="border-t border-border bg-bg">
+                      <td className="px-1.5 py-2 text-right text-[12px] font-bold tabular-nums text-orange md:px-3.5 md:py-2.5 md:text-[13px]">
+                        ${fM(totalPlus)}
+                      </td>
                       <td
-                        colSpan={2}
+                        colSpan={4}
                         className="px-1.5 py-2 text-[12px] font-bold text-ink md:px-3.5 md:py-2.5 md:text-[13px]"
                       >
                         合計({visibleRows.length} 個店家)
-                      </td>
-                      <td className="px-1.5 py-2 text-right text-[12px] font-bold tabular-nums text-orange md:px-3.5 md:py-2.5 md:text-[13px]">
-                        ${fM(totalPlus)}
                       </td>
                     </tr>
                   )}
@@ -246,6 +273,20 @@ export function StoreExpensesView() {
         </div>
       </div>
     </>
+  );
+}
+
+function DesignerCell({ designers }: { designers: DesignerBreakdown[] }) {
+  if (designers.length === 0) return <span>—</span>;
+  return (
+    <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+      {designers.map((d) => (
+        <span key={d.name} className="whitespace-nowrap">
+          {d.name}
+          <span className="ml-1 font-semibold tabular-nums text-orange">${fM(d.spendPlus)}</span>
+        </span>
+      ))}
+    </div>
   );
 }
 
