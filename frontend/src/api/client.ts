@@ -26,7 +26,13 @@ import type {
 
 // ── LINE push types (shared with hooks + modal) ───────────────
 export type LinePushFrequency = "daily" | "weekly" | "monthly";
-export type LinePushDateRange = "yesterday" | "last_7d" | "last_14d" | "last_30d" | "this_month";
+export type LinePushDateRange =
+  | "yesterday"
+  | "last_7d"
+  | "last_14d"
+  | "last_30d"
+  | "this_month"
+  | "month_to_yesterday";
 
 export interface LinePushConfig {
   id: string;

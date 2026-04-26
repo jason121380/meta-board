@@ -1962,7 +1962,14 @@ FREQUENCY_DAILY = "daily"
 FREQUENCY_WEEKLY = "weekly"
 FREQUENCY_MONTHLY = "monthly"
 _VALID_FREQUENCIES = {FREQUENCY_DAILY, FREQUENCY_WEEKLY, FREQUENCY_MONTHLY}
-_VALID_DATE_RANGES = {"yesterday", "last_7d", "last_14d", "last_30d", "this_month"}
+_VALID_DATE_RANGES = {
+    "yesterday",
+    "last_7d",
+    "last_14d",
+    "last_30d",
+    "this_month",
+    "month_to_yesterday",
+}
 
 
 def _compute_next_run(
@@ -2031,6 +2038,20 @@ def _compute_next_run(
     raise HTTPException(status_code=400, detail=f"Unknown frequency: {frequency}")
 
 
+def _month_to_yesterday_bounds() -> tuple[Any, Any]:
+    """Return (since, until) date objects for 本月1日 → 昨日 in SCHEDULER_TZ.
+
+    Edge case: when today is the 1st of the month, "本月1日 → 昨日" has
+    no in-month yesterday. We clamp until = today so the FB query stays
+    valid (a 0-day range covering today only).
+    """
+    tz = _scheduler_tz()
+    today = datetime.now(tz).date()
+    if today.day == 1:
+        return (today, today)
+    return (today.replace(day=1), today - timedelta(days=1))
+
+
 def _date_range_to_preset(date_range: str) -> tuple[str, Optional[str]]:
     """Map the UI's date_range choice to FB insights (date_preset, time_range)."""
     if date_range == "yesterday":
@@ -2043,10 +2064,20 @@ def _date_range_to_preset(date_range: str) -> tuple[str, Optional[str]]:
         return ("last_30d", None)
     if date_range == "this_month":
         return ("this_month", None)
+    if date_range == "month_to_yesterday":
+        since, until = _month_to_yesterday_bounds()
+        tr = _json.dumps(
+            {"since": since.isoformat(), "until": until.isoformat()},
+            separators=(",", ":"),
+        )
+        return ("last_30d", tr)
     return ("last_7d", None)
 
 
 def _date_range_label(date_range: str) -> str:
+    if date_range == "month_to_yesterday":
+        since, until = _month_to_yesterday_bounds()
+        return f"本月1日-昨日 ({since.month}/{since.day}-{until.month}/{until.day})"
     return {
         "yesterday": "昨日",
         "last_7d": "過去 7 天",
@@ -2098,6 +2129,51 @@ def _fmt_pct(v: Any) -> str:
     return f"{n:.2f}%"
 
 
+def _date_range_concrete(date_range: str) -> str:
+    """Concrete `M/D - M/D` (or single `M/D`) string for the given range,
+    in SCHEDULER_TZ. Used for the LINE flex report header subtitle so
+    recipients see the exact reporting window."""
+    tz = _scheduler_tz()
+    today = datetime.now(tz).date()
+    if date_range == "yesterday":
+        d = today - timedelta(days=1)
+        return f"{d.month}/{d.day}"
+    if date_range == "this_month":
+        since = today.replace(day=1)
+        return f"{since.month}/{since.day} - {today.month}/{today.day}"
+    if date_range == "month_to_yesterday":
+        since, until = _month_to_yesterday_bounds()
+        return f"{since.month}/{since.day} - {until.month}/{until.day}"
+    days = {"last_7d": 7, "last_14d": 14, "last_30d": 30}.get(date_range)
+    if days is not None:
+        since = today - timedelta(days=days)
+        until = today - timedelta(days=1)
+        return f"{since.month}/{since.day} - {until.month}/{until.day}"
+    return ""
+
+
+async def _campaign_nickname_display(campaign_id: str) -> str:
+    """Return "店家 · 設計師" / 店家 / 設計師 if either is set, else ''.
+
+    Mirrors the frontend's `formatNickname()` so flex messages match
+    what operators see in the Finance view.
+    """
+    if _db_pool is None:
+        return ""
+    async with _db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT store, designer FROM campaign_nicknames WHERE campaign_id = $1",
+            campaign_id,
+        )
+    if not row:
+        return ""
+    store = (row["store"] or "").strip()
+    designer = (row["designer"] or "").strip()
+    if store and designer:
+        return f"{store} · {designer}"
+    return store or designer
+
+
 async def _build_flex_for_config(cfg: dict) -> dict:
     """Produce the LINE Flex Message for one push config row.
 
@@ -2123,6 +2199,14 @@ async def _build_flex_for_config(cfg: dict) -> dict:
     spend = ins.get("spend") or 0
     msgs = _extract_msg_count(ins.get("actions"))
 
+    # 私訊成本：spend / msgs，無資料時顯示 "—"。
+    msg_cost_str = "—"
+    if msgs > 0:
+        try:
+            msg_cost_str = _fmt_money(float(spend) / msgs)
+        except (TypeError, ValueError):
+            msg_cost_str = "—"
+
     kpis: list[tuple[str, str]] = [
         ("花費", _fmt_money(spend)),
         ("曝光", _fmt_int(ins.get("impressions"))),
@@ -2130,31 +2214,20 @@ async def _build_flex_for_config(cfg: dict) -> dict:
         ("CTR", _fmt_pct(ins.get("ctr"))),
         ("CPC", _fmt_money(ins.get("cpc"))),
         ("私訊數", _fmt_int(msgs) if msgs > 0 else "—"),
+        ("私訊成本", msg_cost_str),
     ]
-    if msgs > 0:
-        try:
-            cost_per_msg = float(spend) / msgs
-        except (TypeError, ValueError):
-            cost_per_msg = 0.0
-        kpis.append(("私訊成本", _fmt_money(cost_per_msg)))
 
-    # Look up the account display name (for the header subtitle).
-    account_name = account_id
-    try:
-        accts = await fb_get("me/adaccounts", {"fields": "id,name", "limit": "500"})
-        for a in accts.get("data", []):
-            if a.get("id") == account_id:
-                account_name = a.get("name", account_id)
-                break
-    except Exception:
-        pass
+    # Title: campaign nickname (store · designer) if set, else FB name.
+    nickname = await _campaign_nickname_display(campaign_id)
+    title = nickname or camp.get("name", campaign_id)
+    concrete_range = _date_range_concrete(date_range)
+    subtitle = f"報告區間: {concrete_range}" if concrete_range else _date_range_label(date_range)
 
     return line_client.build_flex_report(
-        campaign_name=camp.get("name", campaign_id),
-        account_name=account_name,
-        date_label=_date_range_label(date_range),
+        title=title,
+        subtitle=subtitle,
         kpis=kpis,
-        alt_text=f"{camp.get('name', campaign_id)} {_date_range_label(date_range)}",
+        alt_text=f"{title} {concrete_range or _date_range_label(date_range)}",
     )
 
 

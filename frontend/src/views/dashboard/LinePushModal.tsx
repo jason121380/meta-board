@@ -13,7 +13,8 @@ import { Modal } from "@/components/Modal";
 import { toast } from "@/components/Toast";
 import { cn } from "@/lib/cn";
 import type { FbCampaign } from "@/types/fb";
-import { useEffect, useMemo, useState } from "react";
+import * as Popover from "@radix-ui/react-popover";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 /**
  * LINE push settings dialog — per-campaign pairing of a LINE group
@@ -32,13 +33,41 @@ import { useEffect, useMemo, useState } from "react";
 
 const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
 
-const DATE_RANGE_OPTIONS: Array<{ value: LinePushDateRange; label: string }> = [
-  { value: "yesterday", label: "昨日" },
-  { value: "last_7d", label: "過去 7 天" },
-  { value: "last_14d", label: "過去 14 天" },
-  { value: "last_30d", label: "過去 30 天" },
-  { value: "this_month", label: "本月" },
-];
+/** Build a "M/D-M/D" preview of 本月1日 → 昨日 in the user's locale. */
+function monthToYesterdayPreview(): string {
+  const today = new Date();
+  if (today.getDate() === 1) {
+    // Edge case: 1st of the month — fall back to today only.
+    return `${today.getMonth() + 1}/1`;
+  }
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  return `${today.getMonth() + 1}/1-${yesterday.getMonth() + 1}/${yesterday.getDate()}`;
+}
+
+/** Compute the date range options. The 本月1日-昨日 label is dynamic
+ *  so it always reflects the current date when the dropdown opens. */
+function getDateRangeOptions(): Array<{ value: LinePushDateRange; label: string }> {
+  return [
+    { value: "yesterday", label: "昨日" },
+    { value: "last_7d", label: "過去 7 天" },
+    { value: "last_14d", label: "過去 14 天" },
+    { value: "last_30d", label: "過去 30 天" },
+    { value: "this_month", label: "本月" },
+    { value: "month_to_yesterday", label: `本月1日-昨日 (${monthToYesterdayPreview()})` },
+  ];
+}
+
+interface GroupOption {
+  group_id: string;
+  group_name: string;
+  label: string;
+}
+
+/** Display name priority: real LINE group_name → user nickname → raw id. */
+function groupDisplayName(g: GroupOption): string {
+  return g.group_name?.trim() || g.label?.trim() || g.group_id;
+}
 
 interface LinePushModalProps {
   open: boolean;
@@ -89,7 +118,8 @@ export function LinePushModal({ open, onOpenChange, campaign }: LinePushModalPro
 
   const groupLabel = (groupId: string): string => {
     const g = groupsQuery.data?.find((x) => x.group_id === groupId);
-    return g?.label?.trim() || groupId;
+    if (!g) return groupId;
+    return groupDisplayName(g);
   };
 
   const startEdit = (cfg: LinePushConfig) => {
@@ -247,7 +277,8 @@ function ConfigCard({
   testing: boolean;
 }) {
   const rule = useMemo(() => formatRule(cfg), [cfg]);
-  const range = DATE_RANGE_OPTIONS.find((o) => o.value === cfg.date_range)?.label ?? cfg.date_range;
+  const range =
+    getDateRangeOptions().find((o) => o.value === cfg.date_range)?.label ?? cfg.date_range;
   const disabled = !cfg.enabled;
   return (
     <div
@@ -310,7 +341,7 @@ function Editor({
 }: {
   state: EditorState;
   onChange: (s: EditorState) => void;
-  groups: Array<{ group_id: string; label: string }>;
+  groups: GroupOption[];
   onRenameGroup: (groupId: string, label: string) => void;
   groupLabelOf: (groupId: string) => string;
   onCancel: () => void;
@@ -332,22 +363,15 @@ function Editor({
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-bg px-3 py-3">
-      {/* Group picker */}
-      <label className="flex flex-col gap-1">
+      {/* Group picker (searchable — bots can be in hundreds of groups) */}
+      <div className="flex flex-col gap-1">
         <span className="text-[11px] font-semibold text-ink">LINE 群組</span>
-        <select
+        <GroupCombobox
+          groups={groups}
           value={state.groupId}
-          onChange={(e) => onChange({ ...state, groupId: e.currentTarget.value })}
-          className="h-9 rounded-lg border border-border bg-white px-2.5 text-[13px] outline-none focus:border-orange"
-        >
-          {groups.length === 0 && <option value="">(尚無可用群組)</option>}
-          {groups.map((g) => (
-            <option key={g.group_id} value={g.group_id}>
-              {g.label?.trim() || g.group_id}
-            </option>
-          ))}
-        </select>
-      </label>
+          onChange={(id) => onChange({ ...state, groupId: id })}
+        />
+      </div>
 
       {/* Rename current group */}
       {state.groupId && (
@@ -488,7 +512,7 @@ function Editor({
           }
           className="h-9 rounded-lg border border-border bg-white px-2.5 text-[13px] outline-none focus:border-orange"
         >
-          {DATE_RANGE_OPTIONS.map((o) => (
+          {getDateRangeOptions().map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
             </option>
@@ -528,4 +552,127 @@ function formatRule(cfg: LinePushConfig): string {
     return `${days || "每週"} ${time}`;
   }
   return `每月 ${cfg.month_day ?? 1} 日 ${time}`;
+}
+
+/**
+ * Searchable LINE group picker. The bot can sit in hundreds of
+ * groups, so a native <select> is unusable — operators need to
+ * type-to-find. Filters substring (case-insensitive) against
+ * group_name, label (nickname), and group_id.
+ */
+function GroupCombobox({
+  groups,
+  value,
+  onChange,
+}: {
+  groups: GroupOption[];
+  value: string;
+  onChange: (groupId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Reset search + autofocus on open. The 50ms delay lets Radix
+  // finish mounting the portal before we call focus().
+  useEffect(() => {
+    if (!open) return;
+    setQuery("");
+    const t = window.setTimeout(() => searchRef.current?.focus(), 50);
+    return () => window.clearTimeout(t);
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return groups;
+    return groups.filter((g) => {
+      return (
+        (g.group_name || "").toLowerCase().includes(q) ||
+        (g.label || "").toLowerCase().includes(q) ||
+        g.group_id.toLowerCase().includes(q)
+      );
+    });
+  }, [groups, query]);
+
+  const selected = groups.find((g) => g.group_id === value) ?? null;
+  const triggerLabel = selected
+    ? groupDisplayName(selected)
+    : groups.length === 0
+      ? "(尚無可用群組)"
+      : "請選擇群組";
+
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          disabled={groups.length === 0}
+          className={cn(
+            "flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-border bg-white px-2.5 text-left text-[13px] outline-none focus:border-orange disabled:bg-bg disabled:text-gray-300",
+            !selected && groups.length > 0 && "text-gray-300",
+          )}
+        >
+          <span className="truncate">{triggerLabel}</span>
+          <span className="shrink-0 text-gray-300">▾</span>
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align="start"
+          sideOffset={4}
+          // z-index must beat the host Modal's overlay (Radix Dialog
+          // uses 50; bump well past it).
+          className="z-[1100] w-[var(--radix-popover-trigger-width)] rounded-xl border border-border bg-white p-2 shadow-md"
+        >
+          <input
+            ref={searchRef}
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.currentTarget.value)}
+            placeholder="搜尋群組名稱、暱稱或 ID"
+            className="mb-2 h-9 w-full rounded-lg border border-border px-2.5 text-[13px] outline-none focus:border-orange"
+          />
+          <div className="text-[11px] text-gray-300 px-1 pb-1">
+            {filtered.length} / {groups.length} 個群組
+          </div>
+          <div className="max-h-[260px] overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="px-2 py-3 text-center text-[12px] text-gray-300">無符合的群組</div>
+            ) : (
+              filtered.map((g) => {
+                const active = g.group_id === value;
+                const primary = groupDisplayName(g);
+                const showNickname =
+                  g.group_name?.trim() && g.label?.trim() && g.label.trim() !== g.group_name.trim();
+                return (
+                  <button
+                    key={g.group_id}
+                    type="button"
+                    onClick={() => {
+                      onChange(g.group_id);
+                      setOpen(false);
+                    }}
+                    className={cn(
+                      "flex w-full flex-col items-start gap-0.5 rounded-lg px-2.5 py-2 text-left",
+                      active ? "bg-orange-bg text-orange" : "text-ink hover:bg-orange-bg",
+                    )}
+                  >
+                    <span className="w-full truncate text-[13px] font-semibold">{primary}</span>
+                    {showNickname && (
+                      <span className="w-full truncate text-[11px] text-gray-500">
+                        暱稱:{g.label}
+                      </span>
+                    )}
+                    <span className="w-full truncate font-mono text-[10px] text-gray-300">
+                      {g.group_id}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
 }
