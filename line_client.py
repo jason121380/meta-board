@@ -152,7 +152,7 @@ def build_flex_report(
         Body (white)
             {kpi_rows}              (花費 / 曝光 / ... / 私訊成本)
             ─── separator ───       (only if recommendations is non-empty)
-            AI 優化建議              (orange section title, only if any)
+            優化建議                  (orange section title, only if any)
             • {bullet}              (one row per recommendation)
 
         Footer (white)              (only if report_url is provided)
@@ -197,7 +197,7 @@ def build_flex_report(
         suggestion_rows.append(
             {
                 "type": "text",
-                "text": "AI 優化建議",
+                "text": "優化建議",
                 "size": "sm",
                 "color": "#FF6B2C",
                 "weight": "bold",
