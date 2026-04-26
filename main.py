@@ -2220,24 +2220,36 @@ def _evaluate_alert_recommendations(
     cpc: float,
     frequency: float,
 ) -> list[str]:
-    """Mirror of frontend `alertsData.computeAlertBuckets()` rules,
-    flattened into bullet-style optimisation suggestions for the LINE
-    flex report. Same priority/warning thresholds as the dashboard's
-    警示列表, in zh-TW.
+    """產生 LINE flex 報告的優化建議（與 alertsData.ts 同一套規則,但優先順序
+    為私訊優先）。
 
-    Returns at most 5 suggestions (one per rule that fires).
+    判斷順序:
+      1. 有私訊資料時,以私訊成本為主指標,CPC 略過(因為點擊只是中介,
+         真正目標是私訊轉換):
+            - msg_cost < $50  → 正面評價「表現良好」
+            - msg_cost > $200 → 警示「過高」
+            - 中間值不評論
+      2. 沒有私訊資料時,才回頭看 CPC 警示。
+      3. 頻次警示一律檢查(與素材疲勞有關,獨立於私訊/CPC)。
     """
     out: list[str] = []
-    # P2: msgCost > $200 → 私訊成本過高
-    if msgs > 0 and msg_cost > 200:
-        out.append(f"私訊成本 ${msg_cost:.0f} 過高,建議檢視私訊轉換流程或更換素材")
-    # P3 / W3: CPC bands
-    if cpc > 5:
-        out.append(f"CPC ${cpc:.2f} 過高,建議優化受眾或調整素材")
-    elif cpc > 4:
-        out.append(f"CPC ${cpc:.2f} 偏高,可觀察素材成效")
-    # P4: frequency > 5 + spend > $1000
-    # W4: frequency 4–5    + spend > $500
+    has_msg = msgs > 0
+
+    if has_msg:
+        # 私訊型廣告 — 私訊成本是主指標,CPC 不在這裡評估
+        if msg_cost < 50:
+            out.append(f"私訊成本 ${msg_cost:.0f} 表現良好,持續維持目前策略")
+        elif msg_cost > 200:
+            out.append(f"私訊成本 ${msg_cost:.0f} 過高,建議檢視私訊轉換流程或更換素材")
+        # 50 ~ 200 中段不評論,避免訊息冗長
+    else:
+        # 沒有私訊資料才看 CPC 警示
+        if cpc > 5:
+            out.append(f"CPC ${cpc:.2f} 過高,建議優化受眾或調整素材")
+        elif cpc > 4:
+            out.append(f"CPC ${cpc:.2f} 偏高,可觀察素材成效")
+
+    # 頻次警示獨立判斷
     if frequency > 5 and spend > 1000:
         out.append(f"頻次 {frequency:.1f} 過高,建議擴大受眾避免廣告疲勞")
     elif frequency > 4 and spend > 500:
