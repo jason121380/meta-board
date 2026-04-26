@@ -1,4 +1,4 @@
-import { FbAuthProvider, useFbAuth } from "@/auth/FbAuthProvider";
+import { FbAuthProvider, ShareModeAuthProvider, useFbAuth } from "@/auth/FbAuthProvider";
 import { ConfirmDialogHost } from "@/components/ConfirmDialog";
 import { PwaInstallHint } from "@/components/PwaInstallHint";
 import { ToastHost } from "@/components/Toast";
@@ -36,12 +36,18 @@ export function App() {
   // Public share-report route — bypasses the FB auth gate entirely.
   // The backend endpoints use a server-side shared token, so link
   // recipients can view the report without logging in themselves.
+  //
+  // We still wrap in ShareModeAuthProvider so any descendant calling
+  // `useFbAuth()` (e.g. CreativePreviewModal's image hooks) gets a
+  // stub "auth" context instead of throwing. Without it, tapping the
+  // 3rd-level ad card on the share page crashes the whole tree →
+  // blank white screen.
   if (typeof window !== "undefined" && window.location.pathname.startsWith("/r/")) {
     return (
-      <>
+      <ShareModeAuthProvider>
         <ShareReportPage />
         <ToastHost />
-      </>
+      </ShareModeAuthProvider>
     );
   }
 
