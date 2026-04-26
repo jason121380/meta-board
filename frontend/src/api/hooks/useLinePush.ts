@@ -46,6 +46,16 @@ export function useRefreshLineGroupName() {
   });
 }
 
+export function useLineGroupPushConfigs(groupId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["lineGroupConfigs", groupId ?? ""] as const,
+    queryFn: async () => (await api.linePush.listGroupConfigs(groupId ?? "")).data,
+    enabled: !!groupId,
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
+  });
+}
+
 export function useLinePushConfigs(campaignId: string | null | undefined) {
   return useQuery({
     queryKey: CONFIGS_KEY(campaignId ?? ""),

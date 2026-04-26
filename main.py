@@ -2410,6 +2410,45 @@ async def set_line_group_label(group_id: str, payload: LineGroupLabelPayload):
     return {"ok": True, "group_id": group_id, "label": label}
 
 
+@app.get("/api/line-groups/{group_id}/push-configs")
+async def list_group_push_configs(group_id: str):
+    """List push configs that target this LINE group, joined with the
+    campaign nickname (店家 · 設計師) so the UI can show "this group
+    receives X campaigns" without making the user open every campaign.
+
+    The FB-side campaign name is NOT included — fetching it would
+    require an FB Graph API call per row, and operators usually pin
+    a nickname anyway. Falls back to campaign_id when the nickname
+    is empty.
+    """
+    if _db_pool is None:
+        return {"data": []}
+    async with _db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT pc.*, n.store, n.designer
+            FROM campaign_line_push_configs pc
+            LEFT JOIN campaign_nicknames n ON n.campaign_id = pc.campaign_id
+            WHERE pc.group_id = $1
+            ORDER BY pc.created_at ASC
+            """,
+            group_id,
+        )
+    out = []
+    for r in rows:
+        d = _config_row_to_dict(r)
+        store = (r["store"] or "").strip() if r["store"] is not None else ""
+        designer = (r["designer"] or "").strip() if r["designer"] is not None else ""
+        if store and designer:
+            d["campaign_nickname"] = f"{store} · {designer}"
+        elif store or designer:
+            d["campaign_nickname"] = store or designer
+        else:
+            d["campaign_nickname"] = ""
+        out.append(d)
+    return {"data": out}
+
+
 @app.post("/api/line-groups/{group_id}/refresh-name")
 async def refresh_line_group_name(group_id: str):
     """Re-query LINE for a group's display name and update DB.
