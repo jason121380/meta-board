@@ -307,7 +307,7 @@ const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(function 
 
       {/* Footer note */}
       <div className="mt-6 border-t border-border pt-3 text-center text-[10px] text-gray-300">
-        本請款單由 LURE META PLATFORM 自動產生
+        Powered by LURE META PLATFORM
       </div>
     </div>
   );
