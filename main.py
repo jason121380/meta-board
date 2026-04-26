@@ -52,6 +52,10 @@ _fb_semaphore: asyncio.Semaphore = asyncio.Semaphore(40)
 # next_run_at has passed. 3 failures in a row flips `enabled=false`
 # so a broken token doesn't spam the log forever.
 _scheduler_task: Optional[asyncio.Task] = None
+# Background fire-and-forget tasks (e.g. one-shot LINE group name
+# backfill on startup). We hold strong refs so asyncio doesn't gc
+# them mid-run. Tasks self-discard via `add_done_callback`.
+_bg_tasks: "set[asyncio.Task]" = set()
 SCHEDULER_TICK_SECONDS = 60
 SCHEDULER_FAIL_THRESHOLD = 3
 SCHEDULER_TZ_NAME = os.getenv("SCHEDULER_TZ", "Asia/Taipei")
@@ -303,6 +307,12 @@ async def lifespan(app: FastAPI):
             f" tz={SCHEDULER_TZ_NAME}",
             flush=True,
         )
+        # One-shot backfill of legacy line_groups rows whose group_name
+        # is empty (joined before that column existed). Runs in the
+        # background so startup isn't blocked by LINE API latency.
+        bf = asyncio.create_task(_backfill_line_group_names())
+        _bg_tasks.add(bf)
+        bf.add_done_callback(_bg_tasks.discard)
     else:
         print("[startup] scheduler: SKIPPED (no DB)", flush=True)
 
@@ -2150,6 +2160,56 @@ def _date_range_concrete(date_range: str) -> str:
         until = today - timedelta(days=1)
         return f"{since.month}/{since.day} - {until.month}/{until.day}"
     return ""
+
+
+async def _backfill_line_group_names() -> None:
+    """One-shot startup task: pull `groupName` from LINE for any
+    `line_groups` rows where the bot is still in the group
+    (`left_at IS NULL`) but `group_name` is empty (e.g. joined before
+    that column existed). Failures are logged, never raised — this is
+    a best-effort backfill.
+    """
+    if _db_pool is None or _http_client is None:
+        return
+    try:
+        async with _db_pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT group_id FROM line_groups
+                WHERE left_at IS NULL AND COALESCE(group_name, '') = ''
+                ORDER BY joined_at DESC
+                """
+            )
+        if not rows:
+            return
+        print(
+            f"[startup] backfill: {len(rows)} LINE group name(s) to fetch",
+            flush=True,
+        )
+        for r in rows:
+            gid = r["group_id"]
+            summary = await line_client.get_group_summary(_http_client, gid)
+            if not summary:
+                continue
+            name = (summary.get("groupName") or "").strip()
+            if not name:
+                continue
+            try:
+                async with _db_pool.acquire() as conn:
+                    await conn.execute(
+                        """
+                        UPDATE line_groups SET group_name = $1
+                        WHERE group_id = $2 AND COALESCE(group_name, '') = ''
+                        """,
+                        name,
+                        gid,
+                    )
+                print(f"[startup] backfill: {gid} → {name!r}", flush=True)
+            except Exception as exc:
+                print(f"[startup] backfill update failed {gid}: {exc}", flush=True)
+        print("[startup] backfill: done", flush=True)
+    except Exception as exc:
+        print(f"[startup] backfill error: {exc}", flush=True)
 
 
 async def _campaign_nickname_display(campaign_id: str) -> str:

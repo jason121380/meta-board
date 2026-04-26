@@ -241,7 +241,6 @@ export function LinePushModal({ open, onOpenChange, campaign }: LinePushModalPro
             onChange={setEditor}
             groups={activeGroups}
             onRenameGroup={(groupId, label) => renameGroup.mutate({ groupId, label })}
-            groupLabelOf={groupLabel}
             onCancel={() => setEditor(null)}
             onSave={save}
             saving={saveMutation.isPending}
@@ -334,7 +333,6 @@ function Editor({
   onChange,
   groups,
   onRenameGroup,
-  groupLabelOf,
   onCancel,
   onSave,
   saving,
@@ -343,16 +341,19 @@ function Editor({
   onChange: (s: EditorState) => void;
   groups: GroupOption[];
   onRenameGroup: (groupId: string, label: string) => void;
-  groupLabelOf: (groupId: string) => string;
   onCancel: () => void;
   onSave: () => void;
   saving: boolean;
 }) {
   const [labelDraft, setLabelDraft] = useState("");
 
+  // Pre-fill the nickname input with the RAW label only — never the
+  // group_name (LINE-side display name) or group_id, otherwise the
+  // user has to clear a 32-char hash before they can type a nickname.
   useEffect(() => {
-    setLabelDraft(groupLabelOf(state.groupId));
-  }, [state.groupId, groupLabelOf]);
+    const g = groups.find((x) => x.group_id === state.groupId);
+    setLabelDraft(g?.label ?? "");
+  }, [state.groupId, groups]);
 
   const toggleWeekday = (d: number) => {
     const set = new Set(state.weekdays);
