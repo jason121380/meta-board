@@ -36,6 +36,16 @@ export function useUpdateLineGroupLabel() {
   });
 }
 
+export function useRefreshLineGroupName() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (groupId: string) => api.linePush.refreshGroupName(groupId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: GROUPS_KEY });
+    },
+  });
+}
+
 export function useLinePushConfigs(campaignId: string | null | undefined) {
   return useQuery({
     queryKey: CONFIGS_KEY(campaignId ?? ""),

@@ -189,6 +189,15 @@ async def lifespan(app: FastAPI):
                     )
                     """
                 )
+                # Backfill: real LINE-side group display name (from
+                # the /v2/bot/group/{id}/summary endpoint). Separate
+                # from `label`, which is the user-editable nickname.
+                await conn.execute(
+                    """
+                    ALTER TABLE line_groups
+                    ADD COLUMN IF NOT EXISTS group_name TEXT NOT NULL DEFAULT ''
+                    """
+                )
                 # `campaign_line_push_configs`: one row per
                 # (campaign_id, group_id) pair. `next_run_at` is the
                 # index the scheduler tick scans; `frequency` + the
@@ -2187,16 +2196,31 @@ async def line_webhook(request: Request):
             if not group_id:
                 continue
             if etype == "join":
+                # Fetch the real LINE group display name so the UI
+                # can show something more meaningful than a 32-char
+                # hash. Failure is non-fatal — we still record the
+                # join so push configs can be created.
+                group_name = ""
+                if _http_client is not None:
+                    summary = await line_client.get_group_summary(_http_client, group_id)
+                    if summary:
+                        group_name = (summary.get("groupName") or "").strip()
                 await conn.execute(
                     """
-                    INSERT INTO line_groups (group_id, joined_at, left_at)
-                    VALUES ($1, NOW(), NULL)
+                    INSERT INTO line_groups (group_id, group_name, joined_at, left_at)
+                    VALUES ($1, $2, NOW(), NULL)
                     ON CONFLICT (group_id) DO UPDATE
-                    SET joined_at = NOW(), left_at = NULL
+                    SET joined_at = NOW(),
+                        left_at = NULL,
+                        group_name = CASE
+                            WHEN EXCLUDED.group_name <> '' THEN EXCLUDED.group_name
+                            ELSE line_groups.group_name
+                        END
                     """,
                     group_id,
+                    group_name,
                 )
-                print(f"[line_webhook] joined group={group_id}", flush=True)
+                print(f"[line_webhook] joined group={group_id} name={group_name!r}", flush=True)
             elif etype == "leave":
                 await conn.execute(
                     "UPDATE line_groups SET left_at = NOW() WHERE group_id = $1",
@@ -2219,7 +2243,7 @@ async def list_line_groups():
     async with _db_pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT group_id, label, joined_at, left_at
+            SELECT group_id, group_name, label, joined_at, left_at
             FROM line_groups
             ORDER BY joined_at DESC
             """
@@ -2228,6 +2252,7 @@ async def list_line_groups():
         "data": [
             {
                 "group_id": r["group_id"],
+                "group_name": r["group_name"],
                 "label": r["label"],
                 "joined_at": r["joined_at"].isoformat() if r["joined_at"] else None,
                 "left_at": r["left_at"].isoformat() if r["left_at"] else None,
@@ -2250,6 +2275,34 @@ async def set_line_group_label(group_id: str, payload: LineGroupLabelPayload):
         if result.endswith("0"):
             raise HTTPException(status_code=404, detail="Group not found")
     return {"ok": True, "group_id": group_id, "label": label}
+
+
+@app.post("/api/line-groups/{group_id}/refresh-name")
+async def refresh_line_group_name(group_id: str):
+    """Re-query LINE for a group's display name and update DB.
+
+    Used to backfill `group_name` for rows that joined before this
+    feature shipped, or to pick up a manual rename inside LINE.
+    """
+    pool = _require_db()
+    if _http_client is None:
+        raise HTTPException(status_code=503, detail="HTTP client not ready")
+    summary = await line_client.get_group_summary(_http_client, group_id)
+    if not summary:
+        raise HTTPException(
+            status_code=502,
+            detail="LINE API 沒有回傳群組資訊（可能 bot 已退出或 token 失效）",
+        )
+    group_name = (summary.get("groupName") or "").strip()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE line_groups SET group_name = $1 WHERE group_id = $2",
+            group_name,
+            group_id,
+        )
+        if result.endswith("0"):
+            raise HTTPException(status_code=404, detail="Group not found")
+    return {"ok": True, "group_id": group_id, "group_name": group_name}
 
 
 # ── LINE push configs CRUD ────────────────────────────────────
