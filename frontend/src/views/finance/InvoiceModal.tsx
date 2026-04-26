@@ -228,12 +228,6 @@ const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(function 
         </div>
       </div>
 
-      {/* Campaign info */}
-      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[12px]">
-        <Info label="廣告帳號" value={campaign._accountName ?? "—"} />
-        <Info label="行銷活動" value={campaign.name} />
-      </div>
-
       {/* Basic data table */}
       <div className="mt-5">
         <SectionTitle>數據總覽</SectionTitle>
@@ -312,15 +306,6 @@ const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(function 
     </div>
   );
 });
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex">
-      <span className="mr-2 shrink-0 text-gray-500">{label}</span>
-      <span className="min-w-0 flex-1 truncate font-semibold">{value}</span>
-    </div>
-  );
-}
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div className="text-[12px] font-bold tracking-[0.5px] text-orange">{children}</div>;
