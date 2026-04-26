@@ -158,22 +158,31 @@ function PickAccount({
     <div className="flex flex-col gap-2">
       <div className="text-[12px] text-gray-500">請選擇此次請款的收款帳戶</div>
       <div className="flex flex-col gap-2">
-        {accounts.map((acc) => (
-          <button
-            key={acc.id}
-            type="button"
-            onClick={() => onPick(acc.id)}
-            className="flex flex-col items-start rounded-xl border-[1.5px] border-border bg-white px-3.5 py-3 text-left transition hover:border-orange hover:bg-orange-bg/40"
-          >
-            <div className="text-[14px] font-bold text-ink">
-              {acc.bank}
-              {acc.branch && <span className="font-normal text-gray-500"> · {acc.branch}</span>}
-            </div>
-            <div className="mt-0.5 text-[12px] text-gray-500">
-              戶名:{acc.holder || "—"} · 帳號:{acc.accountNo}
-            </div>
-          </button>
-        ))}
+        {accounts.map((acc) => {
+          // 別名優先顯示;沒有別名才 fallback 用銀行 + 分行
+          const primary =
+            acc.alias || `${acc.bank}${acc.branch ? ` · ${acc.branch}` : ""}` || "未命名帳戶";
+          const showBankSubtitle = !!acc.alias && !!acc.bank;
+          return (
+            <button
+              key={acc.id}
+              type="button"
+              onClick={() => onPick(acc.id)}
+              className="flex flex-col items-start rounded-xl border-[1.5px] border-border bg-white px-3.5 py-3 text-left transition hover:border-orange hover:bg-orange-bg/40"
+            >
+              <div className="text-[14px] font-bold text-ink">{primary}</div>
+              {showBankSubtitle && (
+                <div className="mt-0.5 text-[11px] text-gray-300">
+                  {acc.bank}
+                  {acc.branch && ` · ${acc.branch}`}
+                </div>
+              )}
+              <div className="mt-0.5 text-[12px] text-gray-500">
+                戶名:{acc.holder || "—"} · 帳號:{acc.accountNo}
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

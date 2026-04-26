@@ -14,6 +14,9 @@ import { create } from "zustand";
 
 export interface PaymentAccount {
   id: string;
+  /** 顯示用別名 — 例如「公司主帳戶」、「合作店家 A」。在請款單彈窗
+   *  挑選收款帳戶時優先顯示;留空則 fallback 用銀行名稱。 */
+  alias: string;
   bank: string;
   branch: string;
   holder: string;
