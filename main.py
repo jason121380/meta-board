@@ -1970,8 +1970,14 @@ async def get_overview(
 
 FREQUENCY_DAILY = "daily"
 FREQUENCY_WEEKLY = "weekly"
+FREQUENCY_BIWEEKLY = "biweekly"
 FREQUENCY_MONTHLY = "monthly"
-_VALID_FREQUENCIES = {FREQUENCY_DAILY, FREQUENCY_WEEKLY, FREQUENCY_MONTHLY}
+_VALID_FREQUENCIES = {
+    FREQUENCY_DAILY,
+    FREQUENCY_WEEKLY,
+    FREQUENCY_BIWEEKLY,
+    FREQUENCY_MONTHLY,
+}
 _VALID_DATE_RANGES = {
     "yesterday",
     "last_7d",
@@ -2027,6 +2033,30 @@ def _compute_next_run(
                 return candidate.astimezone(timezone.utc)
         # Unreachable — 8 days is >= 1 full week.
         return (now_local + timedelta(days=7)).astimezone(timezone.utc)
+
+    if frequency == FREQUENCY_BIWEEKLY:
+        # Same weekday selection as WEEKLY, but only fires on even ISO
+        # weeks. The choice of "even week" as the anchor is arbitrary
+        # but stable — every config in the system fires on the same
+        # cadence so operators can reason about it consistently.
+        wanted = set(weekdays or [])
+        if not wanted:
+            return _compute_next_run(FREQUENCY_DAILY, [], None, hour, minute, after=after)
+        # Search up to 21 days — guarantees we hit at least one even
+        # ISO week × matching weekday × time-of-day combo.
+        for offset in range(0, 22):
+            probe = now_local + timedelta(days=offset)
+            py_dow = probe.weekday()
+            js_dow = (py_dow + 1) % 7
+            if js_dow not in wanted:
+                continue
+            iso_week = probe.isocalendar()[1]
+            if iso_week % 2 != 0:
+                continue
+            candidate = at(probe)
+            if candidate > now_local:
+                return candidate.astimezone(timezone.utc)
+        return (now_local + timedelta(days=14)).astimezone(timezone.utc)
 
     if frequency == FREQUENCY_MONTHLY:
         day = max(1, min(28, month_day or 1))
@@ -2637,9 +2667,11 @@ def _validate_push_payload(p: LinePushConfigPayload) -> None:
         raise HTTPException(status_code=400, detail="Invalid hour")
     if not 0 <= p.minute <= 59:
         raise HTTPException(status_code=400, detail="Invalid minute")
-    if p.frequency == FREQUENCY_WEEKLY:
+    if p.frequency in (FREQUENCY_WEEKLY, FREQUENCY_BIWEEKLY):
         if not p.weekdays:
-            raise HTTPException(status_code=400, detail="weekdays required for weekly")
+            raise HTTPException(
+                status_code=400, detail="weekdays required for weekly/biweekly"
+            )
         if any(w < 0 or w > 6 for w in p.weekdays):
             raise HTTPException(status_code=400, detail="Invalid weekday")
     if p.frequency == FREQUENCY_MONTHLY:
