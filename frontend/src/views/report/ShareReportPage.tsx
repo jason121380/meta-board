@@ -4,7 +4,7 @@ import { LoadingState } from "@/components/LoadingState";
 import type { DateConfig, DatePreset } from "@/lib/datePicker";
 import { toLabel } from "@/lib/datePicker";
 import { ReportContent } from "@/views/dashboard/ReportContent";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 /**
  * Public share-report page. Mounted by App.tsx BEFORE the auth gate
@@ -26,14 +26,22 @@ export function ShareReportPage() {
     [datePreset],
   );
 
-  const [hideMoney, setHideMoney] = useState(initialHide);
+  // `hideMoney` is now read-only from the URL (?hide=1) — the in-page
+  // toggle was removed per design feedback. Keeps backwards compat
+  // with shared links that already include the param.
+  const hideMoney = initialHide;
 
   const { campaignQuery, adsetsQuery } = useReportCampaign(campaignId, accountId, date);
 
   const campaign = campaignQuery.data ?? null;
 
+  // `globals.css` locks `html, body` to `overflow: hidden` so the
+  // authenticated Shell can manage its own scroll containers. The
+  // share page has no Shell wrapping, so we install our own
+  // scroll-root via `fixed inset-0 overflow-y-auto`. Without this,
+  // any content past the viewport is unreachable on mobile.
   return (
-    <div className="min-h-screen bg-bg py-6 md:py-10">
+    <div className="fixed inset-0 overflow-y-auto bg-bg py-6 md:py-10">
       <div className="mx-auto flex w-full max-w-[960px] flex-col gap-4 px-3 md:px-6">
         <header className="flex items-center gap-3">
           <div className="flex-1">
@@ -42,15 +50,6 @@ export function ShareReportPage() {
             </div>
             <div className="text-[11px] text-gray-500">行銷活動報告 · {toLabel(date)}</div>
           </div>
-          <label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-[12px] text-gray-500">
-            <input
-              type="checkbox"
-              className="custom-cb"
-              checked={hideMoney}
-              onChange={(e) => setHideMoney(e.currentTarget.checked)}
-            />
-            不顯示金額
-          </label>
         </header>
 
         <div className="rounded-2xl border border-border bg-white p-4 md:p-6">
