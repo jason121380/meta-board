@@ -138,6 +138,16 @@ function refreshBackendToken(): Promise<void> {
   return refreshPromise;
 }
 
+/** Public share page (/r/...) is viewable without FB login — the
+ *  backend uses its persisted runtime token. We must NOT try to
+ *  refresh from the FB SDK here (it isn't loaded), and the raw
+ *  backend "Please log in" message would be misleading to viewers
+ *  who legitimately should not log in. */
+function isSharePage(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.location.pathname.startsWith("/r/");
+}
+
 async function request<T>(
   method: "GET" | "POST" | "DELETE",
   path: string,
@@ -181,6 +191,12 @@ async function request<T>(
   }
 
   if (!response.ok) {
+    // Share-page viewers can't log in — translate any 401 to a
+    // friendlier message that doesn't say "請登入" to someone who
+    // legitimately should not.
+    if (response.status === 401 && isSharePage()) {
+      throw new ApiError(401, "報告暫時無法載入,請聯繫管理員重新整理連結");
+    }
     // Self-healing auth: if the backend lost the runtime token (e.g.
     // the process was just restarted), push the FB SDK's access
     // token back up and retry once. skipAuthRefresh prevents the

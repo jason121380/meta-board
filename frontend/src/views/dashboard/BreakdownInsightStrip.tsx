@@ -98,7 +98,7 @@ function PlaceholderCard({ label, text }: { label: string; text: string }) {
   );
 }
 
-interface BreakdownRow {
+export interface BreakdownRow {
   key: string;
   spend: string | number | null;
   impressions: string | number | null;
@@ -106,9 +106,9 @@ interface BreakdownRow {
   msgs: number;
 }
 
-type WinnerMetric = "msgCost" | "ctr" | "impressions";
+export type WinnerMetric = "msgCost" | "ctr" | "impressions";
 
-function pickWinner(
+export function pickWinner(
   rows: BreakdownRow[] | undefined,
 ): { row: BreakdownRow; metric: WinnerMetric } | null {
   if (!rows || rows.length === 0) return null;

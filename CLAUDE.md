@@ -23,8 +23,8 @@ Connects to Facebook Marketing API v21.0 to manage 80+ ad accounts across multip
   - **PostgreSQL** (via `asyncpg`, `DATABASE_URL` env) — source of truth for:
     - `campaign_nicknames` (campaign_id → store, designer) — shared team-wide
     - `user_settings` (fb_user_id, key, value JSONB) — per-user: `selected_accounts`, `account_order`
-    - `shared_settings` (key, value JSONB) — team-wide: `finance_row_markups`, `finance_pinned_ids`, `finance_default_markup`, `finance_show_nicknames`
-    - `line_groups` (group_id PK, label, joined_at, left_at) — auto-upserted by the `/api/line/webhook` route on LINE `join`/`leave` events
+    - `shared_settings` (key, value JSONB) — team-wide: `finance_row_markups`, `finance_pinned_ids`, `finance_default_markup`, `finance_show_nicknames`. **Underscore-prefixed keys (`_fb_runtime_token`) are server-internal** and are filtered out by `GET /api/settings/shared` — never expose to the frontend.
+    - `line_groups` (group_id PK, **group_name** (real LINE display name from /v2/bot/group/{id}/summary), label (user nickname), joined_at, left_at) — auto-upserted by the `/api/line/webhook` route on LINE `join`/`leave` events. Lifespan startup also runs a one-shot backfill for legacy rows whose `group_name` is empty.
     - `campaign_line_push_configs` (campaign ↔ group pairings: frequency, weekdays/month_day, hour/minute, date_range, enabled, next_run_at, fail_count) — partial index on `(next_run_at) WHERE enabled` for the scheduler tick
     - `line_push_logs` (per-push audit rows, success/error/preview)
   - **Browser localStorage** — ephemeral UI state only:
@@ -67,10 +67,13 @@ GEMINI_MODEL    — Gemini model (default: gemini-3-flash-preview)
 1. User visits `/` → sees login page
 2. Clicks FB Login → FB OAuth popup → gets token
 3. Browser POSTs token to `/api/auth/token`
-4. Server stores in `_runtime_token` (overrides .env token)
-5. All API calls use `get_token()` which prefers runtime token
+4. Server stores in `_runtime_token` AND **persists to PG** as `_fb_runtime_token` in `shared_settings`
+5. All API calls use `get_token()` which prefers runtime token (fallback to .env `FB_ACCESS_TOKEN`)
+6. Lifespan startup restores `_runtime_token` from PG → server restarts (e.g. Zeabur redeploy) don't break the public share page until the token actually expires (~60 days for long-lived)
 
-Required FB scopes: `ads_read`, `ads_management`, `business_management`
+For the public **/r/:campaignId** share page: viewers do NOT log in. The frontend `request()` helper detects `window.location.pathname.startsWith("/r/")` and skips `refreshBackendToken()` (the FB SDK isn't loaded there anyway), translating any 401 to a friendly "報告暫時無法載入,請聯繫管理員" instead of FB's raw "Please log in".
+
+Required FB scopes: `ads_read`, `ads_management`, `business_management`, `pages_read_engagement`
 
 ## Running Locally
 
@@ -114,7 +117,9 @@ uvicorn main:app --port 8001 --reload
 ```
 
 ### Settings view
-Same two-column: account list | detail panel
+Sidebar 工具區拆成兩個入口（2026-04-26 後）:
+- **廣告帳號設定** `/settings` — BM panel + 帳戶啟用 / 多選 / 拖曳排序
+- **LINE 推播設定** `/line-push` — `LineGroupsContent` 表格列出每個 LINE 群組,含「重新抓取群組名稱」+ 自訂暱稱 + 該群組目前綁定的所有 push configs（一個 group 多 campaign）。每筆 config 有編輯/刪除按鈕,新增推播時用可搜尋的 `GroupPushConfigModal` 選帳戶 / 行銷活動。
 
 ## Account Selection Logic
 
@@ -181,6 +186,42 @@ Do NOT use `accent-color` inline style — always use the `custom-cb` class.
 | W3 | CPC偏高 | CPC > avgCpc × 1.5 |
 | W4 | 頻次偏高 | frequency > 5 |
 | W5 | 私訊成本偏高 | msgCost > avgMsgCost × 2 |
+
+## Insight Report (LINE flex push + share page `/r/:id`)
+
+The same recommendation logic runs in two places — keep them in sync:
+- Backend `_evaluate_alert_recommendations` in `main.py` → embedded in the LINE flex push body.
+- Frontend `lib/recommendations.ts` `buildCampaignRecommendations` → bullet list above the share-page report.
+
+**Rule order** (priority from top):
+
+| 條件 | 結果 |
+|------|------|
+| msgs > 0 且 msgCost < $100 | 「非常好,持續以私訊轉換為主軸」(忽略 CPC) |
+| msgs > 0 且 100 ≤ msgCost ≤ 200 | 「平均值,維持現狀即可」 |
+| msgs > 0 且 200 < msgCost ≤ 300 | 「偏高,待觀察」 |
+| msgs > 0 且 msgCost > 300 + CPC ≤ 4 | 「太高、但 CPC 表現不錯,檢視私訊回覆流程」 (此情境下 **略過頻次警示**) |
+| msgs > 0 且 msgCost > 300 + CPC > 4 | 「太高、CPC 也偏高,整體優化」 (此情境下 **略過頻次警示**) |
+| msgs == 0 且 CPC > 6 | 「太高,需要調整」 |
+| msgs == 0 且 5 < CPC ≤ 6 | 「可以優化」 |
+| msgs == 0 且 4 < CPC ≤ 5 | 「偏高,待觀察」 |
+| frequency > 5 + spend > $1,000 | 「過高,擴大受眾」 |
+| frequency > 4 + spend > $500 | 「偏高,留意素材疲勞」 |
+
+### Share page (`/r/:campaignId`) layout
+
+`ReportContent` (shared by `<ReportModal/>` and `<ShareReportPage/>`) is **insight-oriented**, fully auto-expanded:
+1. Header (status / objective / date label)
+2. 12-cell KPI grid — 花費 / 私訊數 / 私訊成本 cards have an orange highlight border so the operator's eye lands on outcomes first.
+3. **優化建議** narrative bullet list (from `buildCampaignRecommendations`).
+4. Per-adset card (`AdsetCard`):
+   - Mini KPI row
+   - `<BreakdownInsightStrip/>` — 4 cards (版位 / 性別 / 年齡 / 地區), each fires its own React Query in parallel and shows the **winner** for that dim. Winner picked by: msgCost (lowest, if any bucket has messages) → CTR (highest, requires impressions ≥100) → impressions (fallback).
+   - Ad cards grid (2 cols on ≥sm). Each card has 56px thumbnail (click → `<CreativePreviewModal/>` 600px hi-res), KPI inline, and the best-performing ad in this adset gets a "★ 表現最佳" orange badge.
+
+### Breakdown endpoint
+
+`GET /api/breakdown?level={adset|ad}&id=&dim={age|gender|region|publisher_platform}&date_preset=...&time_range=...` — proxies FB Graph's `<entity>/insights?breakdowns=...` with the dim whitelisted. Returns `{key, spend, impressions, clicks, ctr, cpc, cpm, msgs}` per bucket.
 
 ## Do Not
 
