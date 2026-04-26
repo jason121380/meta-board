@@ -17,13 +17,20 @@ import { useState } from "react";
  */
 
 interface DraftAccount {
+  alias: string;
   bank: string;
   branch: string;
   holder: string;
   accountNo: string;
 }
 
-const EMPTY_DRAFT: DraftAccount = { bank: "", branch: "", holder: "", accountNo: "" };
+const EMPTY_DRAFT: DraftAccount = {
+  alias: "",
+  bank: "",
+  branch: "",
+  holder: "",
+  accountNo: "",
+};
 
 export function PaymentAccountsView() {
   const accounts = usePaymentStore((s) => s.accounts);
@@ -41,6 +48,7 @@ export function PaymentAccountsView() {
       return;
     }
     addAccount({
+      alias: draft.alias.trim(),
       bank,
       branch: draft.branch.trim(),
       holder: draft.holder.trim(),
@@ -51,7 +59,8 @@ export function PaymentAccountsView() {
   };
 
   const onRemove = async (acc: PaymentAccount) => {
-    const ok = await confirm(`確定要刪除「${acc.bank} - ${acc.accountNo}」？`);
+    const label = acc.alias || `${acc.bank} - ${acc.accountNo}`;
+    const ok = await confirm(`確定要刪除「${label}」？`);
     if (!ok) return;
     removeAccount(acc.id);
     toast("已刪除");
@@ -66,6 +75,14 @@ export function PaymentAccountsView() {
           <section className="rounded-2xl border border-border bg-white p-4 md:p-5">
             <div className="mb-3 text-[13px] font-bold text-ink">新增收款帳戶</div>
             <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <Field
+                  label="別名"
+                  value={draft.alias}
+                  onChange={(v) => setDraft((d) => ({ ...d, alias: v }))}
+                  placeholder="例: 公司主帳戶 (選擇收款帳戶時優先顯示)"
+                />
+              </div>
               <Field
                 label="銀行"
                 value={draft.bank}
@@ -158,7 +175,8 @@ function AccountRow({
   onRemove: () => void;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-2.5 border-b border-border px-4 py-3 last:border-b-0 md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-end md:px-5">
+    <div className="grid grid-cols-1 gap-2.5 border-b border-border px-4 py-3 last:border-b-0 md:grid-cols-[1.2fr_1fr_1fr_1fr_1fr_auto] md:items-end md:px-5">
+      <Field label="別名" value={account.alias} onChange={(v) => onUpdate({ alias: v })} />
       <Field label="銀行" value={account.bank} onChange={(v) => onUpdate({ bank: v })} />
       <Field label="分行" value={account.branch} onChange={(v) => onUpdate({ branch: v })} />
       <Field label="戶名" value={account.holder} onChange={(v) => onUpdate({ holder: v })} />

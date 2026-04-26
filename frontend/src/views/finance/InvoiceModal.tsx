@@ -3,7 +3,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Modal } from "@/components/Modal";
 import { Spinner } from "@/components/Spinner";
 import { toast } from "@/components/Toast";
-import { type DateConfig, toLabel } from "@/lib/datePicker";
+import { type DateConfig, resolveRange } from "@/lib/datePicker";
 import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount, spendOf } from "@/lib/insights";
 import { type PaymentAccount, usePaymentStore } from "@/stores/paymentStore";
@@ -57,7 +57,8 @@ export function InvoiceModal({ open, onOpenChange, campaign, date, markup }: Inv
         cacheBust: true,
       });
       const safeName = campaign.name.replace(/[\\/:*?"<>|]/g, "_");
-      const safeDate = toLabel(date).replace(/[/ ~]/g, "_");
+      const { start, end } = resolveRange(date);
+      const safeDate = start === end ? start : `${start}_${end}`;
       const a = document.createElement("a");
       a.href = dataUrl;
       a.download = `請款單_${safeName}_${safeDate}.jpg`;
@@ -158,22 +159,31 @@ function PickAccount({
     <div className="flex flex-col gap-2">
       <div className="text-[12px] text-gray-500">請選擇此次請款的收款帳戶</div>
       <div className="flex flex-col gap-2">
-        {accounts.map((acc) => (
-          <button
-            key={acc.id}
-            type="button"
-            onClick={() => onPick(acc.id)}
-            className="flex flex-col items-start rounded-xl border-[1.5px] border-border bg-white px-3.5 py-3 text-left transition hover:border-orange hover:bg-orange-bg/40"
-          >
-            <div className="text-[14px] font-bold text-ink">
-              {acc.bank}
-              {acc.branch && <span className="font-normal text-gray-500"> · {acc.branch}</span>}
-            </div>
-            <div className="mt-0.5 text-[12px] text-gray-500">
-              戶名:{acc.holder || "—"} · 帳號:{acc.accountNo}
-            </div>
-          </button>
-        ))}
+        {accounts.map((acc) => {
+          // 別名優先顯示;沒有別名才 fallback 用銀行 + 分行
+          const primary =
+            acc.alias || `${acc.bank}${acc.branch ? ` · ${acc.branch}` : ""}` || "未命名帳戶";
+          const showBankSubtitle = !!acc.alias && !!acc.bank;
+          return (
+            <button
+              key={acc.id}
+              type="button"
+              onClick={() => onPick(acc.id)}
+              className="flex flex-col items-start rounded-xl border-[1.5px] border-border bg-white px-3.5 py-3 text-left transition hover:border-orange hover:bg-orange-bg/40"
+            >
+              <div className="text-[14px] font-bold text-ink">{primary}</div>
+              {showBankSubtitle && (
+                <div className="mt-0.5 text-[11px] text-gray-300">
+                  {acc.bank}
+                  {acc.branch && ` · ${acc.branch}`}
+                </div>
+              )}
+              <div className="mt-0.5 text-[12px] text-gray-500">
+                戶名:{acc.holder || "—"} · 帳號:{acc.accountNo}
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -196,6 +206,7 @@ const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(function 
   const plus = spendPlus(spend, markup);
   const today = new Date();
   const issueDate = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, "0")}/${String(today.getDate()).padStart(2, "0")}`;
+  const dateRangeLabel = concreteRangeLabel(date);
 
   return (
     <div
@@ -211,23 +222,19 @@ const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(function 
           <div className="text-[11px] font-semibold uppercase tracking-[1px] text-orange">
             LURE META PLATFORM
           </div>
-          <div className="mt-1 text-[24px] font-bold leading-tight">廣告投放請款單</div>
+          <div className="mt-1 text-[24px] font-bold leading-tight">
+            廣告投放總覽 {dateRangeLabel}
+          </div>
         </div>
         <div className="text-right text-[11px] text-gray-500">
           <div>開立日期:{issueDate}</div>
-          <div>結算期間:{toLabel(date)}</div>
+          <div>結算期間:{dateRangeLabel}</div>
         </div>
-      </div>
-
-      {/* Campaign info */}
-      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[12px]">
-        <Info label="廣告帳號" value={campaign._accountName ?? "—"} />
-        <Info label="行銷活動" value={campaign.name} />
       </div>
 
       {/* Basic data table */}
       <div className="mt-5">
-        <SectionTitle>基礎數據</SectionTitle>
+        <SectionTitle>數據總覽</SectionTitle>
         <table className="mt-2 w-full border-collapse text-[12px]">
           <thead>
             <tr className="bg-orange-bg">
@@ -298,20 +305,11 @@ const InvoicePreview = forwardRef<HTMLDivElement, InvoicePreviewProps>(function 
 
       {/* Footer note */}
       <div className="mt-6 border-t border-border pt-3 text-center text-[10px] text-gray-300">
-        本請款單由 LURE META PLATFORM 自動產生
+        Powered by LURE META PLATFORM
       </div>
     </div>
   );
 });
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex">
-      <span className="mr-2 shrink-0 text-gray-500">{label}</span>
-      <span className="min-w-0 flex-1 truncate font-semibold">{value}</span>
-    </div>
-  );
-}
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div className="text-[12px] font-bold tracking-[0.5px] text-orange">{children}</div>;
@@ -345,4 +343,20 @@ function PayRow({
       </td>
     </tr>
   );
+}
+
+/** "M/D - M/D" 格式;start === end 時只顯示一個日期。 */
+function concreteRangeLabel(date: DateConfig): string {
+  const { start, end } = resolveRange(date);
+  const parse = (iso: string) => {
+    const parts = iso.split("-");
+    return {
+      m: Number.parseInt(parts[1] ?? "0", 10),
+      d: Number.parseInt(parts[2] ?? "0", 10),
+    };
+  };
+  const s = parse(start);
+  const e = parse(end);
+  if (start === end) return `${s.m}/${s.d}`;
+  return `${s.m}/${s.d} - ${e.m}/${e.d}`;
 }

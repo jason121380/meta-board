@@ -86,6 +86,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           return [
             {
               id,
+              alias: typeof r.alias === "string" ? r.alias : "",
               bank: typeof r.bank === "string" ? r.bank : "",
               branch: typeof r.branch === "string" ? r.branch : "",
               holder: typeof r.holder === "string" ? r.holder : "",
