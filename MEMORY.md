@@ -51,6 +51,32 @@ This means the scope is **safe to request even without review** — FB's behavio
   - `shared_settings(key, value JSONB)` — team-wide: `finance_row_markups`, `finance_pinned_ids`, `finance_default_markup`, `finance_show_nicknames`
   localStorage now only holds **ephemeral UI state**: `fb_active_accounts`, date-picker prefs, sidebar collapse, FB token cache. `SettingsProvider` is the hydration gate — fires two GETs in parallel at login, gates the router on success.
 
+## LINE Push Scheduler (2026-04-24)
+
+- Every campaign row has a LINE push button between 調整預算 and 報告
+  (SVG chat bubble, 14x14, orange when at least one active config
+  exists). Opens `LinePushModal` which manages pairings for that
+  campaign.
+- Group discovery is **auto-webhook**: LINE bot `join` → `/api/line/webhook` upserts `line_groups`; `leave` → sets `left_at`.
+  Users just invite the LINE Official Account into a group and it shows up in the dropdown.
+- Message format is **LINE Flex Message** (orange header + KPI grid).
+  Builder lives in `line_client.build_flex_report`; backend assembles
+  the per-campaign KPI rows in `_build_flex_for_config` (main.py) by
+  reusing `_fetch_campaigns_for_account`.
+- Recurrence: `daily` / `weekly (weekdays[], 0=Sun..6=Sat)` /
+  `monthly (month_day 1..28)` + HH:MM. All times interpreted as
+  `SCHEDULER_TZ` (default Asia/Taipei) and converted to UTC for
+  `next_run_at` storage. Helper: `main._compute_next_run()`.
+- Scheduler: single asyncio background task started in `lifespan`
+  ticking every 60s. `_scheduler_tick()` selects `enabled AND next_run_at <= NOW()` rows, pushes Flex, advances `next_run_at`.
+- Failure policy: fail_count ≥ 3 → `enabled=false` (auto-disable).
+  Every attempt is logged in `line_push_logs`.
+- Assumptions: **single uvicorn worker** (no advisory lock yet).
+  If worker count ever goes > 1, switch the SELECT to `FOR UPDATE SKIP LOCKED`.
+- Env vars: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`,
+  `LINE_MOCK=1` (local dev), `SCHEDULER_TZ`.
+- Webhook public URL (Zeabur): `https://{your-zeabur-domain}/api/line/webhook` — register this on the LINE Developers Console.
+
 ## Layout
 
 - Left sidebar: 220px fixed, flex-column, user avatar at bottom (no border/hover/arrow, dropdown opens upward)

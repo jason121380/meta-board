@@ -24,6 +24,44 @@ import type {
   FbInsights,
 } from "@/types/fb";
 
+// ── LINE push types (shared with hooks + modal) ───────────────
+export type LinePushFrequency = "daily" | "weekly" | "monthly";
+export type LinePushDateRange = "yesterday" | "last_7d" | "last_14d" | "last_30d" | "this_month";
+
+export interface LinePushConfig {
+  id: string;
+  campaign_id: string;
+  account_id: string;
+  group_id: string;
+  frequency: LinePushFrequency;
+  /** 0 = Sunday, 6 = Saturday. Used when frequency === "weekly". */
+  weekdays: number[];
+  /** 1..28. Used when frequency === "monthly". */
+  month_day: number | null;
+  hour: number;
+  minute: number;
+  date_range: LinePushDateRange;
+  enabled: boolean;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  last_error: string | null;
+  fail_count: number;
+}
+
+export interface LinePushConfigInput {
+  id?: string;
+  campaign_id: string;
+  account_id: string;
+  group_id: string;
+  frequency: LinePushFrequency;
+  weekdays?: number[];
+  month_day?: number | null;
+  hour: number;
+  minute: number;
+  date_range: LinePushDateRange;
+  enabled: boolean;
+}
+
 export class ApiError extends Error {
   status: number;
   detail: string;
@@ -380,6 +418,51 @@ export const api = {
       }),
     remove: (campaignId: string) =>
       request<{ ok: boolean }>("DELETE", `/api/nicknames/${encodeURIComponent(campaignId)}`),
+  },
+
+  linePush: {
+    /** List LINE groups the bot has been invited to (from webhook join events). */
+    listGroups: () =>
+      request<{
+        data: Array<{
+          group_id: string;
+          label: string;
+          joined_at: string | null;
+          left_at: string | null;
+        }>;
+      }>("GET", "/api/line-groups"),
+    /** Rename a LINE group (display label only; group_id stays fixed). */
+    setGroupLabel: (groupId: string, label: string) =>
+      request<{ ok: boolean }>("POST", `/api/line-groups/${encodeURIComponent(groupId)}`, {
+        body: { label },
+      }),
+    /** List push configs for a single campaign (omit campaignId to list all). */
+    listConfigs: (campaignId?: string) =>
+      request<{ data: LinePushConfig[] }>("GET", "/api/line-push/configs", {
+        query: campaignId ? { campaign_id: campaignId } : undefined,
+      }),
+    upsertConfig: (payload: LinePushConfigInput) =>
+      request<{ ok: boolean; data: LinePushConfig }>("POST", "/api/line-push/configs", {
+        body: payload,
+      }),
+    deleteConfig: (id: string) =>
+      request<{ ok: boolean }>("DELETE", `/api/line-push/configs/${encodeURIComponent(id)}`),
+    /** Fire a push immediately without advancing next_run_at. */
+    test: (id: string) =>
+      request<{ ok: boolean }>("POST", `/api/line-push/configs/${encodeURIComponent(id)}/test`),
+    listLogs: (configId?: string, limit = 20) =>
+      request<{
+        data: Array<{
+          id: number;
+          config_id: string | null;
+          run_at: string | null;
+          success: boolean;
+          error: string | null;
+          message_preview: string | null;
+        }>;
+      }>("GET", "/api/line-push/logs", {
+        query: { config_id: configId, limit: String(limit) },
+      }),
   },
 
   settings: {

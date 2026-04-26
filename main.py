@@ -1,10 +1,12 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, List
+from zoneinfo import ZoneInfo
 import asyncio
 import httpx
 import os
@@ -13,6 +15,8 @@ from pathlib import Path
 from pydantic import BaseModel
 
 import asyncpg
+
+import line_client
 
 load_dotenv()
 
@@ -40,6 +44,24 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 # Without this, a cold /api/overview for 80 accounts fans out 160+
 # simultaneous requests and routinely triggers 429 rate-limiting.
 _fb_semaphore: asyncio.Semaphore = asyncio.Semaphore(40)
+
+# ── LINE push scheduler ─────────────────────────────────────────────
+# `_scheduler_task` holds the background asyncio task started in
+# lifespan so we can cancel it cleanly on shutdown. The loop ticks
+# every SCHEDULER_TICK_SECONDS and fires any push configs whose
+# next_run_at has passed. 3 failures in a row flips `enabled=false`
+# so a broken token doesn't spam the log forever.
+_scheduler_task: Optional[asyncio.Task] = None
+SCHEDULER_TICK_SECONDS = 60
+SCHEDULER_FAIL_THRESHOLD = 3
+SCHEDULER_TZ_NAME = os.getenv("SCHEDULER_TZ", "Asia/Taipei")
+
+
+def _scheduler_tz() -> ZoneInfo:
+    try:
+        return ZoneInfo(SCHEDULER_TZ_NAME)
+    except Exception:
+        return ZoneInfo("Asia/Taipei")
 
 
 def get_token() -> str:
@@ -145,6 +167,80 @@ async def lifespan(app: FastAPI):
                     )
                     """
                 )
+                # ── LINE push scheduler tables ────────────────────
+                # gen_random_uuid() lives in pgcrypto on older PG. PG13+
+                # has it in core, but enabling defensively is idempotent
+                # and lets the CREATE TABLE below parse its DEFAULT on
+                # managed providers that ship PG12.
+                try:
+                    await conn.execute('CREATE EXTENSION IF NOT EXISTS "pgcrypto"')
+                except Exception as exc:
+                    print(f"[startup] DB: pgcrypto extension skipped ({exc})", flush=True)
+                # `line_groups`: populated from the /api/line/webhook
+                # join/leave events. We keep left_at instead of deleting
+                # so existing push configs don't lose their FK target.
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS line_groups (
+                        group_id TEXT PRIMARY KEY,
+                        label TEXT NOT NULL DEFAULT '',
+                        joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        left_at TIMESTAMPTZ
+                    )
+                    """
+                )
+                # `campaign_line_push_configs`: one row per
+                # (campaign_id, group_id) pair. `next_run_at` is the
+                # index the scheduler tick scans; `frequency` + the
+                # three discriminator columns (weekdays/month_day/
+                # hour/minute) describe the recurrence rule.
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS campaign_line_push_configs (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        campaign_id TEXT NOT NULL,
+                        account_id TEXT NOT NULL,
+                        group_id TEXT NOT NULL REFERENCES line_groups(group_id),
+                        frequency TEXT NOT NULL,
+                        weekdays INT[] NOT NULL DEFAULT '{}',
+                        month_day INT,
+                        hour INT NOT NULL,
+                        minute INT NOT NULL,
+                        date_range TEXT NOT NULL DEFAULT 'last_7d',
+                        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                        last_run_at TIMESTAMPTZ,
+                        next_run_at TIMESTAMPTZ NOT NULL,
+                        last_error TEXT,
+                        fail_count INT NOT NULL DEFAULT 0,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        UNIQUE (campaign_id, group_id)
+                    )
+                    """
+                )
+                # Partial index — scheduler tick only cares about
+                # enabled rows.
+                await conn.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_push_due
+                    ON campaign_line_push_configs (next_run_at)
+                    WHERE enabled
+                    """
+                )
+                # `line_push_logs`: audit trail per push attempt, keeps
+                # the last N entries per config for the "最近推播" UI.
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS line_push_logs (
+                        id BIGSERIAL PRIMARY KEY,
+                        config_id UUID REFERENCES campaign_line_push_configs(id) ON DELETE CASCADE,
+                        run_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        success BOOLEAN NOT NULL,
+                        error TEXT,
+                        message_preview TEXT
+                    )
+                    """
+                )
                 # Diagnostic — print every table in the public schema
                 # with its row count. Lets operators confirm at a
                 # glance after a redeploy that the tables are present
@@ -171,16 +267,45 @@ async def lifespan(app: FastAPI):
                 # Exact counts for the three tables we own — these are
                 # fresh after CREATE TABLE even if pg_stat hasn't caught
                 # up with a recent INSERT yet.
-                for tbl in ("campaign_nicknames", "user_settings", "shared_settings"):
+                for tbl in (
+                    "campaign_nicknames",
+                    "user_settings",
+                    "shared_settings",
+                    "line_groups",
+                    "campaign_line_push_configs",
+                    "line_push_logs",
+                ):
                     n = await conn.fetchval(f"SELECT COUNT(*) FROM {tbl}")
                     print(f"[startup] DB exact: {tbl} = {n} rows", flush=True)
-            print("[startup] DB: OK (nicknames + settings tables ready)", flush=True)
+            print("[startup] DB: OK (nicknames + settings + LINE push tables ready)", flush=True)
         except Exception as exc:
             _db_pool = None
             print(f"[startup] DB: FAILED ({exc})", flush=True)
     else:
         print("[startup] DB: SKIPPED (DATABASE_URL not set)", flush=True)
+
+    # Start the LINE push scheduler loop only when the DB is available.
+    # Without DB there's nothing to schedule off, so skip silently.
+    global _scheduler_task
+    if _db_pool is not None:
+        _scheduler_task = asyncio.create_task(_scheduler_loop())
+        print(
+            f"[startup] scheduler: running, tick={SCHEDULER_TICK_SECONDS}s,"
+            f" tz={SCHEDULER_TZ_NAME}",
+            flush=True,
+        )
+    else:
+        print("[startup] scheduler: SKIPPED (no DB)", flush=True)
+
     yield
+
+    if _scheduler_task is not None:
+        _scheduler_task.cancel()
+        try:
+            await _scheduler_task
+        except asyncio.CancelledError:
+            pass
+        _scheduler_task = None
     await _http_client.aclose()
     _http_client = None
     if _db_pool is not None:
@@ -1804,6 +1929,693 @@ async def get_overview(
 
     results = await asyncio.gather(*[_fetch_one_bounded(aid) for aid in account_ids])
     return {"data": dict(results)}
+
+
+# ── LINE push scheduler ───────────────────────────────────────
+#
+# Persistence model:
+#   - `line_groups`  : (group_id, label, joined_at, left_at)
+#   - `campaign_line_push_configs`
+#   - `line_push_logs`
+#
+# Flow:
+#   1. LINE bot added to a group → LINE sends `join` webhook
+#      → /api/line/webhook upserts line_groups row
+#   2. User opens LinePushModal on a campaign row, picks a group
+#      + frequency + time → POST /api/line-push/configs
+#   3. Scheduler loop (_scheduler_loop) ticks every 60s, selects
+#      rows with next_run_at <= now AND enabled, pushes a Flex
+#      Message via line_client.line_push(), advances next_run_at
+#   4. 3 consecutive failures flip `enabled=false` so a broken
+#      token / revoked group doesn't keep retrying forever
+
+FREQUENCY_DAILY = "daily"
+FREQUENCY_WEEKLY = "weekly"
+FREQUENCY_MONTHLY = "monthly"
+_VALID_FREQUENCIES = {FREQUENCY_DAILY, FREQUENCY_WEEKLY, FREQUENCY_MONTHLY}
+_VALID_DATE_RANGES = {"yesterday", "last_7d", "last_14d", "last_30d", "this_month"}
+
+
+def _compute_next_run(
+    frequency: str,
+    weekdays: List[int],
+    month_day: Optional[int],
+    hour: int,
+    minute: int,
+    *,
+    after: Optional[datetime] = None,
+) -> datetime:
+    """Return the next run timestamp (UTC) strictly after `after`.
+
+    All scheduling is expressed in the user's local timezone
+    (`SCHEDULER_TZ`, default Asia/Taipei). We compute the next
+    matching local datetime then convert back to UTC for storage.
+    """
+    tz = _scheduler_tz()
+    now_local = (after or datetime.now(timezone.utc)).astimezone(tz)
+
+    def at(d: datetime) -> datetime:
+        return d.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+    if frequency == FREQUENCY_DAILY:
+        candidate = at(now_local)
+        if candidate <= now_local:
+            candidate = at(now_local + timedelta(days=1))
+        return candidate.astimezone(timezone.utc)
+
+    if frequency == FREQUENCY_WEEKLY:
+        # Python weekday(): Monday=0..Sunday=6. We store 0=Sunday..6=Saturday
+        # to match JS `Date.getDay()`, so translate.
+        wanted = set(weekdays or [])
+        if not wanted:
+            # Fall back to daily to avoid an infinite loop.
+            return _compute_next_run(FREQUENCY_DAILY, [], None, hour, minute, after=after)
+        for offset in range(0, 8):
+            probe = now_local + timedelta(days=offset)
+            py_dow = probe.weekday()  # Mon=0
+            js_dow = (py_dow + 1) % 7  # Sun=0
+            if js_dow not in wanted:
+                continue
+            candidate = at(probe)
+            if candidate > now_local:
+                return candidate.astimezone(timezone.utc)
+        # Unreachable — 8 days is >= 1 full week.
+        return (now_local + timedelta(days=7)).astimezone(timezone.utc)
+
+    if frequency == FREQUENCY_MONTHLY:
+        day = max(1, min(28, month_day or 1))
+        year, month = now_local.year, now_local.month
+        for _ in range(2):
+            candidate = now_local.replace(
+                year=year, month=month, day=day,
+                hour=hour, minute=minute, second=0, microsecond=0,
+            )
+            if candidate > now_local:
+                return candidate.astimezone(timezone.utc)
+            month += 1
+            if month > 12:
+                month = 1
+                year += 1
+        # Unreachable — 2 months ahead always beats `now`.
+        return (now_local + timedelta(days=31)).astimezone(timezone.utc)
+
+    raise HTTPException(status_code=400, detail=f"Unknown frequency: {frequency}")
+
+
+def _date_range_to_preset(date_range: str) -> tuple[str, Optional[str]]:
+    """Map the UI's date_range choice to FB insights (date_preset, time_range)."""
+    if date_range == "yesterday":
+        return ("yesterday", None)
+    if date_range == "last_7d":
+        return ("last_7d", None)
+    if date_range == "last_14d":
+        return ("last_14d", None)
+    if date_range == "last_30d":
+        return ("last_30d", None)
+    if date_range == "this_month":
+        return ("this_month", None)
+    return ("last_7d", None)
+
+
+def _date_range_label(date_range: str) -> str:
+    return {
+        "yesterday": "昨日",
+        "last_7d": "過去 7 天",
+        "last_14d": "過去 14 天",
+        "last_30d": "過去 30 天",
+        "this_month": "本月",
+    }.get(date_range, date_range)
+
+
+def _extract_msg_count(actions: Any) -> int:
+    """Mirror of frontend getMsgCount — first-found wins."""
+    if not isinstance(actions, list):
+        return 0
+    keys = (
+        "onsite_conversion.messaging_conversation_started_7d",
+        "messaging_conversation_started_7d",
+    )
+    for k in keys:
+        for a in actions:
+            if isinstance(a, dict) and a.get("action_type") == k:
+                try:
+                    return int(float(a.get("value", 0)))
+                except (TypeError, ValueError):
+                    return 0
+    return 0
+
+
+def _fmt_money(v: Any) -> str:
+    try:
+        n = float(v or 0)
+    except (TypeError, ValueError):
+        return "—"
+    return f"${n:,.0f}"
+
+
+def _fmt_int(v: Any) -> str:
+    try:
+        n = int(float(v or 0))
+    except (TypeError, ValueError):
+        return "—"
+    return f"{n:,}"
+
+
+def _fmt_pct(v: Any) -> str:
+    try:
+        n = float(v or 0)
+    except (TypeError, ValueError):
+        return "—"
+    return f"{n:.2f}%"
+
+
+async def _build_flex_for_config(cfg: dict) -> dict:
+    """Produce the LINE Flex Message for one push config row.
+
+    Pulls the campaign via _fetch_campaigns_for_account and picks the
+    matching one by id. `_fetch_account_insights` would give an
+    account-level roll-up; we use per-campaign insights instead so
+    the recipient sees the exact campaign they're subscribed to.
+    """
+    account_id = cfg["account_id"]
+    campaign_id = cfg["campaign_id"]
+    date_range = cfg["date_range"]
+    date_preset, time_range = _date_range_to_preset(date_range)
+
+    campaigns = await _fetch_campaigns_for_account(
+        account_id, date_preset, time_range, include_archived=True, lite=False
+    )
+    camp = next((c for c in campaigns if c.get("id") == campaign_id), None)
+    if camp is None:
+        raise RuntimeError(f"Campaign {campaign_id} not found under {account_id}")
+
+    ins_list = (camp.get("insights") or {}).get("data") or []
+    ins = ins_list[0] if ins_list else {}
+    spend = ins.get("spend") or 0
+    msgs = _extract_msg_count(ins.get("actions"))
+
+    kpis: list[tuple[str, str]] = [
+        ("花費", _fmt_money(spend)),
+        ("曝光", _fmt_int(ins.get("impressions"))),
+        ("點擊", _fmt_int(ins.get("clicks"))),
+        ("CTR", _fmt_pct(ins.get("ctr"))),
+        ("CPC", _fmt_money(ins.get("cpc"))),
+        ("私訊數", _fmt_int(msgs) if msgs > 0 else "—"),
+    ]
+    if msgs > 0:
+        try:
+            cost_per_msg = float(spend) / msgs
+        except (TypeError, ValueError):
+            cost_per_msg = 0.0
+        kpis.append(("私訊成本", _fmt_money(cost_per_msg)))
+
+    # Look up the account display name (for the header subtitle).
+    account_name = account_id
+    try:
+        accts = await fb_get("me/adaccounts", {"fields": "id,name", "limit": "500"})
+        for a in accts.get("data", []):
+            if a.get("id") == account_id:
+                account_name = a.get("name", account_id)
+                break
+    except Exception:
+        pass
+
+    return line_client.build_flex_report(
+        campaign_name=camp.get("name", campaign_id),
+        account_name=account_name,
+        date_label=_date_range_label(date_range),
+        kpis=kpis,
+        alt_text=f"{camp.get('name', campaign_id)} {_date_range_label(date_range)}",
+    )
+
+
+# ── LINE webhook ──────────────────────────────────────────────
+
+@app.post("/api/line/webhook")
+async def line_webhook(request: Request):
+    """Receive LINE join/leave events and upsert line_groups rows.
+
+    LINE Platform expects a <10s 200 OK response. We do the minimum
+    here (verify signature, write DB) and return fast. Any parsing
+    error is swallowed and still returns 200 to keep LINE from
+    retrying aggressively.
+    """
+    raw = await request.body()
+    sig = request.headers.get("X-Line-Signature")
+    if not line_client.verify_webhook_signature(raw, sig):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    if _db_pool is None:
+        # Still 200 so LINE doesn't retry; operator can fix DB later.
+        return {"ok": True, "skipped": "no DB"}
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return {"ok": True, "skipped": "non-json body"}
+
+    events = payload.get("events") or []
+    async with _db_pool.acquire() as conn:
+        for ev in events:
+            if not isinstance(ev, dict):
+                continue
+            etype = ev.get("type")
+            source = ev.get("source") or {}
+            if source.get("type") != "group":
+                continue
+            group_id = source.get("groupId")
+            if not group_id:
+                continue
+            if etype == "join":
+                await conn.execute(
+                    """
+                    INSERT INTO line_groups (group_id, joined_at, left_at)
+                    VALUES ($1, NOW(), NULL)
+                    ON CONFLICT (group_id) DO UPDATE
+                    SET joined_at = NOW(), left_at = NULL
+                    """,
+                    group_id,
+                )
+                print(f"[line_webhook] joined group={group_id}", flush=True)
+            elif etype == "leave":
+                await conn.execute(
+                    "UPDATE line_groups SET left_at = NOW() WHERE group_id = $1",
+                    group_id,
+                )
+                print(f"[line_webhook] left group={group_id}", flush=True)
+    return {"ok": True}
+
+
+# ── LINE group management ─────────────────────────────────────
+
+class LineGroupLabelPayload(BaseModel):
+    label: str = ""
+
+
+@app.get("/api/line-groups")
+async def list_line_groups():
+    if _db_pool is None:
+        return {"data": []}
+    async with _db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT group_id, label, joined_at, left_at
+            FROM line_groups
+            ORDER BY joined_at DESC
+            """
+        )
+    return {
+        "data": [
+            {
+                "group_id": r["group_id"],
+                "label": r["label"],
+                "joined_at": r["joined_at"].isoformat() if r["joined_at"] else None,
+                "left_at": r["left_at"].isoformat() if r["left_at"] else None,
+            }
+            for r in rows
+        ]
+    }
+
+
+@app.post("/api/line-groups/{group_id}")
+async def set_line_group_label(group_id: str, payload: LineGroupLabelPayload):
+    pool = _require_db()
+    label = (payload.label or "").strip()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE line_groups SET label = $1 WHERE group_id = $2",
+            label,
+            group_id,
+        )
+        if result.endswith("0"):
+            raise HTTPException(status_code=404, detail="Group not found")
+    return {"ok": True, "group_id": group_id, "label": label}
+
+
+# ── LINE push configs CRUD ────────────────────────────────────
+
+class LinePushConfigPayload(BaseModel):
+    id: Optional[str] = None
+    campaign_id: str
+    account_id: str
+    group_id: str
+    frequency: str
+    weekdays: List[int] = []
+    month_day: Optional[int] = None
+    hour: int
+    minute: int
+    date_range: str = "last_7d"
+    enabled: bool = True
+
+
+def _config_row_to_dict(r: asyncpg.Record) -> dict:
+    return {
+        "id": str(r["id"]),
+        "campaign_id": r["campaign_id"],
+        "account_id": r["account_id"],
+        "group_id": r["group_id"],
+        "frequency": r["frequency"],
+        "weekdays": list(r["weekdays"] or []),
+        "month_day": r["month_day"],
+        "hour": r["hour"],
+        "minute": r["minute"],
+        "date_range": r["date_range"],
+        "enabled": r["enabled"],
+        "last_run_at": r["last_run_at"].isoformat() if r["last_run_at"] else None,
+        "next_run_at": r["next_run_at"].isoformat() if r["next_run_at"] else None,
+        "last_error": r["last_error"],
+        "fail_count": r["fail_count"],
+    }
+
+
+def _validate_push_payload(p: LinePushConfigPayload) -> None:
+    if p.frequency not in _VALID_FREQUENCIES:
+        raise HTTPException(status_code=400, detail="Invalid frequency")
+    if p.date_range not in _VALID_DATE_RANGES:
+        raise HTTPException(status_code=400, detail="Invalid date_range")
+    if not 0 <= p.hour <= 23:
+        raise HTTPException(status_code=400, detail="Invalid hour")
+    if not 0 <= p.minute <= 59:
+        raise HTTPException(status_code=400, detail="Invalid minute")
+    if p.frequency == FREQUENCY_WEEKLY:
+        if not p.weekdays:
+            raise HTTPException(status_code=400, detail="weekdays required for weekly")
+        if any(w < 0 or w > 6 for w in p.weekdays):
+            raise HTTPException(status_code=400, detail="Invalid weekday")
+    if p.frequency == FREQUENCY_MONTHLY:
+        if p.month_day is None or p.month_day < 1 or p.month_day > 28:
+            raise HTTPException(status_code=400, detail="month_day must be 1..28")
+
+
+@app.get("/api/line-push/configs")
+async def list_push_configs(campaign_id: Optional[str] = None):
+    if _db_pool is None:
+        return {"data": []}
+    async with _db_pool.acquire() as conn:
+        if campaign_id:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM campaign_line_push_configs
+                WHERE campaign_id = $1
+                ORDER BY created_at ASC
+                """,
+                campaign_id,
+            )
+        else:
+            rows = await conn.fetch(
+                "SELECT * FROM campaign_line_push_configs ORDER BY created_at ASC"
+            )
+    return {"data": [_config_row_to_dict(r) for r in rows]}
+
+
+@app.post("/api/line-push/configs")
+async def upsert_push_config(payload: LinePushConfigPayload):
+    pool = _require_db()
+    _validate_push_payload(payload)
+    next_run = _compute_next_run(
+        payload.frequency,
+        payload.weekdays,
+        payload.month_day,
+        payload.hour,
+        payload.minute,
+    )
+    async with pool.acquire() as conn:
+        # Verify the target group actually exists — otherwise the FK
+        # error would surface as a generic 500.
+        grp = await conn.fetchrow(
+            "SELECT group_id FROM line_groups WHERE group_id = $1",
+            payload.group_id,
+        )
+        if grp is None:
+            raise HTTPException(status_code=404, detail="LINE group not found")
+        if payload.id:
+            row = await conn.fetchrow(
+                """
+                UPDATE campaign_line_push_configs
+                SET campaign_id = $1, account_id = $2, group_id = $3,
+                    frequency = $4, weekdays = $5, month_day = $6,
+                    hour = $7, minute = $8, date_range = $9, enabled = $10,
+                    next_run_at = $11, fail_count = 0, last_error = NULL,
+                    updated_at = NOW()
+                WHERE id = $12::uuid
+                RETURNING *
+                """,
+                payload.campaign_id,
+                payload.account_id,
+                payload.group_id,
+                payload.frequency,
+                payload.weekdays,
+                payload.month_day,
+                payload.hour,
+                payload.minute,
+                payload.date_range,
+                payload.enabled,
+                next_run,
+                payload.id,
+            )
+            if row is None:
+                raise HTTPException(status_code=404, detail="Config not found")
+        else:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO campaign_line_push_configs (
+                    campaign_id, account_id, group_id,
+                    frequency, weekdays, month_day, hour, minute,
+                    date_range, enabled, next_run_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                ON CONFLICT (campaign_id, group_id) DO UPDATE
+                SET frequency = EXCLUDED.frequency,
+                    weekdays = EXCLUDED.weekdays,
+                    month_day = EXCLUDED.month_day,
+                    hour = EXCLUDED.hour,
+                    minute = EXCLUDED.minute,
+                    date_range = EXCLUDED.date_range,
+                    enabled = EXCLUDED.enabled,
+                    next_run_at = EXCLUDED.next_run_at,
+                    fail_count = 0,
+                    last_error = NULL,
+                    updated_at = NOW()
+                RETURNING *
+                """,
+                payload.campaign_id,
+                payload.account_id,
+                payload.group_id,
+                payload.frequency,
+                payload.weekdays,
+                payload.month_day,
+                payload.hour,
+                payload.minute,
+                payload.date_range,
+                payload.enabled,
+                next_run,
+            )
+    return {"ok": True, "data": _config_row_to_dict(row)}
+
+
+@app.delete("/api/line-push/configs/{config_id}")
+async def delete_push_config(config_id: str):
+    pool = _require_db()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM campaign_line_push_configs WHERE id = $1::uuid",
+            config_id,
+        )
+    return {"ok": True}
+
+
+@app.post("/api/line-push/configs/{config_id}/test")
+async def test_push_config(config_id: str):
+    """Fire a push immediately without advancing next_run_at.
+
+    Handy for validating a newly-saved config or a fresh group label.
+    """
+    pool = _require_db()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM campaign_line_push_configs WHERE id = $1::uuid",
+            config_id,
+        )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Config not found")
+    cfg = _config_row_to_dict(row)
+    try:
+        flex = await _build_flex_for_config(cfg)
+        assert _http_client is not None
+        await line_client.line_push(_http_client, cfg["group_id"], [flex])
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO line_push_logs (config_id, success, message_preview)
+                VALUES ($1::uuid, TRUE, $2)
+                """,
+                config_id,
+                (flex.get("altText") or "")[:200],
+            )
+        return {"ok": True}
+    except Exception as e:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO line_push_logs (config_id, success, error)
+                VALUES ($1::uuid, FALSE, $2)
+                """,
+                config_id,
+                str(e)[:500],
+            )
+        raise HTTPException(status_code=502, detail=f"LINE push failed: {e}")
+
+
+@app.get("/api/line-push/logs")
+async def list_push_logs(config_id: Optional[str] = None, limit: int = 20):
+    if _db_pool is None:
+        return {"data": []}
+    limit = max(1, min(limit, 100))
+    async with _db_pool.acquire() as conn:
+        if config_id:
+            rows = await conn.fetch(
+                """
+                SELECT id, config_id, run_at, success, error, message_preview
+                FROM line_push_logs
+                WHERE config_id = $1::uuid
+                ORDER BY run_at DESC
+                LIMIT $2
+                """,
+                config_id,
+                limit,
+            )
+        else:
+            rows = await conn.fetch(
+                """
+                SELECT id, config_id, run_at, success, error, message_preview
+                FROM line_push_logs
+                ORDER BY run_at DESC
+                LIMIT $1
+                """,
+                limit,
+            )
+    return {
+        "data": [
+            {
+                "id": r["id"],
+                "config_id": str(r["config_id"]) if r["config_id"] else None,
+                "run_at": r["run_at"].isoformat() if r["run_at"] else None,
+                "success": r["success"],
+                "error": r["error"],
+                "message_preview": r["message_preview"],
+            }
+            for r in rows
+        ]
+    }
+
+
+# ── Scheduler loop ────────────────────────────────────────────
+
+async def _scheduler_tick() -> None:
+    """Run one pass: find due configs, push each, update bookkeeping."""
+    if _db_pool is None:
+        return
+    now = datetime.now(timezone.utc)
+    async with _db_pool.acquire() as conn:
+        due = await conn.fetch(
+            """
+            SELECT * FROM campaign_line_push_configs
+            WHERE enabled
+              AND next_run_at <= $1
+              AND (last_run_at IS NULL OR last_run_at < next_run_at)
+            ORDER BY next_run_at ASC
+            LIMIT 50
+            """,
+            now,
+        )
+
+    for row in due:
+        cfg = _config_row_to_dict(row)
+        try:
+            flex = await _build_flex_for_config(cfg)
+            assert _http_client is not None
+            await line_client.line_push(_http_client, cfg["group_id"], [flex])
+            next_run = _compute_next_run(
+                cfg["frequency"],
+                cfg["weekdays"],
+                cfg["month_day"],
+                cfg["hour"],
+                cfg["minute"],
+            )
+            async with _db_pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    UPDATE campaign_line_push_configs
+                    SET last_run_at = $1, next_run_at = $2,
+                        fail_count = 0, last_error = NULL, updated_at = NOW()
+                    WHERE id = $3::uuid
+                    """,
+                    now,
+                    next_run,
+                    cfg["id"],
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO line_push_logs (config_id, success, message_preview)
+                    VALUES ($1::uuid, TRUE, $2)
+                    """,
+                    cfg["id"],
+                    (flex.get("altText") or "")[:200],
+                )
+            print(
+                f"[scheduler] pushed cfg={cfg['id']} group={cfg['group_id']}",
+                flush=True,
+            )
+        except Exception as e:
+            fail_count = int(cfg.get("fail_count") or 0) + 1
+            auto_disable = fail_count >= SCHEDULER_FAIL_THRESHOLD
+            async with _db_pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    UPDATE campaign_line_push_configs
+                    SET fail_count = $1, last_error = $2,
+                        enabled = CASE WHEN $3 THEN FALSE ELSE enabled END,
+                        updated_at = NOW()
+                    WHERE id = $4::uuid
+                    """,
+                    fail_count,
+                    str(e)[:500],
+                    auto_disable,
+                    cfg["id"],
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO line_push_logs (config_id, success, error)
+                    VALUES ($1::uuid, FALSE, $2)
+                    """,
+                    cfg["id"],
+                    str(e)[:500],
+                )
+            print(
+                f"[scheduler] push FAILED cfg={cfg['id']} err={e}"
+                f"{' (auto-disabled)' if auto_disable else ''}",
+                flush=True,
+            )
+
+
+async def _scheduler_loop() -> None:
+    """Long-running task — one tick every SCHEDULER_TICK_SECONDS.
+
+    Any exception inside the tick is caught and logged so the loop
+    itself never dies. CancelledError from shutdown propagates out.
+    """
+    try:
+        while True:
+            try:
+                await _scheduler_tick()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                print(f"[scheduler] tick error: {e}", flush=True)
+            await asyncio.sleep(SCHEDULER_TICK_SECONDS)
+    except asyncio.CancelledError:
+        print("[scheduler] stopped", flush=True)
+        raise
 
 
 # ── AI Chat (Gemini) ──────────────────────────────────────────
