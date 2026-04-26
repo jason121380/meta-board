@@ -102,6 +102,56 @@ describe("buildCampaignRecommendations — 頻次警示", () => {
   });
 });
 
+describe("buildCampaignRecommendations — 流量目標跳過私訊", () => {
+  it("OUTCOME_TRAFFIC + 有私訊資料 → 不評論私訊", () => {
+    const out = buildCampaignRecommendations({
+      ...base,
+      spend: 1000,
+      msgs: 10,
+      msgCost: 500, // 平常 > 300 會出警示
+      cpc: 3,
+      objective: "OUTCOME_TRAFFIC",
+    });
+    expect(out.find((r) => r.includes("私訊"))).toBeUndefined();
+  });
+
+  it("OUTCOME_TRAFFIC + CPC 偏高 → 仍出 CPC 警示", () => {
+    const out = buildCampaignRecommendations({
+      ...base,
+      spend: 1000,
+      msgs: 10,
+      msgCost: 50,
+      cpc: 5.5,
+      objective: "OUTCOME_TRAFFIC",
+    });
+    expect(out[0]).toContain("CPC $5.50 可以優化");
+  });
+
+  it("LINK_CLICKS (legacy) 也視為流量,跳過私訊", () => {
+    const out = buildCampaignRecommendations({
+      ...base,
+      spend: 1000,
+      msgs: 5,
+      msgCost: 200,
+      cpc: 3,
+      objective: "LINK_CLICKS",
+    });
+    expect(out.find((r) => r.includes("私訊"))).toBeUndefined();
+  });
+
+  it("OUTCOME_LEADS / 其他目標 → 仍評論私訊", () => {
+    const out = buildCampaignRecommendations({
+      ...base,
+      spend: 1000,
+      msgs: 10,
+      msgCost: 50,
+      cpc: 3,
+      objective: "OUTCOME_LEADS",
+    });
+    expect(out[0]).toContain("私訊成本 $50 非常好");
+  });
+});
+
 describe("buildCampaignRecommendations — 組合情境", () => {
   it("私訊好 + 頻次過高 → 兩條建議", () => {
     const out = buildCampaignRecommendations({
