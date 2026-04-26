@@ -138,17 +138,25 @@ def build_flex_report(
     title: str,
     subtitle: str,
     kpis: list[tuple[str, str]],
+    recommendations: Optional[List[str]] = None,
+    report_url: Optional[str] = None,
     alt_text: Optional[str] = None,
 ) -> dict:
     """Build a LINE Flex Message bubble for a campaign report.
 
-    Header layout:
-        {title}      (campaign nickname or name — main)
-        {subtitle}   (e.g. "報告區間: 4/1 - 4/25")
+    Layout:
+        Header (orange)
+            {title}                 (campaign nickname or name)
+            {subtitle}              (e.g. "報告區間: 4/1 - 4/25")
 
-    `kpis` is a list of (label, value) tuples rendered as a grid of
-    rows in the body. Colours match the dashboard's orange branding
-    (#FF6B2C) so the message feels consistent with the web UI.
+        Body (white)
+            {kpi_rows}              (花費 / 曝光 / ... / 私訊成本)
+            ─── separator ───       (only if recommendations is non-empty)
+            AI 優化建議              (orange section title, only if any)
+            • {bullet}              (one row per recommendation)
+
+        Footer (white)              (only if report_url is provided)
+            [ 查看完整報告 ]         (primary button → uri action)
     """
     alt = alt_text or f"{title}（{subtitle}）"
 
@@ -180,6 +188,48 @@ def build_flex_report(
                 "margin": "sm",
             }
         )
+
+    suggestion_rows: list[dict[str, Any]] = []
+    if recommendations:
+        suggestion_rows.append(
+            {"type": "separator", "margin": "lg", "color": "#F0F0F0"},
+        )
+        suggestion_rows.append(
+            {
+                "type": "text",
+                "text": "AI 優化建議",
+                "size": "sm",
+                "color": "#FF6B2C",
+                "weight": "bold",
+                "margin": "lg",
+            }
+        )
+        for rec in recommendations:
+            suggestion_rows.append(
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "margin": "sm",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": "•",
+                            "size": "sm",
+                            "color": "#FF6B2C",
+                            "flex": 0,
+                        },
+                        {
+                            "type": "text",
+                            "text": rec,
+                            "size": "sm",
+                            "color": "#1A1A1A",
+                            "wrap": True,
+                            "margin": "sm",
+                            "flex": 1,
+                        },
+                    ],
+                }
+            )
 
     bubble: dict[str, Any] = {
         "type": "bubble",
@@ -215,8 +265,30 @@ def build_flex_report(
             "paddingAll": "16px",
             "contents": [
                 *kpi_rows,
+                *suggestion_rows,
             ],
         },
     }
+
+    if report_url:
+        bubble["footer"] = {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "paddingAll": "12px",
+            "contents": [
+                {
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#FF6B2C",
+                    "height": "sm",
+                    "action": {
+                        "type": "uri",
+                        "label": "查看完整報告",
+                        "uri": report_url,
+                    },
+                },
+            ],
+        }
 
     return {"type": "flex", "altText": alt[:400], "contents": bubble}
