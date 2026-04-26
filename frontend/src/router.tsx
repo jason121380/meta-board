@@ -26,6 +26,7 @@ const importAnalytics = () => import("@/views/analytics/AnalyticsView");
 const importAlerts = () => import("@/views/alerts/AlertsView");
 const importFinance = () => import("@/views/finance/FinanceView");
 const importHistory = () => import("@/views/history/HistoryView");
+const importStoreExpenses = () => import("@/views/storeExpenses/StoreExpensesView");
 const importLaunch = () => import("@/views/launch/QuickLaunchView");
 const importSettings = () => import("@/views/settings/SettingsView");
 const importLinePush = () => import("@/views/settings/LinePushSettingsView");
@@ -84,6 +85,11 @@ const FinanceView = lazy(() =>
 const HistoryView = lazy(() =>
   withReloadOnChunkError(importHistory)().then((m) => ({ default: m.HistoryView })),
 );
+const StoreExpensesView = lazy(() =>
+  withReloadOnChunkError(importStoreExpenses)().then((m) => ({
+    default: m.StoreExpensesView,
+  })),
+);
 const QuickLaunchView = lazy(() =>
   withReloadOnChunkError(importLaunch)().then((m) => ({ default: m.QuickLaunchView })),
 );
@@ -117,6 +123,9 @@ export const prefetchView = (path: string): void => {
     case "/history":
       void importHistory();
       return;
+    case "/store-expenses":
+      void importStoreExpenses();
+      return;
     case "/launch":
       void importLaunch();
       return;
@@ -149,6 +158,7 @@ export const router = createBrowserRouter([
       { path: "alerts", element: lazyView(<AlertsView />) },
       { path: "finance", element: lazyView(<FinanceView />) },
       { path: "history", element: lazyView(<HistoryView />) },
+      { path: "store-expenses", element: lazyView(<StoreExpensesView />) },
       { path: "launch", element: lazyView(<QuickLaunchView />) },
       { path: "settings", element: lazyView(<SettingsView />) },
       { path: "line-push", element: lazyView(<LinePushSettingsView />) },

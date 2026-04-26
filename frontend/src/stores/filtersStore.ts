@@ -14,7 +14,7 @@ import { create } from "zustand";
  * when they open any view.
  */
 
-export type ViewKey = "dashboard" | "analytics" | "alerts" | "finance";
+export type ViewKey = "dashboard" | "analytics" | "alerts" | "finance" | "storeExpenses";
 
 const defaultDate = (): DateConfig => ({ preset: "this_month", from: null, to: null });
 
@@ -35,6 +35,7 @@ export const useFiltersStore = create<FiltersState>((set) => ({
     analytics: defaultDate(),
     alerts: defaultDate(),
     finance: defaultDate(),
+    storeExpenses: defaultDate(),
   },
   setActiveOnly: (v) => set({ activeOnly: v }),
   setDate: (view, config) => set((state) => ({ date: { ...state.date, [view]: config } })),
