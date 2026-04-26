@@ -25,7 +25,7 @@ import type {
 } from "@/types/fb";
 
 // ── LINE push types (shared with hooks + modal) ───────────────
-export type LinePushFrequency = "daily" | "weekly" | "monthly";
+export type LinePushFrequency = "daily" | "weekly" | "biweekly" | "monthly";
 export type LinePushDateRange =
   | "yesterday"
   | "last_7d"

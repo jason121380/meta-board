@@ -160,7 +160,8 @@ export function LinePushModal({ open, onOpenChange, campaign }: LinePushModalPro
         account_id: campaign._accountId,
         group_id: editor.groupId,
         frequency: editor.frequency,
-        weekdays: editor.frequency === "weekly" ? editor.weekdays : [],
+        weekdays:
+          editor.frequency === "weekly" || editor.frequency === "biweekly" ? editor.weekdays : [],
         month_day: editor.frequency === "monthly" ? editor.monthDay : null,
         hour: editor.hour,
         minute: editor.minute,
@@ -401,7 +402,7 @@ function Editor({
       <div className="flex flex-col gap-1">
         <span className="text-[11px] font-semibold text-ink">推播頻率</span>
         <div className="flex gap-1.5">
-          {(["daily", "weekly", "monthly"] as const).map((f) => (
+          {(["daily", "weekly", "biweekly", "monthly"] as const).map((f) => (
             <button
               key={f}
               type="button"
@@ -413,14 +414,20 @@ function Editor({
                   : "bg-white text-gray-500 hover:border-orange",
               )}
             >
-              {f === "daily" ? "每日" : f === "weekly" ? "每週" : "每月"}
+              {f === "daily"
+                ? "每日"
+                : f === "weekly"
+                  ? "每週"
+                  : f === "biweekly"
+                    ? "雙週"
+                    : "每月"}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Weekly discriminator */}
-      {state.frequency === "weekly" && (
+      {/* Weekday picker — used by both weekly and biweekly */}
+      {(state.frequency === "weekly" || state.frequency === "biweekly") && (
         <div className="flex flex-col gap-1">
           <span className="text-[11px] font-semibold text-ink">星期</span>
           <div className="flex gap-1">
@@ -548,9 +555,10 @@ function Editor({
 function formatRule(cfg: LinePushConfig): string {
   const time = `${String(cfg.hour).padStart(2, "0")}:${String(cfg.minute).padStart(2, "0")}`;
   if (cfg.frequency === "daily") return `每日 ${time}`;
-  if (cfg.frequency === "weekly") {
+  if (cfg.frequency === "weekly" || cfg.frequency === "biweekly") {
+    const prefix = cfg.frequency === "biweekly" ? "雙週" : "";
     const days = cfg.weekdays.map((d) => `週${WEEKDAY_LABELS[d] ?? "?"}`).join("、");
-    return `${days || "每週"} ${time}`;
+    return `${prefix}${days || (cfg.frequency === "biweekly" ? "" : "每週")} ${time}`;
   }
   return `每月 ${cfg.month_day ?? 1} 日 ${time}`;
 }

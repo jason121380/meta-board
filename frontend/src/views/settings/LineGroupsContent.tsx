@@ -31,9 +31,11 @@ const DATE_RANGE_LABELS: Record<LinePushDateRange, string> = {
 function formatPushRule(cfg: LinePushConfig): string {
   const time = `${String(cfg.hour).padStart(2, "0")}:${String(cfg.minute).padStart(2, "0")}`;
   if (cfg.frequency === "daily") return `每日 ${time}`;
-  if (cfg.frequency === "weekly") {
+  if (cfg.frequency === "weekly" || cfg.frequency === "biweekly") {
+    const prefix = cfg.frequency === "biweekly" ? "雙週" : "";
     const days = (cfg.weekdays ?? []).map((d) => `週${WEEKDAY_LABELS[d] ?? "?"}`).join("、");
-    return `${days || "每週"} ${time}`;
+    const fallback = cfg.frequency === "biweekly" ? "" : "每週";
+    return `${prefix}${days || fallback} ${time}`;
   }
   return `每月 ${cfg.month_day ?? 1} 日 ${time}`;
 }

@@ -145,7 +145,8 @@ export function GroupPushConfigModal({
       account_id: state.accountId,
       group_id: groupId,
       frequency: state.frequency,
-      weekdays: state.frequency === "weekly" ? state.weekdays : [],
+      weekdays:
+        state.frequency === "weekly" || state.frequency === "biweekly" ? state.weekdays : [],
       month_day: state.frequency === "monthly" ? state.monthDay : null,
       hour: state.hour,
       minute: state.minute,
@@ -224,7 +225,7 @@ export function GroupPushConfigModal({
         <div className="flex flex-col gap-1">
           <span className="text-[11px] font-semibold text-ink">推播頻率</span>
           <div className="flex gap-1.5">
-            {(["daily", "weekly", "monthly"] as const).map((f) => (
+            {(["daily", "weekly", "biweekly", "monthly"] as const).map((f) => (
               <button
                 key={f}
                 type="button"
@@ -236,13 +237,19 @@ export function GroupPushConfigModal({
                     : "bg-white text-gray-500 hover:border-orange",
                 )}
               >
-                {f === "daily" ? "每日" : f === "weekly" ? "每週" : "每月"}
+                {f === "daily"
+                  ? "每日"
+                  : f === "weekly"
+                    ? "每週"
+                    : f === "biweekly"
+                      ? "雙週"
+                      : "每月"}
               </button>
             ))}
           </div>
         </div>
 
-        {state.frequency === "weekly" && (
+        {(state.frequency === "weekly" || state.frequency === "biweekly") && (
           <div className="flex flex-col gap-1">
             <span className="text-[11px] font-semibold text-ink">星期</span>
             <div className="flex gap-1">
