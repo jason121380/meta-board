@@ -364,12 +364,30 @@ function AdCard({
   const thumb = ad.creative?.thumbnail_url;
   const [previewOpen, setPreviewOpen] = useState(false);
   const showMsg = !trafficMode && m > 0;
+  const canPreview = Boolean(thumb);
+  const openPreview = () => {
+    if (canPreview) setPreviewOpen(true);
+  };
 
   return (
     <div
       className={`relative rounded-lg border bg-bg p-3.5 ${
-        isBest ? "border-orange" : "border-border"
-      }`}
+        canPreview ? "cursor-zoom-in" : ""
+      } ${isBest ? "border-orange" : "border-border"}`}
+      onClick={openPreview}
+      onKeyDown={
+        canPreview
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                openPreview();
+              }
+            }
+          : undefined
+      }
+      role={canPreview ? "button" : undefined}
+      tabIndex={canPreview ? 0 : undefined}
+      aria-label={canPreview ? "放大預覽" : undefined}
     >
       {isBest && (
         <span className="absolute -top-2 left-3 rounded-full bg-orange px-2.5 py-[3px] text-[11px] font-bold text-white">
@@ -378,20 +396,13 @@ function AdCard({
       )}
       <div className="flex items-start gap-3">
         {thumb ? (
-          <button
-            type="button"
-            onClick={() => setPreviewOpen(true)}
-            className="shrink-0 cursor-zoom-in"
-            aria-label="放大預覽"
-          >
-            <img
-              src={thumb}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              className="h-[64px] w-[64px] rounded border border-border object-cover hover:border-orange"
-            />
-          </button>
+          <img
+            src={thumb}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="h-[64px] w-[64px] shrink-0 rounded border border-border object-cover"
+          />
         ) : (
           <div className="h-[64px] w-[64px] shrink-0 rounded border border-border bg-white" />
         )}
