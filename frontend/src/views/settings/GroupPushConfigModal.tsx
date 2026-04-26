@@ -6,10 +6,13 @@ import type {
 } from "@/api/client";
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useCampaigns } from "@/api/hooks/useCampaigns";
-import { useDeleteLinePushConfig, useSaveLinePushConfig } from "@/api/hooks/useLinePush";
+import {
+  useDeleteLinePushConfig,
+  useLineGroupPushConfigs,
+  useSaveLinePushConfig,
+} from "@/api/hooks/useLinePush";
 import { useNicknames } from "@/api/hooks/useNicknames";
 import { Button } from "@/components/Button";
-import { confirm } from "@/components/ConfirmDialog";
 import { Modal } from "@/components/Modal";
 import { toast } from "@/components/Toast";
 import { cn } from "@/lib/cn";
@@ -57,32 +60,67 @@ interface GroupPushConfigModalProps {
   editing?: LinePushConfig | null;
 }
 
-interface EditorState {
+const FREQS: LinePushFrequency[] = ["daily", "weekly", "biweekly", "monthly"];
+
+/** State for ONE frequency tab. Each frequency maintains its own
+ *  enabled flag + schedule; the modal saves all four at once. */
+interface PerFreqState {
+  /** Existing config id (when this tab was already saved); undefined
+   *  → first time enabling this frequency. Drives upsert vs create on
+   *  save, and delete-on-disable detection. */
   id?: string;
-  accountId: string;
-  accountName: string;
-  campaignId: string;
-  frequency: LinePushFrequency;
+  enabled: boolean;
   weekdays: number[];
   monthDay: number;
   hour: number;
   minute: number;
   dateRange: LinePushDateRange;
-  enabled: boolean;
 }
 
-const blankState = (): EditorState => ({
-  accountId: "",
-  accountName: "",
-  campaignId: "",
-  frequency: "daily",
+interface EditorState {
+  accountId: string;
+  accountName: string;
+  campaignId: string;
+  /** Which tab is currently visible — purely a UI selector, doesn't
+   *  affect what gets saved. */
+  activeFrequency: LinePushFrequency;
+  byFreq: Record<LinePushFrequency, PerFreqState>;
+}
+
+const blankFreq = (): PerFreqState => ({
+  enabled: false,
   weekdays: [1, 2, 3, 4, 5],
   monthDay: 1,
   hour: 9,
   minute: 0,
   dateRange: "last_7d",
-  enabled: true,
 });
+
+const blankState = (): EditorState => ({
+  accountId: "",
+  accountName: "",
+  campaignId: "",
+  activeFrequency: "daily",
+  byFreq: {
+    daily: blankFreq(),
+    weekly: blankFreq(),
+    biweekly: blankFreq(),
+    monthly: blankFreq(),
+  },
+});
+
+/** Hydrate a PerFreqState from an existing server config row. */
+function freqFromConfig(c: LinePushConfig): PerFreqState {
+  return {
+    id: c.id,
+    enabled: c.enabled,
+    weekdays: c.weekdays.length ? c.weekdays : [1, 2, 3, 4, 5],
+    monthDay: c.month_day ?? 1,
+    hour: c.hour,
+    minute: c.minute,
+    dateRange: c.date_range,
+  };
+}
 
 export function GroupPushConfigModal({
   open,
@@ -96,9 +134,17 @@ export function GroupPushConfigModal({
   const nicknamesQuery = useNicknames();
   const nicknames = nicknamesQuery.data ?? {};
   const saveMutation = useSaveLinePushConfig();
-  const deleteMutation = useDeleteLinePushConfig(editing?.campaign_id ?? "");
-
+  // Need a deleteMutation tied to the eventual campaign id to invalidate
+  // the right query key; we pass the live campaignId through so the
+  // hook's onSuccess invalidator targets the active campaign's list.
   const [state, setState] = useState<EditorState>(() => blankState());
+  const deleteMutation = useDeleteLinePushConfig(state.campaignId);
+
+  // Pull all configs for this group so we can find sibling rows
+  // (same group, same campaign, different frequency) and pre-fill
+  // each frequency tab with its current state.
+  const groupConfigsQuery = useLineGroupPushConfigs(open ? groupId : null);
+  const groupConfigs = groupConfigsQuery.data ?? [];
 
   // Sync from editing prop on open. Reset on close.
   useEffect(() => {
@@ -106,28 +152,69 @@ export function GroupPushConfigModal({
     if (editing) {
       const acct = accounts.find((a) => a.id === editing.account_id);
       setState({
-        id: editing.id,
         accountId: editing.account_id,
         accountName: acct?.name ?? "",
         campaignId: editing.campaign_id,
-        frequency: editing.frequency,
-        weekdays: editing.weekdays.length ? editing.weekdays : [1, 2, 3, 4, 5],
-        monthDay: editing.month_day ?? 1,
-        hour: editing.hour,
-        minute: editing.minute,
-        dateRange: editing.date_range,
-        enabled: editing.enabled,
+        activeFrequency: editing.frequency,
+        byFreq: {
+          daily: blankFreq(),
+          weekly: blankFreq(),
+          biweekly: blankFreq(),
+          monthly: blankFreq(),
+          [editing.frequency]: freqFromConfig(editing),
+        },
       });
     } else {
       setState(blankState());
     }
   }, [open, editing, accounts]);
 
+  // Whenever (campaignId, groupConfigs) change, populate any other
+  // frequency tabs that already have a saved sibling config. This
+  // handles two cases:
+  //   1. Edit mode (single freq pre-filled by the effect above), then
+  //      sibling fetch resolves → populate the other tabs too.
+  //   2. New mode where the user picks a campaign that already has
+  //      some configs in this group → those tabs auto-populate.
+  // We only OVERWRITE tabs that haven't been edited yet (id matches
+  // server OR enabled is still false with default values), so user
+  // edits aren't clobbered.
+  useEffect(() => {
+    if (!open) return;
+    if (!state.campaignId) return;
+    const siblings = groupConfigs.filter((c) => c.campaign_id === state.campaignId);
+    if (siblings.length === 0) return;
+    setState((prev) => {
+      const next = { ...prev, byFreq: { ...prev.byFreq } };
+      for (const c of siblings) {
+        const cur = next.byFreq[c.frequency];
+        // Only hydrate if this tab hasn't been touched (no id and
+        // still default-disabled). A tab that the user already edited
+        // will have either an id or enabled=true, both of which we
+        // preserve.
+        if (!cur.id && !cur.enabled) {
+          next.byFreq[c.frequency] = freqFromConfig(c);
+        }
+      }
+      return next;
+    });
+  }, [open, state.campaignId, groupConfigs]);
+
+  const active = state.byFreq[state.activeFrequency];
+  const updateActive = (patch: Partial<PerFreqState>) =>
+    setState((prev) => ({
+      ...prev,
+      byFreq: {
+        ...prev.byFreq,
+        [prev.activeFrequency]: { ...prev.byFreq[prev.activeFrequency], ...patch },
+      },
+    }));
+
   const toggleWeekday = (d: number) => {
-    const set = new Set(state.weekdays);
+    const set = new Set(active.weekdays);
     if (set.has(d)) set.delete(d);
     else set.add(d);
-    setState({ ...state, weekdays: [...set].sort((a, b) => a - b) });
+    updateActive({ weekdays: [...set].sort((a, b) => a - b) });
   };
 
   const save = async () => {
@@ -139,39 +226,40 @@ export function GroupPushConfigModal({
       toast("請選擇行銷活動", "error");
       return;
     }
-    const payload: LinePushConfigInput = {
-      id: state.id,
-      campaign_id: state.campaignId,
-      account_id: state.accountId,
-      group_id: groupId,
-      frequency: state.frequency,
-      weekdays:
-        state.frequency === "weekly" || state.frequency === "biweekly" ? state.weekdays : [],
-      month_day: state.frequency === "monthly" ? state.monthDay : null,
-      hour: state.hour,
-      minute: state.minute,
-      date_range: state.dateRange,
-      enabled: state.enabled,
-    };
+    const enabledFreqs = FREQS.filter((f) => state.byFreq[f].enabled);
+    const toDelete = FREQS.filter((f) => !state.byFreq[f].enabled && state.byFreq[f].id);
+    if (enabledFreqs.length === 0 && toDelete.length === 0) {
+      toast("至少啟用一個推播頻率", "error");
+      return;
+    }
     try {
-      await saveMutation.mutateAsync(payload);
+      // 先刪除被取消勾選的舊 config
+      for (const f of toDelete) {
+        const id = state.byFreq[f].id;
+        if (id) await deleteMutation.mutateAsync(id);
+      }
+      // 再 upsert 啟用的 config(每個頻率一筆)
+      for (const f of enabledFreqs) {
+        const s = state.byFreq[f];
+        const payload: LinePushConfigInput = {
+          id: s.id,
+          campaign_id: state.campaignId,
+          account_id: state.accountId,
+          group_id: groupId,
+          frequency: f,
+          weekdays: f === "weekly" || f === "biweekly" ? s.weekdays : [],
+          month_day: f === "monthly" ? s.monthDay : null,
+          hour: s.hour,
+          minute: s.minute,
+          date_range: s.dateRange,
+          enabled: true,
+        };
+        await saveMutation.mutateAsync(payload);
+      }
       toast("已儲存推播設定", "success");
       onOpenChange(false);
     } catch (e) {
       toast(`儲存失敗：${e instanceof Error ? e.message : String(e)}`, "error", 4500);
-    }
-  };
-
-  const remove = async () => {
-    if (!editing) return;
-    const ok = await confirm("確定要解除這筆推播設定？");
-    if (!ok) return;
-    try {
-      await deleteMutation.mutateAsync(editing.id);
-      toast("已解除推播", "success");
-      onOpenChange(false);
-    } catch (e) {
-      toast(`解除失敗：${e instanceof Error ? e.message : String(e)}`, "error", 4500);
     }
   };
 
@@ -196,13 +284,23 @@ export function GroupPushConfigModal({
             }))}
             value={state.accountId}
             onChange={(v, raw) => {
-              setState({
-                ...state,
+              setState((prev) => ({
+                ...prev,
                 accountId: v,
                 accountName: raw?.name ?? "",
-                // Reset campaign when account changes (avoid orphaned id).
-                campaignId: state.accountId === v ? state.campaignId : "",
-              });
+                // Reset campaign + per-freq state when account changes
+                // (avoid orphaned id + stale sibling data).
+                campaignId: prev.accountId === v ? prev.campaignId : "",
+                byFreq:
+                  prev.accountId === v
+                    ? prev.byFreq
+                    : {
+                        daily: blankFreq(),
+                        weekly: blankFreq(),
+                        biweekly: blankFreq(),
+                        monthly: blankFreq(),
+                      },
+              }));
             }}
             placeholder="搜尋廣告帳號名稱或 ID"
             triggerEmpty="請選擇廣告帳號"
@@ -216,45 +314,76 @@ export function GroupPushConfigModal({
             accountId={state.accountId}
             accountName={state.accountName}
             value={state.campaignId}
-            onChange={(v) => setState({ ...state, campaignId: v })}
+            onChange={(v) =>
+              setState((prev) => ({
+                ...prev,
+                campaignId: v,
+                // Re-blank per-freq state when campaign changes so the
+                // hydration effect can re-populate from the new
+                // campaign's siblings.
+                byFreq:
+                  prev.campaignId === v
+                    ? prev.byFreq
+                    : {
+                        daily: blankFreq(),
+                        weekly: blankFreq(),
+                        biweekly: blankFreq(),
+                        monthly: blankFreq(),
+                      },
+              }))
+            }
             nicknames={nicknames}
           />
         </div>
 
-        {/* Frequency */}
+        {/* Frequency tabs — each tab carries its own enabled state.
+            Active tab gets orange fill; enabled tabs (incl. inactive)
+            get a small dot to signal they'll be saved. */}
         <div className="flex flex-col gap-1">
           <span className="text-[11px] font-semibold text-ink">推播頻率</span>
           <div className="flex gap-1.5">
-            {(["daily", "weekly", "biweekly", "monthly"] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => setState({ ...state, frequency: f })}
-                className={cn(
-                  "h-8 flex-1 rounded-lg border border-border px-2 text-[12px] font-semibold",
-                  state.frequency === f
-                    ? "border-orange bg-orange-bg text-orange"
-                    : "bg-white text-gray-500 hover:border-orange",
-                )}
-              >
-                {f === "daily"
-                  ? "每日"
-                  : f === "weekly"
-                    ? "每週"
-                    : f === "biweekly"
-                      ? "雙週"
-                      : "每月"}
-              </button>
-            ))}
+            {FREQS.map((f) => {
+              const tabEnabled = state.byFreq[f].enabled;
+              const isActive = state.activeFrequency === f;
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setState((prev) => ({ ...prev, activeFrequency: f }))}
+                  className={cn(
+                    "relative h-8 flex-1 rounded-lg border border-border px-2 text-[12px] font-semibold",
+                    isActive
+                      ? "border-orange bg-orange-bg text-orange"
+                      : tabEnabled
+                        ? "border-orange/40 bg-white text-orange"
+                        : "bg-white text-gray-500 hover:border-orange",
+                  )}
+                >
+                  {f === "daily"
+                    ? "每日"
+                    : f === "weekly"
+                      ? "每週"
+                      : f === "biweekly"
+                        ? "雙週"
+                        : "每月"}
+                  {tabEnabled && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-orange"
+                    />
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {(state.frequency === "weekly" || state.frequency === "biweekly") && (
+        {(state.activeFrequency === "weekly" || state.activeFrequency === "biweekly") && (
           <div className="flex flex-col gap-1">
             <span className="text-[11px] font-semibold text-ink">星期</span>
             <div className="flex gap-1">
               {WEEKDAY_LABELS.map((lbl, idx) => {
-                const active = state.weekdays.includes(idx);
+                const isActive = active.weekdays.includes(idx);
                 return (
                   <button
                     key={lbl}
@@ -262,7 +391,7 @@ export function GroupPushConfigModal({
                     onClick={() => toggleWeekday(idx)}
                     className={cn(
                       "h-8 w-8 rounded-lg border border-border text-[12px] font-semibold",
-                      active
+                      isActive
                         ? "border-orange bg-orange-bg text-orange"
                         : "bg-white text-gray-500 hover:border-orange",
                     )}
@@ -275,17 +404,16 @@ export function GroupPushConfigModal({
           </div>
         )}
 
-        {state.frequency === "monthly" && (
+        {state.activeFrequency === "monthly" && (
           <label className="flex flex-col gap-1">
             <span className="text-[11px] font-semibold text-ink">每月幾號 (1-28)</span>
             <input
               type="number"
               min={1}
               max={28}
-              value={state.monthDay}
+              value={active.monthDay}
               onChange={(e) =>
-                setState({
-                  ...state,
+                updateActive({
                   monthDay: Math.max(
                     1,
                     Math.min(28, Number.parseInt(e.currentTarget.value, 10) || 1),
@@ -302,10 +430,8 @@ export function GroupPushConfigModal({
           <span className="text-[11px] font-semibold text-ink">推播時間(台北)</span>
           <div className="flex items-center gap-1.5">
             <select
-              value={state.hour}
-              onChange={(e) =>
-                setState({ ...state, hour: Number.parseInt(e.currentTarget.value, 10) })
-              }
+              value={active.hour}
+              onChange={(e) => updateActive({ hour: Number.parseInt(e.currentTarget.value, 10) })}
               className="h-9 rounded-lg border border-border bg-white px-2.5 text-[13px] outline-none focus:border-orange"
             >
               {Array.from({ length: 24 }, (_, i) => i).map((h) => (
@@ -316,10 +442,8 @@ export function GroupPushConfigModal({
             </select>
             <span className="text-[13px] text-gray-500">:</span>
             <select
-              value={state.minute}
-              onChange={(e) =>
-                setState({ ...state, minute: Number.parseInt(e.currentTarget.value, 10) })
-              }
+              value={active.minute}
+              onChange={(e) => updateActive({ minute: Number.parseInt(e.currentTarget.value, 10) })}
               className="h-9 rounded-lg border border-border bg-white px-2.5 text-[13px] outline-none focus:border-orange"
             >
               {[0, 15, 30, 45].map((m) => (
@@ -335,9 +459,9 @@ export function GroupPushConfigModal({
         <label className="flex flex-col gap-1">
           <span className="text-[11px] font-semibold text-ink">報告資料區間</span>
           <select
-            value={state.dateRange}
+            value={active.dateRange}
             onChange={(e) =>
-              setState({ ...state, dateRange: e.currentTarget.value as LinePushDateRange })
+              updateActive({ dateRange: e.currentTarget.value as LinePushDateRange })
             }
             className="h-9 rounded-lg border border-border bg-white px-2.5 text-[13px] outline-none focus:border-orange"
           >
@@ -349,40 +473,32 @@ export function GroupPushConfigModal({
           </select>
         </label>
 
-        {/* Enabled */}
+        {/* Enabled — per-tab. Drives both create-on-save and
+            delete-on-save (a tab that was previously enabled but is
+            now unchecked → its config gets deleted). */}
         <label className="flex items-center gap-2 text-[13px] text-ink">
           <input
             type="checkbox"
             className="custom-cb"
-            checked={state.enabled}
-            onChange={(e) => setState({ ...state, enabled: e.currentTarget.checked })}
+            checked={active.enabled}
+            onChange={(e) => updateActive({ enabled: e.currentTarget.checked })}
           />
-          啟用此推播
+          啟用此推播 ({tabLabel(state.activeFrequency)})
         </label>
 
         {/* Actions */}
-        <div className="mt-1 flex items-center justify-between gap-2">
-          {editing ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={remove}
-              disabled={deleteMutation.isPending}
-              className="text-red"
-            >
-              {deleteMutation.isPending ? "解除中..." : "解除推播"}
-            </Button>
-          ) : (
-            <span />
-          )}
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
-              取消
-            </Button>
-            <Button variant="primary" size="sm" onClick={save} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? "儲存中..." : "儲存"}
-            </Button>
-          </div>
+        <div className="mt-1 flex items-center justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+            取消
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={save}
+            disabled={saveMutation.isPending || deleteMutation.isPending}
+          >
+            {saveMutation.isPending || deleteMutation.isPending ? "儲存中..." : "儲存"}
+          </Button>
         </div>
       </div>
     </Modal>
@@ -435,6 +551,10 @@ function CampaignPicker({
       loadingText={campaignsQuery.isLoading ? "載入行銷活動中..." : undefined}
     />
   );
+}
+
+function tabLabel(f: LinePushFrequency): string {
+  return f === "daily" ? "每日" : f === "weekly" ? "每週" : f === "biweekly" ? "雙週" : "每月";
 }
 
 interface ComboItem<T = unknown> {
