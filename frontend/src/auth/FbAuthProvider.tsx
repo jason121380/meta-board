@@ -235,6 +235,36 @@ export function FbAuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Stub auth provider for the public share page (`/r/:campaignId`).
+ *
+ * The share page has NO real FB login — viewers reach it via a link
+ * shared on LINE/email and the backend serves data using its runtime
+ * token. But `useFbAuth()` throws when no FbAuthContext is present,
+ * and several modal hooks (CreativePreviewModal etc.) call it. Without
+ * this stub, opening the creative preview on the share page crashes
+ * the whole React tree → blank white screen.
+ *
+ * We supply `status: "auth"` so query gates like `enabled: status === "auth"`
+ * fire normally; login/logout are no-ops because the share page has
+ * no UI to invoke them.
+ */
+export function ShareModeAuthProvider({ children }: { children: ReactNode }) {
+  return (
+    <FbAuthContext.Provider
+      value={{
+        status: "auth",
+        user: null,
+        error: null,
+        login: () => {},
+        logout: async () => {},
+      }}
+    >
+      {children}
+    </FbAuthContext.Provider>
+  );
+}
+
 export function useFbAuth(): FbAuthContextValue {
   const ctx = useContext(FbAuthContext);
   if (!ctx) {
