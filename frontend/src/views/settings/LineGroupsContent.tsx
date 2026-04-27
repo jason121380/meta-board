@@ -3,6 +3,7 @@ import {
   useDeleteLinePushConfig,
   useLineGroupPushConfigs,
   useLineGroups,
+  useTestLinePush,
   useUpdateLineGroupLabel,
 } from "@/api/hooks/useLinePush";
 import { confirm } from "@/components/ConfirmDialog";
@@ -306,6 +307,7 @@ function PushConfigRow({
   const dateLabel = DATE_RANGE_LABELS[cfg.date_range] ?? cfg.date_range;
   const rule = formatPushRule(cfg);
   const deleteMutation = useDeleteLinePushConfig(cfg.campaign_id);
+  const testMutation = useTestLinePush();
 
   const onUnbind = async () => {
     const ok = await confirm(`確定要解除「${name}」的推播綁定？`);
@@ -315,6 +317,15 @@ function PushConfigRow({
       toast("已解除推播", "success");
     } catch (e) {
       toast(`解除失敗:${e instanceof Error ? e.message : String(e)}`, "error", 4500);
+    }
+  };
+
+  const onTest = async () => {
+    try {
+      await testMutation.mutateAsync(cfg.id);
+      toast(`已發送測試推播到「${name}」`, "success");
+    } catch (e) {
+      toast(`測試失敗:${e instanceof Error ? e.message : String(e)}`, "error", 4500);
     }
   };
 
@@ -345,6 +356,14 @@ function PushConfigRow({
           className="rounded border border-border px-1.5 py-0.5 text-[10px] text-gray-500 hover:border-orange hover:text-orange"
         >
           編輯
+        </button>
+        <button
+          type="button"
+          onClick={onTest}
+          disabled={testMutation.isPending}
+          className="rounded border border-border px-1.5 py-0.5 text-[10px] text-orange hover:border-orange hover:bg-orange-bg disabled:opacity-50"
+        >
+          {testMutation.isPending ? "發送中" : "測試"}
         </button>
         <button
           type="button"
