@@ -1,9 +1,11 @@
 import type { LinePushConfig, LinePushDateRange } from "@/api/client";
 import {
+  useDeleteLinePushConfig,
   useLineGroupPushConfigs,
   useLineGroups,
   useUpdateLineGroupLabel,
 } from "@/api/hooks/useLinePush";
+import { confirm } from "@/components/ConfirmDialog";
 import { toast } from "@/components/Toast";
 import { cn } from "@/lib/cn";
 import { useEffect, useMemo, useState } from "react";
@@ -275,41 +277,9 @@ function GroupPushConfigsList({
         <div className="text-[11px] text-gray-300">尚無推播設定</div>
       ) : (
         <ul className="flex flex-col gap-1">
-          {configs.map((cfg) => {
-            const name = cfg.campaign_nickname?.trim() || cfg.campaign_id;
-            const dateLabel = DATE_RANGE_LABELS[cfg.date_range] ?? cfg.date_range;
-            const rule = formatPushRule(cfg);
-            return (
-              <li
-                key={cfg.id}
-                className={cn(
-                  "group/row flex items-start justify-between gap-2 rounded-md px-1 py-0.5 hover:bg-bg",
-                  !cfg.enabled && "opacity-60",
-                )}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-[12px] font-semibold text-ink">{name}</span>
-                    {!cfg.enabled && (
-                      <span className="shrink-0 rounded-full bg-red-bg px-1.5 py-[1px] text-[10px] font-semibold text-red">
-                        已停用
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-[11px] text-gray-500">
-                    {rule} · {dateLabel}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onEdit(cfg)}
-                  className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-gray-500 hover:border-orange hover:text-orange"
-                >
-                  編輯
-                </button>
-              </li>
-            );
-          })}
+          {configs.map((cfg) => (
+            <PushConfigRow key={cfg.id} cfg={cfg} onEdit={onEdit} />
+          ))}
         </ul>
       )}
       {onAdd && (
@@ -322,5 +292,69 @@ function GroupPushConfigsList({
         </button>
       )}
     </div>
+  );
+}
+
+function PushConfigRow({
+  cfg,
+  onEdit,
+}: {
+  cfg: LinePushConfig & { campaign_nickname?: string };
+  onEdit: (cfg: LinePushConfig) => void;
+}) {
+  const name = cfg.campaign_nickname?.trim() || cfg.campaign_id;
+  const dateLabel = DATE_RANGE_LABELS[cfg.date_range] ?? cfg.date_range;
+  const rule = formatPushRule(cfg);
+  const deleteMutation = useDeleteLinePushConfig(cfg.campaign_id);
+
+  const onUnbind = async () => {
+    const ok = await confirm(`確定要解除「${name}」的推播綁定？`);
+    if (!ok) return;
+    try {
+      await deleteMutation.mutateAsync(cfg.id);
+      toast("已解除推播", "success");
+    } catch (e) {
+      toast(`解除失敗:${e instanceof Error ? e.message : String(e)}`, "error", 4500);
+    }
+  };
+
+  return (
+    <li
+      className={cn(
+        "group/row flex items-start justify-between gap-2 rounded-md px-1 py-0.5 hover:bg-bg",
+        !cfg.enabled && "opacity-60",
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-[12px] font-semibold text-ink">{name}</span>
+          {!cfg.enabled && (
+            <span className="shrink-0 rounded-full bg-red-bg px-1.5 py-[1px] text-[10px] font-semibold text-red">
+              已停用
+            </span>
+          )}
+        </div>
+        <div className="text-[11px] text-gray-500">
+          {rule} · {dateLabel}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={() => onEdit(cfg)}
+          className="rounded border border-border px-1.5 py-0.5 text-[10px] text-gray-500 hover:border-orange hover:text-orange"
+        >
+          編輯
+        </button>
+        <button
+          type="button"
+          onClick={onUnbind}
+          disabled={deleteMutation.isPending}
+          className="rounded border border-border px-1.5 py-0.5 text-[10px] text-red hover:border-red hover:bg-red-bg disabled:opacity-50"
+        >
+          {deleteMutation.isPending ? "解除中" : "解除綁定"}
+        </button>
+      </div>
+    </li>
   );
 }
