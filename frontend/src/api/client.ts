@@ -152,6 +152,34 @@ function isSharePage(): boolean {
   return window.location.pathname.startsWith("/r/");
 }
 
+/** Default per-request timeout. The backend's longest path (overview
+ *  batch over 80 accounts) tops out around ~12s end-to-end; 30s gives
+ *  room for slow networks while still bounding hung tabs. */
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+/** Compose two AbortSignals — fires when either aborts. Used to merge
+ *  the per-call timeout with the caller's signal (typically supplied
+ *  by react-query, which aborts on unmount / refetch). */
+function composeSignals(...signals: Array<AbortSignal | undefined>): AbortSignal | undefined {
+  const real = signals.filter((s): s is AbortSignal => Boolean(s));
+  if (real.length === 0) return undefined;
+  if (real.length === 1) return real[0];
+  // AbortSignal.any() is widely supported in modern browsers; fall
+  // back to a manual controller for older runtimes.
+  if (typeof (AbortSignal as unknown as { any?: unknown }).any === "function") {
+    return (AbortSignal as unknown as { any: (s: AbortSignal[]) => AbortSignal }).any(real);
+  }
+  const ctrl = new AbortController();
+  for (const s of real) {
+    if (s.aborted) {
+      ctrl.abort(s.reason);
+      break;
+    }
+    s.addEventListener("abort", () => ctrl.abort(s.reason), { once: true });
+  }
+  return ctrl.signal;
+}
+
 async function request<T>(
   method: "GET" | "POST" | "DELETE",
   path: string,
@@ -161,6 +189,12 @@ async function request<T>(
     /** Internal flag — set by the 401 retry path so the token
      * refresh call itself doesn't loop back through this logic. */
     skipAuthRefresh?: boolean;
+    /** Caller-supplied abort signal (typically from react-query's
+     *  context — aborts on unmount / refetch). Composed with the
+     *  default timeout signal. */
+    signal?: AbortSignal;
+    /** Override the default 30s timeout when needed. */
+    timeoutMs?: number;
   },
 ): Promise<T> {
   let url = path;
@@ -173,14 +207,31 @@ async function request<T>(
     if (qs) url += (url.includes("?") ? "&" : "?") + qs;
   }
 
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutSignal =
+    typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+      ? (AbortSignal as unknown as { timeout: (ms: number) => AbortSignal }).timeout(timeoutMs)
+      : undefined;
+  const signal = composeSignals(options?.signal, timeoutSignal);
+
   let response: Response;
   try {
     response = await fetch(url, {
       method,
       headers: options?.body ? { "Content-Type": "application/json" } : undefined,
       body: options?.body ? JSON.stringify(options.body) : undefined,
+      signal,
     });
   } catch (networkErr) {
+    if (
+      networkErr instanceof DOMException &&
+      (networkErr.name === "TimeoutError" || networkErr.name === "AbortError")
+    ) {
+      // Caller cancelled (unmount) → propagate so react-query treats it
+      // as a cancellation, not an error.
+      if (options?.signal?.aborted) throw networkErr;
+      throw new ApiError(0, networkErr.name === "TimeoutError" ? "請求逾時" : "請求已取消");
+    }
     const msg = networkErr instanceof Error ? networkErr.message : "Network error";
     throw new ApiError(0, msg);
   }

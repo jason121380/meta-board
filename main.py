@@ -92,8 +92,17 @@ async def lifespan(app: FastAPI):
     )
     if DATABASE_URL:
         try:
+            # max_size=5 was too tight: scheduler tick can claim several
+            # connections in parallel while the dashboard simultaneously
+            # fans out per-account fetches. 20 leaves comfortable
+            # headroom; tune via env on busy deployments.
+            db_pool_max = int(os.getenv("DB_POOL_MAX", "20"))
+            db_pool_min = int(os.getenv("DB_POOL_MIN", "2"))
             _db_pool = await asyncpg.create_pool(
-                DATABASE_URL, min_size=1, max_size=5, command_timeout=10
+                DATABASE_URL,
+                min_size=db_pool_min,
+                max_size=db_pool_max,
+                command_timeout=10,
             )
             async with _db_pool.acquire() as conn:
                 await conn.execute(
@@ -241,6 +250,16 @@ async def lifespan(app: FastAPI):
                     WHERE enabled
                     """
                 )
+                # Foreign-key / filter indexes — list endpoints query
+                # by group_id and campaign_id, audit logs by config_id.
+                # Without these, list pages do seq scans as the table
+                # grows.
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_clpc_campaign ON campaign_line_push_configs (campaign_id)"
+                )
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_clpc_group ON campaign_line_push_configs (group_id)"
+                )
                 # Migration (2026-04-27): allow multiple configs per
                 # (campaign, group) — different frequencies should
                 # coexist (daily report + weekly report to same group).
@@ -291,6 +310,18 @@ async def lifespan(app: FastAPI):
                     )
                     """
                 )
+                # `/api/line-push/logs?config_id=…` list query filters
+                # by config_id and orders by run_at DESC.
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_lpl_config_run ON line_push_logs (config_id, run_at DESC)"
+                )
+                # user_settings is keyed (fb_user_id, key) — the PK
+                # already covers fb_user_id-leading queries, but bare
+                # WHERE fb_user_id=$1 fan-outs benefit from being able
+                # to land on a covering index. Postgres composite PK is
+                # sufficient; explicit single-col index is redundant
+                # and we skip it.
+
                 # Diagnostic — print every table in the public schema
                 # with its row count. Lets operators confirm at a
                 # glance after a redeploy that the tables are present
@@ -393,12 +424,59 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="FB Ads Dashboard", lifespan=lifespan)
 
+# CORS: explicit allowlist via env (comma-separated), e.g.
+#   ALLOWED_ORIGINS=https://meta.lure.agency,https://staging.lure.agency
+# Wildcard is opt-in via ALLOWED_ORIGINS=* — kept for legacy local dev.
+_RAW_ORIGINS = os.getenv("ALLOWED_ORIGINS", "").strip()
+if _RAW_ORIGINS == "*" or _RAW_ORIGINS == "":
+    _CORS_ORIGINS: List[str] = ["*"]
+else:
+    _CORS_ORIGINS = [o.strip() for o in _RAW_ORIGINS.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_CORS_ORIGINS,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+print(f"[startup] CORS origins: {_CORS_ORIGINS}", flush=True)
+
+
+# Security headers — applied to every response. CSP allows our own
+# origin plus FB CDN for ad creative thumbnails (signed URLs, never
+# escape the value with HTML escapers — see CLAUDE.md).
+@app.middleware("http")
+async def _security_headers(request: Request, call_next):
+    resp = await call_next(request)
+    h = resp.headers
+    h.setdefault("X-Content-Type-Options", "nosniff")
+    h.setdefault("X-Frame-Options", "DENY")
+    h.setdefault("Referrer-Policy", "same-origin")
+    h.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+    # HSTS only when behind HTTPS (Zeabur terminates TLS — `x-forwarded-proto`
+    # is set to "https"). Avoid sending HSTS over plain http: localhost.
+    if request.headers.get("x-forwarded-proto", "").lower() == "https":
+        h.setdefault(
+            "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
+        )
+    # CSP: restrict by default, allow FB CDN for ad creative thumbnails
+    # and Graph API XHR. Chart.js / Vite output is self-hosted so 'self'
+    # is enough for scripts.
+    if "content-type" in h and h["content-type"].startswith("text/html"):
+        h.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; "
+            "img-src 'self' https: data: blob:; "
+            "media-src 'self' https: blob:; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com data:; "
+            "script-src 'self' https://connect.facebook.net 'unsafe-inline'; "
+            "connect-src 'self' https://graph.facebook.com https://*.facebook.com "
+            "https://generativelanguage.googleapis.com; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'",
+        )
+    return resp
+
 
 # Gzip EVERY response >500 bytes for clients that send Accept-Encoding:
 # gzip. Every FB API JSON response compresses roughly 4-5× so the
@@ -412,8 +490,23 @@ app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
 _REACT_BUILD_PRESENT = (DIST_DIR / "index.html").exists()
 _REACT_ASSETS_PRESENT = (DIST_DIR / "assets").exists()
 
+
+class _ImmutableAssets(StaticFiles):
+    """Vite emits hashed filenames under /assets — content for a given
+    URL never changes, so the browser can cache it forever."""
+
+    async def get_response(self, path: str, scope):  # type: ignore[override]
+        resp = await super().get_response(path, scope)
+        # 200 responses get the long max-age; 404s stay uncached.
+        if getattr(resp, "status_code", 0) == 200:
+            resp.headers.setdefault(
+                "Cache-Control", "public, max-age=31536000, immutable"
+            )
+        return resp
+
+
 if _REACT_ASSETS_PRESENT:
-    app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="assets")
+    app.mount("/assets", _ImmutableAssets(directory=str(DIST_DIR / "assets")), name="assets")
 
 
 # ── Startup-cached HTML / PWA assets ────────────────────────────────
@@ -1080,9 +1173,25 @@ def _index_bytes() -> bytes:
     return b"<!doctype html><title>LURE Meta Platform</title><body>build missing</body>"
 
 
+# index.html must always be revalidated so a redeploy picks up the
+# new asset hashes immediately. The hashed /assets/* files are still
+# cached forever (handled by _ImmutableAssets).
+_HTML_NO_CACHE = {"Cache-Control": "no-cache, must-revalidate"}
+# Icons / favicon: 1 day cache is plenty (rarely change, but updates
+# should reach users within a day without a hard refresh).
+_ICON_CACHE = {"Cache-Control": "public, max-age=86400"}
+# Service worker MUST NOT be aggressively cached — browsers re-check
+# it themselves per spec, but be explicit.
+_SW_HEADERS = {"Cache-Control": "no-cache, must-revalidate"}
+
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    return Response(content=_index_bytes(), media_type="text/html; charset=utf-8")
+    return Response(
+        content=_index_bytes(),
+        media_type="text/html; charset=utf-8",
+        headers=_HTML_NO_CACHE,
+    )
 
 
 @app.get("/api/_status")
@@ -1101,21 +1210,21 @@ async def app_status():
 async def favicon_png():
     if _FAVICON_PNG is None:
         raise HTTPException(status_code=404, detail="favicon missing")
-    return Response(content=_FAVICON_PNG, media_type="image/png")
+    return Response(content=_FAVICON_PNG, media_type="image/png", headers=_ICON_CACHE)
 
 
 @app.get("/icon-192.png")
 async def icon_192_png():
     if _ICON_192_PNG is None:
         raise HTTPException(status_code=404, detail="icon missing")
-    return Response(content=_ICON_192_PNG, media_type="image/png")
+    return Response(content=_ICON_192_PNG, media_type="image/png", headers=_ICON_CACHE)
 
 
 @app.get("/icon-512.png")
 async def icon_512_png():
     if _ICON_512_PNG is None:
         raise HTTPException(status_code=404, detail="icon missing")
-    return Response(content=_ICON_512_PNG, media_type="image/png")
+    return Response(content=_ICON_512_PNG, media_type="image/png", headers=_ICON_CACHE)
 
 
 @app.get("/sw.js")
@@ -1124,7 +1233,9 @@ async def service_worker():
     Cached at module import so this route never touches disk.
     """
     body = _SW_JS if _SW_JS is not None else b"// no service worker"
-    return Response(content=body, media_type="application/javascript")
+    return Response(
+        content=body, media_type="application/javascript", headers=_SW_HEADERS
+    )
 
 
 @app.get("/manifest.json")
@@ -1134,6 +1245,7 @@ async def manifest():
         return Response(
             content=_MANIFEST_JSON,
             media_type="application/manifest+json",
+            headers=_ICON_CACHE,
         )
     return JSONResponse(content={})
 
@@ -1196,7 +1308,10 @@ async def set_token(payload: TokenPayload):
         return {"ok": True, "name": me.get("name"), "id": me.get("id"), "pictureUrl": pic}
     except Exception as e:
         _runtime_token = None
-        raise HTTPException(status_code=400, detail=str(e))
+        # Don't leak FB error internals (URLs, app secret hints) to the
+        # client — log internally, surface a generic message.
+        print(f"[auth] token verify failed: {e!r}", flush=True)
+        raise HTTPException(status_code=400, detail="Token verification failed")
 
 
 @app.delete("/api/auth/token")
@@ -1347,7 +1462,10 @@ async def upsert_user_setting(fb_user_id: str, key: str, payload: SettingsValueP
             key,
             json.dumps(payload.value),
         )
-    print(f"[settings] user POST uid={fb_user_id!r} key={key!r}", flush=True)
+    # Redact uid in logs — only show suffix to confirm right user
+    # without leaking the full FB id to log aggregators.
+    uid_tail = (fb_user_id or "")[-4:]
+    print(f"[settings] user POST uid=…{uid_tail} key={key!r}", flush=True)
     return {"ok": True}
 
 
@@ -1410,8 +1528,15 @@ async def upsert_shared_setting(key: str, payload: SettingsValuePayload):
 # though our data is already non-sensitive). Useful for diagnosing
 # "saved settings didn't come back".
 
+_DEBUG_ENABLED = os.getenv("LURE_DEBUG", "").lower() in {"1", "true", "yes"}
+
+
 @app.get("/api/_debug/settings")
 async def debug_settings_dump():
+    # Production gate — this endpoint dumps every fb_user_id and shared
+    # setting key. Only expose when explicitly opted in via LURE_DEBUG=1.
+    if not _DEBUG_ENABLED:
+        raise HTTPException(status_code=404, detail="Not found")
     if _db_pool is None:
         return {"db": "not_configured", "database_url_set": bool(DATABASE_URL)}
     out: dict = {"db": "connected"}
@@ -2384,16 +2509,33 @@ async def _backfill_line_group_names() -> None:
             f"[startup] backfill: {len(rows)} LINE group name(s) to fetch",
             flush=True,
         )
-        for r in rows:
-            gid = r["group_id"]
-            summary = await line_client.get_group_summary(_http_client, gid)
-            if not summary:
-                continue
-            name = (summary.get("groupName") or "").strip()
-            if not name:
-                continue
-            try:
-                async with _db_pool.acquire() as conn:
+
+        # Parallelize the LINE summary fetches — sequential calls used
+        # to take O(N × LINE_API_LATENCY) on every restart, blocking
+        # this background task for minutes. Cap concurrency at 8 to
+        # stay polite to the LINE bot endpoint.
+        sem = asyncio.Semaphore(8)
+
+        async def _fetch_one(gid: str) -> tuple[str, Optional[str]]:
+            async with sem:
+                try:
+                    summary = await line_client.get_group_summary(_http_client, gid)
+                except Exception as exc:
+                    print(f"[startup] backfill summary failed {gid}: {exc}", flush=True)
+                    return gid, None
+                if not summary:
+                    return gid, None
+                return gid, (summary.get("groupName") or "").strip() or None
+
+        results = await asyncio.gather(
+            *[_fetch_one(r["group_id"]) for r in rows], return_exceptions=False
+        )
+
+        async with _db_pool.acquire() as conn:
+            for gid, name in results:
+                if not name:
+                    continue
+                try:
                     await conn.execute(
                         """
                         UPDATE line_groups SET group_name = $1
@@ -2402,9 +2544,9 @@ async def _backfill_line_group_names() -> None:
                         name,
                         gid,
                     )
-                print(f"[startup] backfill: {gid} → {name!r}", flush=True)
-            except Exception as exc:
-                print(f"[startup] backfill update failed {gid}: {exc}", flush=True)
+                    print(f"[startup] backfill: {gid} → {name!r}", flush=True)
+                except Exception as exc:
+                    print(f"[startup] backfill update failed {gid}: {exc}", flush=True)
         print("[startup] backfill: done", flush=True)
     except Exception as exc:
         print(f"[startup] backfill error: {exc}", flush=True)
@@ -3197,22 +3339,43 @@ async def list_push_logs(config_id: Optional[str] = None, limit: int = 20):
 # ── Scheduler loop ────────────────────────────────────────────
 
 async def _scheduler_tick() -> None:
-    """Run one pass: find due configs, push each, update bookkeeping."""
+    """Run one pass: find due configs, push each, update bookkeeping.
+
+    Uses `FOR UPDATE SKIP LOCKED` so two concurrent workers (or two
+    overlapping ticks) never grab the same row — each row is owned
+    by exactly one worker for the duration of the transaction.
+    """
     if _db_pool is None:
         return
     now = datetime.now(timezone.utc)
     async with _db_pool.acquire() as conn:
-        due = await conn.fetch(
-            """
-            SELECT * FROM campaign_line_push_configs
-            WHERE enabled
-              AND next_run_at <= $1
-              AND (last_run_at IS NULL OR last_run_at < next_run_at)
-            ORDER BY next_run_at ASC
-            LIMIT 50
-            """,
-            now,
-        )
+        async with conn.transaction():
+            due = await conn.fetch(
+                """
+                SELECT * FROM campaign_line_push_configs
+                WHERE enabled
+                  AND next_run_at <= $1
+                  AND (last_run_at IS NULL OR last_run_at < next_run_at)
+                ORDER BY next_run_at ASC
+                LIMIT 50
+                FOR UPDATE SKIP LOCKED
+                """,
+                now,
+            )
+            # Bump last_run_at inside the same txn so other workers'
+            # `last_run_at < next_run_at` filter immediately excludes
+            # these rows even before we push. The real next_run_at
+            # update happens after push success below.
+            if due:
+                await conn.execute(
+                    """
+                    UPDATE campaign_line_push_configs
+                    SET last_run_at = $1
+                    WHERE id = ANY($2::uuid[])
+                    """,
+                    now,
+                    [r["id"] for r in due],
+                )
 
     for row in due:
         cfg = _config_row_to_dict(row)
@@ -3383,7 +3546,11 @@ async def spa_fallback(full_path: str):
     if full_path.startswith(("api/", "static/", "assets/")):
         raise HTTPException(status_code=404, detail="Not found")
     # Served from module-level cached bytes — no disk read per request.
-    return Response(content=_index_bytes(), media_type="text/html; charset=utf-8")
+    return Response(
+        content=_index_bytes(),
+        media_type="text/html; charset=utf-8",
+        headers=_HTML_NO_CACHE,
+    )
 
 
 if __name__ == "__main__":
