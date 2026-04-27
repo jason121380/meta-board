@@ -45,41 +45,46 @@ export function setAccountsUserId(id: string | null) {
   _currentUserId = id;
 }
 
+// Dev-only logger — production builds tree-shake these calls away.
+const devLog = import.meta.env.DEV ? console.log.bind(console) : () => {};
+const devWarn = import.meta.env.DEV ? console.warn.bind(console) : () => {};
+const devError = import.meta.env.DEV ? console.error.bind(console) : () => {};
+
 // selectedIds + order are discrete click actions (checkbox toggle,
 // drag-end). Fire the POST immediately so a quick refresh doesn't
 // drop the write. No debounce.
 async function postSelected(ids: string[]): Promise<void> {
   if (!_currentUserId) {
-    console.warn("[settings] postSelected skipped — no fb user id");
+    devWarn("[settings] postSelected skipped — no fb user id");
     toast("儲存失敗：無 FB 使用者 id", "error", 4000);
     return;
   }
   const uid = _currentUserId;
-  console.log("[settings] POST selected_accounts uid=", uid, "ids=", ids);
+  devLog("[settings] POST selected_accounts uid=", uid, "ids=", ids);
   try {
     await api.settings.setUser(uid, "selected_accounts", ids);
-    console.log("[settings] POST selected_accounts OK");
+    devLog("[settings] POST selected_accounts OK");
     // Invalidate the useUserSettings query so any UI reading from it
     // (avatar debug modal etc.) refetches instead of showing stale data.
     queryClient.invalidateQueries({ queryKey: ["settings", "user", uid] });
   } catch (e) {
-    console.error("[settings] POST selected_accounts FAILED:", e);
+    devError("[settings] POST selected_accounts FAILED:", e);
     toast(`儲存帳戶失敗：${(e as Error).message ?? "unknown"}`, "error", 5000);
   }
 }
 async function postOrder(order: string[]): Promise<void> {
   if (!_currentUserId) {
-    console.warn("[settings] postOrder skipped — no fb user id");
+    devWarn("[settings] postOrder skipped — no fb user id");
     return;
   }
   const uid = _currentUserId;
-  console.log("[settings] POST account_order uid=", uid, "order=", order);
+  devLog("[settings] POST account_order uid=", uid, "order=", order);
   try {
     await api.settings.setUser(uid, "account_order", order);
-    console.log("[settings] POST account_order OK");
+    devLog("[settings] POST account_order OK");
     queryClient.invalidateQueries({ queryKey: ["settings", "user", uid] });
   } catch (e) {
-    console.error("[settings] POST account_order FAILED:", e);
+    devError("[settings] POST account_order FAILED:", e);
     toast(`儲存排序失敗：${(e as Error).message ?? "unknown"}`, "error", 5000);
   }
 }
