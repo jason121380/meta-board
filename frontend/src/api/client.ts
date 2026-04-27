@@ -48,6 +48,9 @@ export interface LinePushConfig {
   minute: number;
   date_range: LinePushDateRange;
   enabled: boolean;
+  /** User-selected KPI field codes for the LINE flex report.
+   *  Empty = use defaults. See REPORT_FIELDS for the catalog. */
+  report_fields: string[];
   last_run_at: string | null;
   next_run_at: string | null;
   last_error: string | null;
@@ -66,6 +69,7 @@ export interface LinePushConfigInput {
   minute: number;
   date_range: LinePushDateRange;
   enabled: boolean;
+  report_fields?: string[];
 }
 
 export class ApiError extends Error {

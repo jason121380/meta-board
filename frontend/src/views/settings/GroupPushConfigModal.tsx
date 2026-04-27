@@ -62,6 +62,31 @@ interface GroupPushConfigModalProps {
 
 const FREQS: LinePushFrequency[] = ["daily", "weekly", "biweekly", "monthly"];
 
+/** All selectable KPI fields for the LINE flex report. Codes must
+ *  match the backend `field_catalog` keys in main.py. The default
+ *  selection (when reportFields is empty in DB → fallback to backend
+ *  defaults) is documented at the call site. */
+const REPORT_FIELDS: Array<{ code: string; label: string }> = [
+  { code: "spend", label: "花費" },
+  { code: "spend_plus", label: "花費+%" },
+  { code: "impressions", label: "曝光" },
+  { code: "clicks", label: "點擊" },
+  { code: "ctr", label: "CTR" },
+  { code: "cpc", label: "CPC" },
+  { code: "cpm", label: "CPM" },
+  { code: "frequency", label: "頻次" },
+  { code: "reach", label: "觸及" },
+  { code: "msgs", label: "私訊數" },
+  { code: "msg_cost", label: "私訊成本" },
+];
+
+/** 互斥群組 — 同一陣列內的 code 在 multi-select 內只能擇一。
+ *  目前僅有「花費 / 花費+%」需要互斥(同一份報告不會同時放原始花費
+ *  跟加成後的花費)。 */
+const MUTEX_GROUPS: string[][] = [["spend", "spend_plus"]];
+
+const DEFAULT_REPORT_FIELDS = ["spend", "impressions", "clicks", "ctr", "cpc", "msgs", "msg_cost"];
+
 /** State for ONE frequency tab. Each frequency maintains its own
  *  enabled flag + schedule; the modal saves all four at once. */
 interface PerFreqState {
@@ -75,6 +100,8 @@ interface PerFreqState {
   hour: number;
   minute: number;
   dateRange: LinePushDateRange;
+  /** KPI field codes to include in the report. */
+  reportFields: string[];
 }
 
 interface EditorState {
@@ -94,6 +121,7 @@ const blankFreq = (): PerFreqState => ({
   hour: 9,
   minute: 0,
   dateRange: "last_7d",
+  reportFields: [...DEFAULT_REPORT_FIELDS],
 });
 
 const blankState = (): EditorState => ({
@@ -119,6 +147,9 @@ function freqFromConfig(c: LinePushConfig): PerFreqState {
     hour: c.hour,
     minute: c.minute,
     dateRange: c.date_range,
+    // Backend stores [] for "use defaults"; surface that as the
+    // explicit default list so the UI checkboxes start populated.
+    reportFields: c.report_fields?.length ? c.report_fields : [...DEFAULT_REPORT_FIELDS],
   };
 }
 
@@ -253,6 +284,7 @@ export function GroupPushConfigModal({
           minute: s.minute,
           date_range: s.dateRange,
           enabled: true,
+          report_fields: s.reportFields,
         };
         await saveMutation.mutateAsync(payload);
       }
@@ -472,6 +504,87 @@ export function GroupPushConfigModal({
             ))}
           </select>
         </label>
+
+        {/* Report fields multi-select — per-tab. Each frequency can
+            include a different set of KPIs in its flex report. */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold text-ink">報告欄位</span>
+            <div className="flex items-center gap-2 text-[11px] text-gray-300">
+              <button
+                type="button"
+                onClick={() => {
+                  // 全選時,互斥群組各只挑第一個 code(避免 spend 跟
+                  // spend_plus 同時被勾)
+                  const mutexBlocked = new Set<string>();
+                  for (const group of MUTEX_GROUPS) {
+                    for (const code of group.slice(1)) mutexBlocked.add(code);
+                  }
+                  updateActive({
+                    reportFields: REPORT_FIELDS.filter((f) => !mutexBlocked.has(f.code)).map(
+                      (f) => f.code,
+                    ),
+                  });
+                }}
+                className="hover:text-orange"
+              >
+                全選
+              </button>
+              <span className="text-gray-300/60">|</span>
+              <button
+                type="button"
+                onClick={() => updateActive({ reportFields: [...DEFAULT_REPORT_FIELDS] })}
+                className="hover:text-orange"
+              >
+                還原預設
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {REPORT_FIELDS.map((field) => {
+              const selected = active.reportFields.includes(field.code);
+              return (
+                <button
+                  key={field.code}
+                  type="button"
+                  onClick={() => {
+                    const set = new Set(active.reportFields);
+                    if (set.has(field.code)) {
+                      set.delete(field.code);
+                    } else {
+                      // 互斥群組:選擇此 code 時自動移除同群組內已選的
+                      // 其他 code(花費 vs 花費+% 二選一)。
+                      for (const group of MUTEX_GROUPS) {
+                        if (group.includes(field.code)) {
+                          for (const sibling of group) {
+                            if (sibling !== field.code) set.delete(sibling);
+                          }
+                        }
+                      }
+                      set.add(field.code);
+                    }
+                    // 維持 catalog 內的固定順序輸出,避免使用者點選順序
+                    // 影響顯示排版。
+                    const ordered = REPORT_FIELDS.filter((f) => set.has(f.code)).map((f) => f.code);
+                    updateActive({ reportFields: ordered });
+                  }}
+                  className={cn(
+                    "h-7 rounded-full border px-2.5 text-[11px] font-semibold transition",
+                    selected
+                      ? "border-orange bg-orange-bg text-orange"
+                      : "border-border bg-white text-gray-500 hover:border-orange",
+                  )}
+                  aria-pressed={selected}
+                >
+                  {field.label}
+                </button>
+              );
+            })}
+          </div>
+          {active.reportFields.length === 0 && (
+            <span className="text-[10px] text-red">至少選一個欄位,否則報告會是空的</span>
+          )}
+        </div>
 
         {/* Enabled — per-tab. Drives both create-on-save and
             delete-on-save (a tab that was previously enabled but is
