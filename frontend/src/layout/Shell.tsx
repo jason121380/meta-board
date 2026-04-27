@@ -1,4 +1,3 @@
-import { BottomTabBar } from "@/components/BottomTabBar";
 import { DataPreloader, didPreload } from "@/components/DataPreloader";
 import { EmptyAccountsPrompt } from "@/components/EmptyAccountsPrompt";
 import { useCallback, useEffect, useState } from "react";
@@ -10,22 +9,15 @@ import { Sidebar } from "./Sidebar";
  * content on the right. The <Outlet/> renders whichever view the
  * current route matched.
  *
- * Layout ported from the original template, with 100vh replaced
- * by 100dvh so mobile Safari's address bar doesn't push the bottom of
- * the view off-screen:
- *   .layout   { display: flex; height: 100dvh; overflow: hidden; }
- *   .main     { margin-left: 180px; flex: 1; height: 100dvh;
- *                overflow: hidden; flex-direction: column; }
- *
- * Desktop sidebar width is the `sidebar` spacing token
- * (tailwind.config.ts) — kept as a single source of truth so
- * `w-sidebar` / `ml-sidebar` stay in sync.
- *
  * Mobile (<= 768px): the sidebar slides off-screen and the main
- * content fills the full width. A hamburger button in the topbar
- * (via MobileMenuToggle context helper) toggles the open state.
- * Sidebar auto-closes on route change so clicking a nav item
- * immediately reveals the selected view.
+ * content fills the full width. The hamburger in the Topbar
+ * (via MobileToggleContext) toggles the open state. Sidebar
+ * auto-closes on route change so clicking a nav item immediately
+ * reveals the selected view.
+ *
+ * No bottom tab bar — replaced by the hamburger + sidebar drawer
+ * pattern (2026-04-27 redesign). The sidebar's user dropdown
+ * provides the logout entry point on mobile.
  */
 export function Shell() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -47,13 +39,6 @@ export function Shell() {
 
   const closeOnBackdrop = useCallback(() => setMobileOpen(false), []);
 
-  // `h-[100dvh]` (dynamic viewport height) NOT `h-screen` (100vh).
-  // On iOS Safari, 100vh is the viewport height WITHOUT the browser
-  // toolbar, so the app ends up taller than the visible area and
-  // the bottom of the dashboard / finance tables scrolls off-screen
-  // (the "頁面過長" bug). dvh adjusts to the actual visible viewport,
-  // which keeps both views fitting inside the window on every
-  // device. Supported in iOS 15.4+ / Chrome 108+.
   return (
     <div className="shell-root flex h-[100dvh] overflow-hidden">
       <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
@@ -65,17 +50,17 @@ export function Shell() {
           onClick={closeOnBackdrop}
         />
       )}
-      {/* Bottom padding = 60px (tab bar intrinsic height) + the iOS
-          home-indicator safe-area inset. Without the env() term the
-          tab bar visually eats ~22px of the last row on iPhones with
-          a home indicator. Desktop env() resolves to 0 and md:pb-0
-          wipes the floor-60 anyway. */}
-      <main className="shell-main ml-sidebar flex h-[100dvh] flex-1 flex-col overflow-x-hidden overflow-y-auto bg-bg pb-[calc(60px+env(safe-area-inset-bottom))] md:pb-0">
+      {/* Mobile: padding-bottom uses env(safe-area-inset-bottom) so
+          content extends to the screen edge but doesn't render under
+          the iOS home indicator. Desktop env() resolves to 0 (no-op). */}
+      <main
+        className="shell-main ml-sidebar flex h-[100dvh] flex-1 flex-col overflow-x-hidden overflow-y-auto bg-bg"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
         <MobileToggleContext.Provider value={() => setMobileOpen((v) => !v)}>
           {preloadDone && <Outlet />}
         </MobileToggleContext.Provider>
       </main>
-      {preloadDone && <BottomTabBar />}
       {preloadDone && <EmptyAccountsPrompt />}
       <DataPreloader onComplete={onPreloadComplete} />
     </div>
