@@ -22,15 +22,30 @@ export interface ShareReportParams {
   accountId: string;
   hideMoney: boolean;
   datePreset?: DatePreset;
+  /** When true, the share report renders 花費 as 花費* using the
+   *  marked-up amount (spend × (1 + markupPercent/100)). The viewer
+   *  gets the same view the operator chose at link-creation time. */
+  useSpendPlus?: boolean;
+  /** Markup percent — only meaningful when useSpendPlus is true.
+   *  Encoded into the URL so the share page renders without needing
+   *  to look up shared_settings.finance_row_markups. */
+  markupPercent?: number;
 }
 
 /** Build an absolute share URL the user can paste anywhere. */
 export function buildShareUrl(params: ShareReportParams): string {
-  const { campaignId, accountId, hideMoney, datePreset } = params;
+  const { campaignId, accountId, hideMoney, datePreset, useSpendPlus, markupPercent } = params;
   const search = new URLSearchParams();
   search.set("acct", accountId);
   if (hideMoney) search.set("hide", "1");
   if (datePreset) search.set("date", datePreset);
+  if (useSpendPlus) {
+    search.set("plus", "1");
+    if (markupPercent !== undefined && markupPercent > 0) {
+      // Strip trailing zeros for shorter URLs (5 not 5.0)
+      search.set("mkp", String(markupPercent));
+    }
+  }
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   return `${origin}/r/${encodeURIComponent(campaignId)}?${search.toString()}`;
 }

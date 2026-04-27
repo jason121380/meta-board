@@ -10,8 +10,10 @@ import {
 import { Button } from "@/components/Button";
 import { confirm } from "@/components/ConfirmDialog";
 import { Modal } from "@/components/Modal";
+import { ReportFieldsPicker } from "@/components/ReportFieldsPicker";
 import { toast } from "@/components/Toast";
 import { cn } from "@/lib/cn";
+import { normalizeReportFields } from "@/lib/reportFields";
 import type { FbCampaign } from "@/types/fb";
 import * as Popover from "@radix-ui/react-popover";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -85,6 +87,7 @@ type EditorState = {
   minute: number;
   dateRange: LinePushDateRange;
   enabled: boolean;
+  reportFields: string[];
 };
 
 const NEW_EDITOR: EditorState = {
@@ -96,6 +99,7 @@ const NEW_EDITOR: EditorState = {
   minute: 0,
   dateRange: "last_7d",
   enabled: true,
+  reportFields: normalizeReportFields(null),
 };
 
 export function LinePushModal({ open, onOpenChange, campaign }: LinePushModalProps) {
@@ -133,6 +137,7 @@ export function LinePushModal({ open, onOpenChange, campaign }: LinePushModalPro
       minute: cfg.minute,
       dateRange: cfg.date_range,
       enabled: cfg.enabled,
+      reportFields: normalizeReportFields(cfg.report_fields),
     });
   };
 
@@ -167,6 +172,7 @@ export function LinePushModal({ open, onOpenChange, campaign }: LinePushModalPro
         minute: editor.minute,
         date_range: editor.dateRange,
         enabled: editor.enabled,
+        report_fields: editor.reportFields,
       });
       toast("已儲存推播設定", "success");
       setEditor(null);
@@ -527,6 +533,13 @@ function Editor({
           ))}
         </select>
       </label>
+
+      {/* Report fields multi-select — same picker as the LINE 推播設定
+          group page, so the two surfaces stay in sync. */}
+      <ReportFieldsPicker
+        value={state.reportFields}
+        onChange={(next) => onChange({ ...state, reportFields: next })}
+      />
 
       {/* Enabled */}
       <label className="flex items-center gap-2 text-[13px] text-ink">

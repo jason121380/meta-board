@@ -19,7 +19,10 @@ import { useMemo } from "react";
  * viewer only sees the report card.
  */
 export function ShareReportPage() {
-  const { campaignId, accountId, initialHide, datePreset } = useMemo(() => parseUrl(), []);
+  const { campaignId, accountId, initialHide, datePreset, useSpendPlus, markupPercent } = useMemo(
+    () => parseUrl(),
+    [],
+  );
 
   const date: DateConfig = useMemo(
     () => ({ preset: datePreset, from: null, to: null }),
@@ -73,6 +76,8 @@ export function ShareReportPage() {
               hideMoney={hideMoney}
               dateLabel={toLabel(date)}
               date={date}
+              useSpendPlus={useSpendPlus}
+              markupPercent={markupPercent}
             />
           )}
         </div>
@@ -86,9 +91,18 @@ function parseUrl(): {
   accountId: string | null;
   initialHide: boolean;
   datePreset: DatePreset;
+  useSpendPlus: boolean;
+  markupPercent: number;
 } {
   if (typeof window === "undefined") {
-    return { campaignId: null, accountId: null, initialHide: true, datePreset: "this_month" };
+    return {
+      campaignId: null,
+      accountId: null,
+      initialHide: true,
+      datePreset: "this_month",
+      useSpendPlus: false,
+      markupPercent: 0,
+    };
   }
   const path = window.location.pathname;
   const match = path.match(/^\/r\/([^/]+)/);
@@ -98,7 +112,11 @@ function parseUrl(): {
   const initialHide = params.get("hide") === "1";
   const rawDate = params.get("date") ?? "this_month";
   const datePreset = isValidPreset(rawDate) ? rawDate : "this_month";
-  return { campaignId, accountId, initialHide, datePreset };
+  // 花費 / 花費+% — 由產生連結的操作者決定,接收者看到同一份視圖。
+  const useSpendPlus = params.get("plus") === "1";
+  const rawMkp = Number.parseFloat(params.get("mkp") ?? "");
+  const markupPercent = Number.isFinite(rawMkp) && rawMkp > 0 ? rawMkp : 0;
+  return { campaignId, accountId, initialHide, datePreset, useSpendPlus, markupPercent };
 }
 
 function isValidPreset(s: string): s is DatePreset {
