@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, List
 from zoneinfo import ZoneInfo
 import asyncio
+import math
 import httpx
 import os
 from dotenv import load_dotenv
@@ -238,6 +239,42 @@ async def lifespan(app: FastAPI):
                     CREATE INDEX IF NOT EXISTS idx_push_due
                     ON campaign_line_push_configs (next_run_at)
                     WHERE enabled
+                    """
+                )
+                # Migration (2026-04-27): allow multiple configs per
+                # (campaign, group) — different frequencies should
+                # coexist (daily report + weekly report to same group).
+                # The legacy UNIQUE (campaign_id, group_id) made the
+                # 2nd insert ON-CONFLICT-overwrite the 1st. Replace
+                # with the correct invariant: at most one row per
+                # (campaign, group, frequency).
+                await conn.execute(
+                    """
+                    ALTER TABLE campaign_line_push_configs
+                    DROP CONSTRAINT IF EXISTS campaign_line_push_configs_campaign_id_group_id_key
+                    """
+                )
+                await conn.execute(
+                    """
+                    DO $$
+                    BEGIN
+                      IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'campaign_line_push_configs_campaign_group_freq_key'
+                      ) THEN
+                        ALTER TABLE campaign_line_push_configs
+                        ADD CONSTRAINT campaign_line_push_configs_campaign_group_freq_key
+                        UNIQUE (campaign_id, group_id, frequency);
+                      END IF;
+                    END$$;
+                    """
+                )
+                # Migration (2026-04-27): user-selectable report KPI
+                # fields. Empty array → use the built-in defaults.
+                await conn.execute(
+                    """
+                    ALTER TABLE campaign_line_push_configs
+                    ADD COLUMN IF NOT EXISTS report_fields TEXT[] NOT NULL DEFAULT '{}'
                     """
                 )
                 # `line_push_logs`: audit trail per push attempt, keeps
@@ -2551,6 +2588,46 @@ async def _campaign_nickname_display(campaign_id: str) -> str:
     return store or designer
 
 
+async def _markup_for_campaign(campaign_id: str) -> float:
+    """Resolve the markup % for a campaign — per-row override (set in
+    費用中心) wins over the team-wide default. Returns 0 when no DB
+    or no settings exist (i.e. spend_plus == spend).
+    """
+    if _db_pool is None:
+        return 0.0
+    try:
+        async with _db_pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT key, value FROM shared_settings WHERE key = ANY($1)",
+                ["finance_row_markups", "finance_default_markup"],
+            )
+    except Exception:
+        return 0.0
+    row_markups: dict = {}
+    default_markup: float = 0.0
+    for r in rows:
+        v = r["value"]
+        if isinstance(v, str):
+            try:
+                v = _json.loads(v)
+            except Exception:
+                continue
+        if r["key"] == "finance_row_markups" and isinstance(v, dict):
+            row_markups = v
+        elif r["key"] == "finance_default_markup":
+            try:
+                default_markup = float(v)
+            except (TypeError, ValueError):
+                pass
+    per_row = row_markups.get(campaign_id)
+    if per_row is not None:
+        try:
+            return float(per_row)
+        except (TypeError, ValueError):
+            return default_markup
+    return default_markup
+
+
 async def _build_flex_for_config(cfg: dict) -> dict:
     """Produce the LINE Flex Message for one push config row.
 
@@ -2592,22 +2669,43 @@ async def _build_flex_for_config(cfg: dict) -> dict:
     traffic_mode = _is_traffic_objective(objective)
     objective_label = _translate_objective(objective)
 
-    # 流量類目標下私訊指標是雜訊,KPI 區直接省略。
-    kpis: list[tuple[str, str]] = [
-        ("花費", _fmt_money(spend_f)),
-        ("曝光", _fmt_int(ins.get("impressions"))),
-        ("點擊", _fmt_int(ins.get("clicks"))),
-        ("CTR", _fmt_pct(ins.get("ctr"))),
-        ("CPC", _fmt_money(cpc_f)),
-    ]
-    if not traffic_mode:
-        msg_cost_str = _fmt_money(msg_cost_f) if msgs > 0 else "—"
-        kpis.extend(
-            [
-                ("私訊數", _fmt_int(msgs) if msgs > 0 else "—"),
-                ("私訊成本", msg_cost_str),
-            ]
-        )
+    # 計算 +% 後的金額(若使用者在 multi-select 選了 spend_plus
+    # 取代 spend,報告的花費就會顯示這個含成本加成的數字)。
+    # 標籤刻意用「花費*」星號代替具體百分比 — LINE 報告的對象通常
+    # 是業主而非內部,不要洩漏具體加成比例。
+    markup_pct = await _markup_for_campaign(campaign_id)
+    spend_plus_f = math.ceil(spend_f * (1 + markup_pct / 100)) if spend_f > 0 else 0.0
+    spend_plus_label = "花費*"
+
+    # 全部可選的 KPI 欄位 — code → (label, value getter)。新增欄位
+    # 在這個 dict 一處改即可,前端 multi-select 也讀取相同的 code。
+    # spend / spend_plus 在 UI 是 mutex,同一份報告只會出現一個。
+    msg_cost_str = _fmt_money(msg_cost_f) if msgs > 0 else "—"
+    msgs_str = _fmt_int(msgs) if msgs > 0 else "—"
+    field_catalog: dict[str, tuple[str, str]] = {
+        "spend": ("花費", _fmt_money(spend_f)),
+        "spend_plus": (spend_plus_label, _fmt_money(spend_plus_f)),
+        "impressions": ("曝光", _fmt_int(ins.get("impressions"))),
+        "clicks": ("點擊", _fmt_int(ins.get("clicks"))),
+        "ctr": ("CTR", _fmt_pct(ins.get("ctr"))),
+        "cpc": ("CPC", _fmt_money(cpc_f)),
+        "cpm": ("CPM", _fmt_money(ins.get("cpm"))),
+        "frequency": ("頻次", f"{freq_f:.2f}" if freq_f else "—"),
+        "reach": ("觸及", _fmt_int(ins.get("reach"))),
+        "msgs": ("私訊數", msgs_str),
+        "msg_cost": ("私訊成本", msg_cost_str),
+    }
+
+    selected = list(cfg.get("report_fields") or [])
+    if selected:
+        # 使用者自訂欄位:照他們選的順序輸出,跳過 catalog 沒有的 code
+        kpis = [field_catalog[c] for c in selected if c in field_catalog]
+    else:
+        # 預設(沿用先前行為):流量目標略過私訊指標
+        default_codes = ["spend", "impressions", "clicks", "ctr", "cpc"]
+        if not traffic_mode:
+            default_codes += ["msgs", "msg_cost"]
+        kpis = [field_catalog[c] for c in default_codes]
 
     recommendations = _evaluate_alert_recommendations(
         spend=spend_f,
@@ -2837,6 +2935,12 @@ class LinePushConfigPayload(BaseModel):
     minute: int
     date_range: str = "last_7d"
     enabled: bool = True
+    # User-selectable KPI fields for the LINE flex report. Codes:
+    # spend, impressions, clicks, ctr, cpc, cpm, frequency, reach,
+    # msgs, msg_cost. Empty → use the built-in defaults
+    # (spend/impressions/clicks/ctr/cpc + msgs/msg_cost when not
+    # traffic-objective).
+    report_fields: List[str] = []
 
 
 def _config_row_to_dict(r: asyncpg.Record) -> dict:
@@ -2852,6 +2956,7 @@ def _config_row_to_dict(r: asyncpg.Record) -> dict:
         "minute": r["minute"],
         "date_range": r["date_range"],
         "enabled": r["enabled"],
+        "report_fields": list(r["report_fields"] or []),
         "last_run_at": r["last_run_at"].isoformat() if r["last_run_at"] else None,
         "next_run_at": r["next_run_at"].isoformat() if r["next_run_at"] else None,
         "last_error": r["last_error"],
@@ -2928,9 +3033,10 @@ async def upsert_push_config(payload: LinePushConfigPayload):
                 SET campaign_id = $1, account_id = $2, group_id = $3,
                     frequency = $4, weekdays = $5, month_day = $6,
                     hour = $7, minute = $8, date_range = $9, enabled = $10,
-                    next_run_at = $11, fail_count = 0, last_error = NULL,
+                    report_fields = $11,
+                    next_run_at = $12, fail_count = 0, last_error = NULL,
                     updated_at = NOW()
-                WHERE id = $12::uuid
+                WHERE id = $13::uuid
                 RETURNING *
                 """,
                 payload.campaign_id,
@@ -2943,28 +3049,33 @@ async def upsert_push_config(payload: LinePushConfigPayload):
                 payload.minute,
                 payload.date_range,
                 payload.enabled,
+                payload.report_fields,
                 next_run,
                 payload.id,
             )
             if row is None:
                 raise HTTPException(status_code=404, detail="Config not found")
         else:
+            # ON CONFLICT key is (campaign_id, group_id, frequency) —
+            # one row per (pair, frequency). Re-saving the same triple
+            # updates that row in place.
             row = await conn.fetchrow(
                 """
                 INSERT INTO campaign_line_push_configs (
                     campaign_id, account_id, group_id,
                     frequency, weekdays, month_day, hour, minute,
-                    date_range, enabled, next_run_at
+                    date_range, enabled, report_fields, next_run_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                ON CONFLICT (campaign_id, group_id) DO UPDATE
-                SET frequency = EXCLUDED.frequency,
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                ON CONFLICT (campaign_id, group_id, frequency) DO UPDATE
+                SET account_id = EXCLUDED.account_id,
                     weekdays = EXCLUDED.weekdays,
                     month_day = EXCLUDED.month_day,
                     hour = EXCLUDED.hour,
                     minute = EXCLUDED.minute,
                     date_range = EXCLUDED.date_range,
                     enabled = EXCLUDED.enabled,
+                    report_fields = EXCLUDED.report_fields,
                     next_run_at = EXCLUDED.next_run_at,
                     fail_count = 0,
                     last_error = NULL,
@@ -2981,6 +3092,7 @@ async def upsert_push_config(payload: LinePushConfigPayload):
                 payload.minute,
                 payload.date_range,
                 payload.enabled,
+                payload.report_fields,
                 next_run,
             )
     return {"ok": True, "data": _config_row_to_dict(row)}

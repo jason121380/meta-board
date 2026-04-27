@@ -117,34 +117,45 @@ export function Modal({
               </div>
               {titleAction && <div className="shrink-0">{titleAction}</div>}
               {!hideClose && (
-                // 直接呼叫 onOpenChange(false) 取代 <Dialog.Close>。
-                // Dialog.Close 透過 React context 找最近的 Dialog.Root,
-                // 在 share 頁的 ShareModeAuthProvider context 切換 +
-                // nested modal (報告 modal 內再開素材預覽 modal)場景
-                // 下會出現點擊無反應的問題。直接綁 onClick 跳過
-                // Radix 內部 context 解析,確保任何 wrapper 結構下
-                // 都能可靠關閉。
-                <button
-                  type="button"
-                  aria-label="關閉"
-                  onClick={() => onOpenChange(false)}
-                  className="-mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 hover:bg-bg hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange/40 md:-mr-3"
-                >
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
+                // X 關閉按鈕 — 多重保險:
+                //   1. Dialog.Close asChild → 取得 Radix 內建 robust
+                //      click 處理 + 焦點管理(會自動 onOpenChange(false))
+                //   2. 我們自己的 onClick → 備援,iOS WKWebView 在
+                //      Radix focus trap 內偶爾會吃掉 click,直接綁
+                //      確保即使 Radix 內部沒觸發 close 也會關閉
+                //   3. onPointerUp → iOS / LINE in-app browser 上
+                //      pointer event 比 click 更可靠 (沒 300ms tap
+                //      delay,也不受 focus trap 干擾)
+                //   4. SVG pointer-events:none → 點擊只命中 button,
+                //      防止 line/path 元素吞掉觸控
+                //   5. touch-action:manipulation → 移除 iOS 預設的
+                //      雙擊縮放延遲,讓 tap 立刻觸發
+                <Dialog.Close asChild>
+                  <button
+                    type="button"
+                    aria-label="關閉"
+                    onClick={() => onOpenChange(false)}
+                    onPointerUp={() => onOpenChange(false)}
+                    style={{ touchAction: "manipulation" }}
+                    className="-mr-2 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-gray-500 hover:bg-bg hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange/40 md:-mr-3"
                   >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                      className="pointer-events-none"
+                    >
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </Dialog.Close>
               )}
             </div>
           )}
