@@ -48,6 +48,15 @@ export interface ReportContentProps {
    *  big concrete-date headline so users see both at a glance. */
   dateLabel?: ReactNode;
   date: DateConfig;
+  /** When true, every 花費 cell renders as 花費* using the marked-up
+   *  amount (spend × (1 + markupPercent/100), ceiled). Other money
+   *  cells (CPC / CPM / 私訊成本) stay raw — only the spend total
+   *  reflects the operator's billing markup. */
+  useSpendPlus?: boolean;
+  /** Markup percent applied when useSpendPlus is true. Comes from
+   *  finance_row_markups[campaignId] or finance_default_markup at the
+   *  time the modal/share-link was created. */
+  markupPercent?: number;
 }
 
 export function ReportContent({
@@ -58,6 +67,8 @@ export function ReportContent({
   hideMoney,
   dateLabel,
   date,
+  useSpendPlus = false,
+  markupPercent = 0,
 }: ReportContentProps) {
   const ins = getIns(campaign);
   const msgs = getMsgCount(campaign);
@@ -78,6 +89,18 @@ export function ReportContent({
 
   const money = (v: number | string | null | undefined): string =>
     hideMoney ? "—" : v !== null && v !== undefined && v !== "" ? `$${fM(v)}` : "—";
+
+  // 「花費」相關格式化:啟用 spend_plus 時對 raw spend 套用 markup
+  // 並把 label 從「花費」改為「花費*」(星號代表加成,不洩漏實際%)。
+  // 只影響 spend 自身,CPC / CPM / 私訊成本維持 FB 原始值,以免雙重
+  // 加成造成數字脫離真實表現。
+  const spendLabel = useSpendPlus ? "花費*" : "花費";
+  const applyMarkup = (raw: number): number =>
+    useSpendPlus ? Math.ceil(raw * (1 + markupPercent / 100)) : raw;
+  const spendMoney = (raw: number | string | null | undefined): string => {
+    if (raw === null || raw === undefined || raw === "") return money(raw);
+    return money(applyMarkup(num(raw)));
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -106,7 +129,7 @@ export function ReportContent({
 
       {/* Campaign-wide KPIs */}
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
-        <Stat label="花費" value={money(ins.spend)} highlight />
+        <Stat label={spendLabel} value={spendMoney(ins.spend)} highlight />
         <Stat label="曝光" value={fN(ins.impressions)} />
         <Stat label="點擊" value={fN(ins.clicks)} />
         <Stat label="CTR" value={fP(ins.ctr)} highlight={trafficMode} />
@@ -183,6 +206,8 @@ export function ReportContent({
                 date={date}
                 hideMoney={hideMoney}
                 money={money}
+                spendMoney={spendMoney}
+                spendLabel={spendLabel}
                 trafficMode={trafficMode}
               />
             ));
@@ -198,12 +223,16 @@ function AdsetCard({
   date,
   hideMoney,
   money,
+  spendMoney,
+  spendLabel,
   trafficMode,
 }: {
   adset: FbAdset;
   date: DateConfig;
   hideMoney: boolean;
   money: (v: number | string | null | undefined) => string;
+  spendMoney: (v: number | string | null | undefined) => string;
+  spendLabel: string;
   trafficMode: boolean;
 }) {
   const ai = getIns(adset);
@@ -221,7 +250,7 @@ function AdsetCard({
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-gray-500">
           <span>
-            花費 <span className="font-semibold text-ink">{money(ai.spend)}</span>
+            {spendLabel} <span className="font-semibold text-ink">{spendMoney(ai.spend)}</span>
           </span>
           <span>
             曝光 <span className="font-semibold text-ink">{fN(ai.impressions)}</span>
@@ -253,7 +282,14 @@ function AdsetCard({
       </div>
 
       {/* Ads list */}
-      <AdCards adsetId={adset.id} date={date} money={money} trafficMode={trafficMode} />
+      <AdCards
+        adsetId={adset.id}
+        date={date}
+        money={money}
+        spendMoney={spendMoney}
+        spendLabel={spendLabel}
+        trafficMode={trafficMode}
+      />
     </section>
   );
 }
@@ -270,11 +306,15 @@ function AdCards({
   adsetId,
   date,
   money,
+  spendMoney,
+  spendLabel,
   trafficMode,
 }: {
   adsetId: string;
   date: DateConfig;
   money: (v: number | string | null | undefined) => string;
+  spendMoney: (v: number | string | null | undefined) => string;
+  spendLabel: string;
   trafficMode: boolean;
 }) {
   const adsQuery = useReportAds(adsetId, date, true);
@@ -337,6 +377,8 @@ function AdCards({
               ad={s.ad}
               isBest={bestId === s.ad.id}
               money={money}
+              spendMoney={spendMoney}
+              spendLabel={spendLabel}
               trafficMode={trafficMode}
             />
           ))}
@@ -350,11 +392,15 @@ function AdCard({
   ad,
   isBest,
   money,
+  spendMoney,
+  spendLabel,
   trafficMode,
 }: {
   ad: FbCreativeEntity;
   isBest: boolean;
   money: (v: number | string | null | undefined) => string;
+  spendMoney: (v: number | string | null | undefined) => string;
+  spendLabel: string;
   trafficMode: boolean;
 }) {
   const ai = getIns(ad);
@@ -411,7 +457,7 @@ function AdCard({
             {ad.name}
           </div>
           <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[12px] text-gray-500">
-            <Cell label="花費" value={money(ai.spend)} />
+            <Cell label={spendLabel} value={spendMoney(ai.spend)} />
             <Cell label="曝光" value={fN(ai.impressions)} />
             <Cell label="CTR" value={fP(ai.ctr)} />
             <Cell label="CPC" value={money(ai.cpc)} />

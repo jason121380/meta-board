@@ -5,7 +5,7 @@ import {
   type DatePreset,
   fmtDate,
   resolveRange,
-  toLabel,
+  toShortLabel,
 } from "@/lib/datePicker";
 import * as Popover from "@radix-ui/react-popover";
 import { useEffect, useMemo, useState } from "react";
@@ -68,7 +68,8 @@ export function DatePicker({ value, onChange }: DatePickerProps) {
   }, [open, value]);
 
   const range = useMemo(() => resolveRange(value), [value]);
-  const label = useMemo(() => toLabel(value), [value]);
+  // 觸發按鈕顯示緊湊版 (M/D~M/D),避免在窄畫面把帳戶選擇器擠出視野
+  const label = useMemo(() => toShortLabel(value), [value]);
 
   const selectPreset = (preset: Exclude<DatePreset, "custom">) => {
     setCustomFrom(null);

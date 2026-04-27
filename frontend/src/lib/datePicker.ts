@@ -115,3 +115,19 @@ export function toLabel(config: DateConfig): string {
   const preset = DP_PRESETS.find((p) => p.value === config.preset);
   return preset ? preset.label : "選擇日期";
 }
+
+/** 緊湊版 label — DatePicker 觸發按鈕用。Custom range 從完整 ISO
+ *  (`2026-04-01 ~ 2026-04-26`) 縮成 `M/D ~ M/D` (`4/1 ~ 4/26`),
+ *  避免在手機 Topbar 把帳戶選擇器跟頁面標題擠到出畫面外。Preset
+ *  則直接沿用中文 label (本月 / 過去 7 天等),已經夠短。 */
+export function toShortLabel(config: DateConfig): string {
+  if (config.preset === "custom" && config.from && config.to) {
+    const parse = (iso: string) => {
+      const parts = iso.split("-");
+      return `${Number.parseInt(parts[1] ?? "0", 10)}/${Number.parseInt(parts[2] ?? "0", 10)}`;
+    };
+    return `${parse(config.from)} ~ ${parse(config.to)}`;
+  }
+  const preset = DP_PRESETS.find((p) => p.value === config.preset);
+  return preset ? preset.label : "選擇日期";
+}
