@@ -3013,9 +3013,6 @@ async def line_webhook(request: Request):
 
 # ── LINE group management ─────────────────────────────────────
 
-class LineGroupLabelPayload(BaseModel):
-    label: str = ""
-
 
 @app.get("/api/line-groups")
 async def list_line_groups():
@@ -3050,21 +3047,6 @@ async def list_line_groups():
             for r in rows
         ]
     }
-
-
-@app.post("/api/line-groups/{group_id}")
-async def set_line_group_label(group_id: str, payload: LineGroupLabelPayload):
-    pool = _require_db()
-    label = (payload.label or "").strip()
-    async with pool.acquire() as conn:
-        result = await conn.execute(
-            "UPDATE line_groups SET label = $1 WHERE group_id = $2",
-            label,
-            group_id,
-        )
-        if result.endswith("0"):
-            raise HTTPException(status_code=404, detail="Group not found")
-    return {"ok": True, "group_id": group_id, "label": label}
 
 
 @app.get("/api/line-groups/{group_id}/push-configs")

@@ -542,11 +542,6 @@ export const api = {
           left_at: string | null;
         }>;
       }>("GET", "/api/line-groups"),
-    /** Rename a LINE group (display label only; group_id stays fixed). */
-    setGroupLabel: (groupId: string, label: string) =>
-      request<{ ok: boolean }>("POST", `/api/line-groups/${encodeURIComponent(groupId)}`, {
-        body: { label },
-      }),
     /** List push configs targeting this group (with campaign nickname joined). */
     listGroupConfigs: (groupId: string) =>
       request<{ data: Array<LinePushConfig & { campaign_nickname: string }> }>(
