@@ -25,7 +25,7 @@ Connects to Facebook Marketing API v21.0 to manage 80+ ad accounts across multip
     - `user_settings` (fb_user_id, key, value JSONB) — per-user: `selected_accounts`, `account_order`
     - `shared_settings` (key, value JSONB) — team-wide: `finance_row_markups`, `finance_pinned_ids`, `finance_default_markup`, `finance_show_nicknames`. **Underscore-prefixed keys (`_fb_runtime_token`) are server-internal** and are filtered out by `GET /api/settings/shared` — never expose to the frontend.
     - `line_groups` (group_id PK, **group_name** (real LINE display name from /v2/bot/group/{id}/summary), label (user nickname), joined_at, left_at) — auto-upserted by the `/api/line/webhook` route on LINE `join`/`leave` events. Lifespan startup also runs a one-shot backfill for legacy rows whose `group_name` is empty.
-    - `campaign_line_push_configs` (campaign ↔ group pairings: frequency, weekdays/month_day, hour/minute, date_range, enabled, next_run_at, fail_count) — partial index on `(next_run_at) WHERE enabled` for the scheduler tick
+    - `campaign_line_push_configs` (campaign ↔ group pairings: frequency, weekdays/month_day, hour/minute, date_range, enabled, next_run_at, fail_count, **report_fields TEXT[]**, **include_report_button BOOLEAN DEFAULT FALSE**, **include_recommendations BOOLEAN DEFAULT FALSE**) — partial index on `(next_run_at) WHERE enabled` for the scheduler tick. The two `include_*` toggles default FALSE so existing rows opt-in rather than retroactively gaining a button / advice block.
     - `line_push_logs` (per-push audit rows, success/error/preview)
   - **Browser localStorage** — ephemeral UI state only:
     - `fb_active_accounts` (dashboard current selection — intentionally NOT synced)
@@ -119,7 +119,8 @@ uvicorn main:app --port 8001 --reload
 ### Settings view
 Sidebar 工具區拆成兩個入口（2026-04-26 後）:
 - **廣告帳號設定** `/settings` — BM panel + 帳戶啟用 / 多選 / 拖曳排序
-- **LINE 推播設定** `/line-push` — `LineGroupsContent` 表格列出每個 LINE 群組,含「重新抓取群組名稱」+ 自訂暱稱 + 該群組目前綁定的所有 push configs（一個 group 多 campaign）。每筆 config 有編輯/刪除按鈕,新增推播時用可搜尋的 `GroupPushConfigModal` 選帳戶 / 行銷活動。
+- **LINE 推播設定** `/line-push` — `LineGroupsContent` 表格列出每個 LINE 群組(只顯示 `left_at IS NULL`)+ 自訂暱稱 + 該群組目前綁定的所有 push configs(一個 group 多 campaign)。Topbar 右上有 **重新整理** icon:點擊後 `POST /api/line-groups/refresh-all` 批次拉每個 group 的 LINE display name、若 LINE 回 404(bot 已被踢出 / token 失效)就把 row 標記 `left_at = NOW()` 從 UI 中移除,接著 `refetchQueries(['lineGroups', 'lineGroupConfigs'])` 並 toast「已更新 N 個群組名稱、移除 M 個已退出群組」。每筆 config 有編輯/刪除按鈕,新增推播時用可搜尋的 `GroupPushConfigModal` 選帳戶 / 行銷活動(combobox 顯示活動狀態 badge)。
+- 推播設定 modal 預設值:每週五 09:00 / 本月1日-昨日 / 花費+%/私訊數/私訊成本 / `include_report_button=false` / `include_recommendations=false`(兩者都是 opt-in)。
 
 ## Account Selection Logic
 
@@ -135,6 +136,7 @@ Sidebar 工具區拆成兩個入口（2026-04-26 後）:
 - Pagination: `get_accounts()` follows `paging.next` in while loop
 - Budget values: × 100 when sending (cents), ÷ 100 when displaying
 - Account IDs include `act_` prefix (e.g. `act_123456`)
+- `_fetch_campaigns_for_account` requests `id,name,status,objective,daily_budget,lifetime_budget,updated_time,{insights}`. `updated_time` is needed by the LINE flex push to render「M/D 已暫停」 — FB doesn't expose a dedicated `paused_at` without the Activity Log endpoint, so updated_time (last modification) is the closest free signal.
 
 ### Frontend
 - Date params: `_insights_clause()` builds `insights.date_preset(X){fields}` or `insights.time_range(X){fields}`
@@ -172,6 +174,20 @@ Do NOT use `accent-color` inline style — always use the `custom-cb` class.
 - Clicking a `CreativeRow` opens a preview Modal showing the FB thumbnail enlarged, plus the creative title / body text.
 - Backend `get_ads` passes `thumbnail_width=600` and `thumbnail_height=600` when requesting the creative field so the thumbnail is sharp at modal scale. FB returns the nearest CDN size.
 - The dashboard tree card has a transparent bg (only the search header has `bg-white` explicitly). When the table is shorter than the card, the area below 合計 shows the page warm-white instead of a stark white block.
+
+### Optimistic status toggle (Dashboard)
+- `CampaignRow` / `AdsetRow` / `CreativeRow` keep a local `pendingStatus: FbEntityStatus | null` so the Toggle + Badge flip instantly. Source of truth = `pendingStatus ?? entity.status`. A `useEffect` clears `pendingStatus` whenever `entity.status` changes (server-side update arrived). On mutation error, also clear `pendingStatus` so the UI snaps back to truth. Without this the controlled Toggle component snaps back to the stale prop while the FB round-trip is in flight, and users mash the switch repeatedly.
+
+### LINE flex card (`line_client.build_flex_report`)
+- Header layout: outer `vertical` orange box → child 0 = horizontal "title row" with `flex:1` title + `flex:0, gravity:top` status chip → child 1 = subtitle (`size:lg, weight:bold` to match title) → optional 「目標 · X」line.
+- Status chip parameters (caller passes hex color directly):
+  - ACTIVE → `#16A34A` 「進行中」
+  - PAUSED → `#DC2626` 「M/D 已暫停」(M/D from FB campaign `updated_time`)
+  - ARCHIVED / DELETED → `#888888`
+- Chip is a vertical box with `cornerRadius:md`, `backgroundColor:#FFFFFF`, small symmetric padding, `gravity:top`. **Do not** add `height` or `justifyContent` — some property combos cause LINE to 400 the entire message ("messages[0] is invalid"). Intrinsic text height + padding + gravity is sufficient.
+- Body section is opt-in:
+  - `include_report_button=true` → footer button linking to `/r/:campaignId`
+  - `include_recommendations=true` → 優化建議 bullet list under the KPI grid (uses `_evaluate_alert_recommendations`)
 
 ## Alert Thresholds
 
