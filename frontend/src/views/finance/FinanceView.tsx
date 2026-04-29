@@ -191,12 +191,18 @@ export function FinanceView() {
                 <span className="whitespace-nowrap text-xs text-gray-500">月%</span>
                 <input
                   type="number"
-                  value={defaultMarkup}
+                  value={defaultMarkup === 0 ? "" : defaultMarkup}
+                  placeholder="0"
                   min={0}
                   max={100}
                   step={0.5}
                   onChange={(e) => {
-                    const v = Number.parseFloat(e.currentTarget.value);
+                    const raw = e.currentTarget.value;
+                    if (raw === "") {
+                      setDefaultMarkup(0);
+                      return;
+                    }
+                    const v = Number.parseFloat(raw);
                     if (!Number.isNaN(v)) setDefaultMarkup(v);
                   }}
                   className="h-10 w-[58px] rounded-lg border-[1.5px] border-border px-1 text-center text-[13px] md:h-8 md:w-[54px]"
