@@ -12,8 +12,8 @@ import type { DateConfig } from "@/lib/datePicker";
 import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
 import { useUiStore } from "@/stores/uiStore";
-import type { FbCampaign } from "@/types/fb";
-import { memo, useState } from "react";
+import type { FbCampaign, FbEntityStatus } from "@/types/fb";
+import { memo, useEffect, useState } from "react";
 import { AdsetRow } from "./AdsetRow";
 import type { BudgetModalTarget } from "./BudgetModal";
 import { LinePushModal } from "./LinePushModal";
@@ -59,6 +59,12 @@ function CampaignRowInner({
   const businessId = accountsQuery.data?.find((a) => a.id === campaign._accountId)?.business?.id;
   const [reportOpen, setReportOpen] = useState(false);
   const [linePushOpen, setLinePushOpen] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<FbEntityStatus | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: trigger-only dep — clear optimistic override whenever server status changes
+  useEffect(() => {
+    setPendingStatus(null);
+  }, [campaign.status]);
+  const displayStatus = pendingStatus ?? campaign.status;
   // Lightly-cached query (30s staleTime) so the LINE icon can light
   // up orange when the campaign already has at least one active
   // pairing. Only fetched when the row is mounted, i.e. when the
@@ -73,14 +79,16 @@ function CampaignRowInner({
   const onRowClick = () => toggleCamp(campaign.id);
 
   const onToggleStatus = async (nextChecked: boolean) => {
-    const status = nextChecked ? "ACTIVE" : "PAUSED";
+    const status: FbEntityStatus = nextChecked ? "ACTIVE" : "PAUSED";
     const action = nextChecked ? "開啟" : "暫停";
     const ok = await confirm(`確定要${action}此行銷活動？`);
     if (!ok) return;
+    setPendingStatus(status);
     try {
       await mutation.mutateAsync({ kind: "campaign", id: campaign.id, status });
       toast(`已${action}行銷活動`, "success");
     } catch (e) {
+      setPendingStatus(null);
       toast(`${action}行銷活動失敗：${mutationErrorMessage(e)}`, "error", 4500);
     }
   };
@@ -128,7 +136,7 @@ function CampaignRowInner({
           </td>
         )}
         <td>
-          <Badge status={campaign.status} />
+          <Badge status={displayStatus} />
         </td>
         <td className="num">{fM(ins.spend)}</td>
         <td className="num">{fN(ins.impressions)}</td>
@@ -143,7 +151,8 @@ function CampaignRowInner({
         <td onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center gap-1.5">
             <Toggle
-              checked={campaign.status === "ACTIVE"}
+              checked={displayStatus === "ACTIVE"}
+              disabled={mutation.isPending}
               onChange={(e) => {
                 void onToggleStatus(e.currentTarget.checked);
               }}

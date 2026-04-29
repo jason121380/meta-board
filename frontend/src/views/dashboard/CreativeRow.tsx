@@ -6,8 +6,8 @@ import { Toggle } from "@/components/Toggle";
 import { isFrontPostCreative } from "@/lib/fbLinks";
 import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
-import type { FbCreativeEntity } from "@/types/fb";
-import { Suspense, lazy, memo, useState } from "react";
+import type { FbCreativeEntity, FbEntityStatus } from "@/types/fb";
+import { Suspense, lazy, memo, useEffect, useState } from "react";
 
 // The preview modal pulls in <video>, usePostMedia, usePageInfo, and
 // FB-post-style header rendering — ~5KB of JS + its own query hooks.
@@ -44,16 +44,24 @@ function CreativeRowInner({ creative, multiAcct }: CreativeRowProps) {
   const thumb = creative.creative?.thumbnail_url;
   const isFrontPost = creative.creative ? isFrontPostCreative(creative.creative) : false;
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<FbEntityStatus | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: trigger-only dep — clear optimistic override whenever server status changes
+  useEffect(() => {
+    setPendingStatus(null);
+  }, [creative.status]);
+  const displayStatus = pendingStatus ?? creative.status;
 
   const onToggleStatus = async (nextChecked: boolean) => {
-    const status = nextChecked ? "ACTIVE" : "PAUSED";
+    const status: FbEntityStatus = nextChecked ? "ACTIVE" : "PAUSED";
     const action = nextChecked ? "開啟" : "暫停";
     const ok = await confirm(`確定要${action}此廣告？`);
     if (!ok) return;
+    setPendingStatus(status);
     try {
       await mutation.mutateAsync({ kind: "creative", id: creative.id, status });
       toast(`已${action}廣告`, "success");
     } catch (e) {
+      setPendingStatus(null);
       toast(`${action}廣告失敗：${mutationErrorMessage(e)}`, "error", 4500);
     }
   };
@@ -106,7 +114,7 @@ function CreativeRowInner({ creative, multiAcct }: CreativeRowProps) {
         </td>
         {multiAcct && <td />}
         <td>
-          <Badge status={creative.status} />
+          <Badge status={displayStatus} />
         </td>
         <td className="num">{fM(ins.spend)}</td>
         <td className="num">{fN(ins.impressions)}</td>
@@ -118,7 +126,8 @@ function CreativeRowInner({ creative, multiAcct }: CreativeRowProps) {
         <td className="muted">—</td>
         <td onClick={(e) => e.stopPropagation()}>
           <Toggle
-            checked={creative.status === "ACTIVE"}
+            checked={displayStatus === "ACTIVE"}
+            disabled={mutation.isPending}
             onChange={(e) => {
               void onToggleStatus(e.currentTarget.checked);
             }}
