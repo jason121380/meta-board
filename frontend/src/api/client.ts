@@ -53,6 +53,8 @@ export interface LinePushConfig {
   report_fields: string[];
   /** Show the「查看完整報告」footer button on the LINE flex card. */
   include_report_button: boolean;
+  /** Render the「優化建議」bullet list in the flex body. */
+  include_recommendations: boolean;
   last_run_at: string | null;
   next_run_at: string | null;
   last_error: string | null;
@@ -73,6 +75,7 @@ export interface LinePushConfigInput {
   enabled: boolean;
   report_fields?: string[];
   include_report_button?: boolean;
+  include_recommendations?: boolean;
 }
 
 export class ApiError extends Error {

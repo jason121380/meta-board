@@ -80,6 +80,8 @@ interface PerFreqState {
   reportFields: string[];
   /** Show「查看完整報告」footer button on the flex card. */
   includeReportButton: boolean;
+  /** Render「優化建議」bullet list in the flex body. */
+  includeRecommendations: boolean;
 }
 
 interface EditorState {
@@ -101,6 +103,7 @@ const blankFreq = (): PerFreqState => ({
   dateRange: "month_to_yesterday",
   reportFields: ["spend_plus", "msgs", "msg_cost"],
   includeReportButton: false,
+  includeRecommendations: false,
 });
 
 const blankState = (): EditorState => ({
@@ -131,6 +134,7 @@ function freqFromConfig(c: LinePushConfig): PerFreqState {
     // explicit default list so the UI checkboxes start populated.
     reportFields: c.report_fields?.length ? c.report_fields : [...DEFAULT_REPORT_FIELDS],
     includeReportButton: !!c.include_report_button,
+    includeRecommendations: !!c.include_recommendations,
   };
 }
 
@@ -264,6 +268,7 @@ export function GroupPushConfigModal({
           enabled: true,
           report_fields: s.reportFields,
           include_report_button: s.includeReportButton,
+          include_recommendations: s.includeRecommendations,
         };
         await saveMutation.mutateAsync(payload);
       }
@@ -501,6 +506,18 @@ export function GroupPushConfigModal({
             onChange={(e) => updateActive({ includeReportButton: e.currentTarget.checked })}
           />
           是否出現按鈕
+        </label>
+
+        {/* Recommendations toggle. Default off — many recipients are
+            external (業主) and only want raw numbers. */}
+        <label className="flex items-center gap-2 text-[13px] text-ink">
+          <input
+            type="checkbox"
+            className="custom-cb"
+            checked={active.includeRecommendations}
+            onChange={(e) => updateActive({ includeRecommendations: e.currentTarget.checked })}
+          />
+          是否啟用優化建議
         </label>
 
         {/* Enabled — per-tab. Drives both create-on-save and
