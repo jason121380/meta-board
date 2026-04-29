@@ -2874,6 +2874,19 @@ async def _build_flex_for_config(cfg: dict) -> dict:
     concrete_range = _date_range_concrete(date_range)
     subtitle = f"報告區間: {concrete_range}" if concrete_range else _date_range_label(date_range)
 
+    # Status chip in header top-right — recipients can tell at a glance
+    # whether the campaign behind these numbers is still ACTIVE or has
+    # been paused / archived.
+    status_raw = (camp.get("status") or "").upper()
+    status_label_map = {
+        "ACTIVE": "進行中",
+        "PAUSED": "已暫停",
+        "ARCHIVED": "已封存",
+        "DELETED": "已刪除",
+    }
+    status_label = status_label_map.get(status_raw, status_raw or "")
+    status_active = status_raw == "ACTIVE"
+
     # Footer button is opt-in per config (column added 2026-04-29).
     report_url = (
         _share_url_for_config(account_id, campaign_id, date_range)
@@ -2885,6 +2898,8 @@ async def _build_flex_for_config(cfg: dict) -> dict:
         title=title,
         subtitle=subtitle,
         objective_label=objective_label,
+        status_label=status_label,
+        status_active=status_active,
         kpis=kpis,
         recommendations=recommendations,
         report_url=report_url,

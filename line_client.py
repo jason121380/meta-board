@@ -139,6 +139,8 @@ def build_flex_report(
     subtitle: str,
     kpis: list[tuple[str, str]],
     objective_label: str = "",
+    status_label: str = "",
+    status_active: bool = False,
     recommendations: Optional[List[str]] = None,
     report_url: Optional[str] = None,
     alt_text: Optional[str] = None,
@@ -147,9 +149,9 @@ def build_flex_report(
 
     Layout:
         Header (orange)
-            {title}                 (campaign nickname or name)
-            {subtitle}              (e.g. "報告區間: 4/1 - 4/25")
-            [目標 · {objective}]    (small chip, when objective_label set)
+            {title}      [{status_label}]  (status chip pinned top-right)
+            {subtitle}                     (e.g. "報告區間: 4/1 - 4/25")
+            [目標 · {objective}]           (small chip, when objective_label set)
 
         Body (white)
             {kpi_rows}              (花費 / 曝光 / ... / 私訊成本)
@@ -233,6 +235,47 @@ def build_flex_report(
                 }
             )
 
+    # Status pill — pinned to the top-right of the header. Renders as a
+    # white chip with green text for ACTIVE and grey text for everything
+    # else, so a quick glance tells the operator if the campaign behind
+    # the numbers is still running.
+    title_row_contents: list[dict[str, Any]] = [
+        {
+            "type": "text",
+            "text": title,
+            "size": "lg",
+            "color": "#FFFFFF",
+            "weight": "bold",
+            "wrap": True,
+            "flex": 1,
+            "gravity": "top",
+        }
+    ]
+    if status_label:
+        title_row_contents.append(
+            {
+                "type": "box",
+                "layout": "vertical",
+                "flex": 0,
+                "cornerRadius": "lg",
+                "backgroundColor": "#FFFFFF",
+                "paddingTop": "2px",
+                "paddingBottom": "2px",
+                "paddingStart": "8px",
+                "paddingEnd": "8px",
+                "margin": "sm",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": status_label,
+                        "size": "xs",
+                        "weight": "bold",
+                        "color": "#16A34A" if status_active else "#888888",
+                    }
+                ],
+            }
+        )
+
     bubble: dict[str, Any] = {
         "type": "bubble",
         "size": "mega",
@@ -243,12 +286,9 @@ def build_flex_report(
             "paddingAll": "16px",
             "contents": [
                 {
-                    "type": "text",
-                    "text": title,
-                    "size": "lg",
-                    "color": "#FFFFFF",
-                    "weight": "bold",
-                    "wrap": True,
+                    "type": "box",
+                    "layout": "horizontal",
+                    "contents": title_row_contents,
                 },
                 {
                     "type": "text",
