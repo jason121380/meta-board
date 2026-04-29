@@ -20,18 +20,18 @@
 | `--border-strong` | `#E0E0E0` | 強調邊框 |
 | `--green` | `#2E7D32` | 進行中、成功、正向 |
 | `--green-bg` | `#E8F5E9` | 綠色底色 |
-| `--red` | `#C62828` | 錯誤、已刪除、危險 |
+| `--red` | `#C62828` | 錯誤、已暫停、已刪除、危險 |
 | `--red-bg` | `#FFEBEE` | 紅色底色 |
-| `--yellow` | `#E65100` | 警示、暫停 |
+| `--yellow` | `#E65100` | 警示(輕度)|
 | `--yellow-bg` | `#FFF3E0` | 黃色底色 |
 
 ### 語意色彩使用規則
 
 - **主色橘**：按鈕 CTA、active nav、focus 邊框、badge、強調
 - **綠色**：進行中廣告（ACTIVE）、成功訊息、指示燈 on
-- **黃色**：暫停廣告（PAUSED）、警示項目
-- **紅色**：已刪除廣告（DELETED）、錯誤狀態
-- **灰色**：停用帳戶、指示燈 off、輔助說明
+- **紅色**：已暫停廣告（PAUSED）、已刪除廣告（DELETED）、錯誤狀態
+- **黃色**：輕度警示(目前較少使用,主要保留給 dashboard 警示卡片)
+- **灰色**：已封存廣告(ARCHIVED)、停用帳戶、指示燈 off、輔助說明
 
 ---
 
@@ -126,7 +126,8 @@ letter-spacing: -0.5px;              /* 大數字 */
 
 - 60px 高，white 背景，底部 1px border + box-shadow
 - 左：頁面標題
-- 右：DatePicker（有日曆 icon，**無箭頭**）、分隔線、重新整理按鈕
+- 右(視頁面):DatePicker(有日曆 icon,**無箭頭**)、分隔線、視圖按鈕(下載 CSV / 重新整理 等)
+- LINE 推播設定頁右上有獨立的重新整理 icon 按鈕,旋轉動畫,完成後跳「已重新整理」toast
 
 ### 雙欄面板（Dashboard / 關注名單 / Finance / Settings）
 
@@ -168,14 +169,14 @@ letter-spacing: -0.5px;              /* 大數字 */
 
 ```css
 .badge          /* 基底：inline-flex, padding 2px 8px, radius pill, font 11px 600 */
-.badge-active   /* 綠底綠字 */
-.badge-paused   /* 黃底黃字 */
-.badge-other    /* 紅底紅字（已封存、已刪除）*/
+.badge-active   /* 綠底綠字(進行中)*/
+.badge-paused   /* 紅底紅字(已暫停)*/
+.badge-other    /* 灰底灰字(已封存、已刪除)*/
 ```
 
 財務專區狀態文字樣式：
 - 進行中：`color: var(--green); font-weight: 600`
-- 暫停：`color: var(--gray-300)`
+- 已暫停：`color: var(--red)`
 - 已封存：`color: var(--gray-300); opacity: 0.6`
 - 已刪除：`color: var(--red)`
 
@@ -254,6 +255,20 @@ table.tree td   /* padding 10px 14px, border-bottom */
 .spinner      /* 18x18px, border-top 橘色, animation spin */
 .empty-state  /* padding 60px, center, gray-300 */
 ```
+
+---
+
+### LINE Flex Status Chip
+
+LINE 推播 flex 訊息 header 右上角的活動狀態 chip:
+
+| 狀態 | 文字 | 文字色 | 背景 |
+|------|------|--------|------|
+| ACTIVE | 進行中 | `#16A34A`(綠)| `#FFFFFF` |
+| PAUSED | `M/D 已暫停`(M/D 從 FB `updated_time` 解析)| `#DC2626`(紅)| `#FFFFFF` |
+| ARCHIVED / DELETED | 已封存 / 已刪除 | `#888888`(灰)| `#FFFFFF` |
+
+實作:`line_client.build_flex_report` 把 chip 放在 `layout: horizontal` 的 title row,設 `flex: 0`、`gravity: top`、`height: 22px`、`justifyContent: center`,標題換行也不會把白色 chip 拉成大方塊。
 
 ---
 

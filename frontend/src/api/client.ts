@@ -559,6 +559,13 @@ export const api = {
         "POST",
         `/api/line-groups/${encodeURIComponent(groupId)}/refresh-name`,
       ),
+    /** Bulk refresh: re-fetch every active group's display name AND mark
+     *  any whose membership ended (LINE returns no summary) as left. */
+    refreshAllGroups: () =>
+      request<{ ok: boolean; refreshed: number; marked_left: number }>(
+        "POST",
+        "/api/line-groups/refresh-all",
+      ),
     upsertConfig: (payload: LinePushConfigInput) =>
       request<{ ok: boolean; data: LinePushConfig }>("POST", "/api/line-push/configs", {
         body: payload,

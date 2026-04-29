@@ -3019,6 +3019,14 @@ class LineGroupLabelPayload(BaseModel):
 
 @app.get("/api/line-groups")
 async def list_line_groups():
+    """Return only groups the bot is currently a member of.
+
+    Rows with `left_at IS NOT NULL` (bot was kicked / left the group)
+    stay in DB for history but are filtered out so the management UI
+    only shows actionable groups. Use POST /api/line-groups/refresh-all
+    to detect groups whose membership ended without a `leave` webhook
+    (e.g. token rotation, missed webhook delivery).
+    """
     if _db_pool is None:
         return {"data": []}
     async with _db_pool.acquire() as conn:
@@ -3026,6 +3034,7 @@ async def list_line_groups():
             """
             SELECT group_id, group_name, label, joined_at, left_at
             FROM line_groups
+            WHERE left_at IS NULL
             ORDER BY joined_at DESC
             """
         )
@@ -3123,6 +3132,65 @@ async def refresh_line_group_name(group_id: str):
         if result.endswith("0"):
             raise HTTPException(status_code=404, detail="Group not found")
     return {"ok": True, "group_id": group_id, "group_name": group_name}
+
+
+@app.post("/api/line-groups/refresh-all")
+async def refresh_all_line_groups():
+    """Bulk refresh: for every active group, re-fetch the LINE display
+    name and detect stale memberships.
+
+    Powered by the LINE 推播設定 page's top-right refresh button. For
+    each row with `left_at IS NULL` we call `get_group_summary`:
+      - Success → update `group_name` (picks up rename inside LINE).
+      - None    → bot can't see the group anymore (kicked / token bad
+                  / etc.). Set `left_at = NOW()` so the row drops out
+                  of the management UI on the next GET.
+
+    Concurrency-bounded by an asyncio.Semaphore(8) so we don't fan
+    out 80 LINE API calls in parallel and tip into rate limits.
+    """
+    pool = _require_db()
+    if _http_client is None:
+        raise HTTPException(status_code=503, detail="HTTP client not ready")
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT group_id FROM line_groups WHERE left_at IS NULL"
+        )
+    group_ids = [r["group_id"] for r in rows]
+    if not group_ids:
+        return {"ok": True, "refreshed": 0, "marked_left": 0}
+
+    sem = asyncio.Semaphore(8)
+    refreshed = 0
+    marked_left = 0
+
+    async def _one(gid: str) -> tuple[str, Optional[str]]:
+        async with sem:
+            summary = await line_client.get_group_summary(_http_client, gid)
+        if summary is None:
+            return gid, None
+        return gid, (summary.get("groupName") or "").strip()
+
+    results = await asyncio.gather(*(_one(g) for g in group_ids), return_exceptions=True)
+    async with pool.acquire() as conn:
+        for r in results:
+            if isinstance(r, Exception):
+                continue
+            gid, name = r
+            if name is None:
+                await conn.execute(
+                    "UPDATE line_groups SET left_at = NOW() WHERE group_id = $1 AND left_at IS NULL",
+                    gid,
+                )
+                marked_left += 1
+            else:
+                await conn.execute(
+                    "UPDATE line_groups SET group_name = $1 WHERE group_id = $2",
+                    name,
+                    gid,
+                )
+                refreshed += 1
+    return {"ok": True, "refreshed": refreshed, "marked_left": marked_left}
 
 
 # ── LINE push configs CRUD ────────────────────────────────────

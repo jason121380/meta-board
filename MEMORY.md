@@ -51,24 +51,45 @@ This means the scope is **safe to request even without review** — FB's behavio
   - `shared_settings(key, value JSONB)` — team-wide: `finance_row_markups`, `finance_pinned_ids`, `finance_default_markup`, `finance_show_nicknames`
   localStorage now only holds **ephemeral UI state**: `fb_active_accounts`, date-picker prefs, sidebar collapse, FB token cache. `SettingsProvider` is the hydration gate — fires two GETs in parallel at login, gates the router on success.
 
-## LINE Push Scheduler (2026-04-24)
+## LINE Push Scheduler (latest: 2026-04-29)
 
-- Every campaign row has a LINE push button between 調整預算 and 報告
-  (SVG chat bubble, 14x14, orange when at least one active config
-  exists). Opens `LinePushModal` which manages pairings for that
-  campaign.
-- Group discovery is **auto-webhook**: LINE bot `join` → `/api/line/webhook` upserts `line_groups`; `leave` → sets `left_at`.
-  Users just invite the LINE Official Account into a group and it shows up in the dropdown.
+- **Entry point** is the `/line-push` settings page (sidebar 工具區). The
+  per-campaign push button on the dashboard tree was **removed
+  2026-04-29** — all configuration now happens here. Topbar has a
+  refresh icon that re-fetches groups + configs and toasts on success.
+- Group discovery is **auto-webhook**: LINE bot `join` →
+  `/api/line/webhook` upserts `line_groups`; `leave` → sets `left_at`.
+  Users just invite the LINE Official Account into a group and it
+  shows up in the table. Lifespan startup also runs a one-shot
+  backfill for legacy rows whose `group_name` is empty.
+- **GroupPushConfigModal** (one group, one campaign per row, one row
+  per frequency) — searchable comboboxes for both account and campaign;
+  the campaign combobox shows a status badge (進行中 / 已暫停 / 已封存)
+  on each item so you can avoid binding to a paused campaign.
+- **Per-config toggles** (both default OFF — opt-in):
+  - `include_report_button` → footer「查看完整報告」button linking to `/r/:campaignId`
+  - `include_recommendations` → render the 優化建議 bullet list in the body
+- **Default values for new configs**: `weekly` enabled, weekdays = 週五,
+  hour = 09:00, date_range = `month_to_yesterday` (本月1日-昨日),
+  reportFields = [spend_plus, msgs, msg_cost], button + recommendations off.
 - Message format is **LINE Flex Message** (orange header + KPI grid).
   Builder lives in `line_client.build_flex_report`; backend assembles
   the per-campaign KPI rows in `_build_flex_for_config` (main.py) by
   reusing `_fetch_campaigns_for_account`.
+  - Header right side has a **status chip** (`build_flex_report`
+    `status_label` + `status_color`): green `#16A34A`「進行中」for
+    ACTIVE; red `#DC2626`「M/D 已暫停」for PAUSED (M/D parsed from
+    `updated_time`); grey `#888888` for ARCHIVED / DELETED.
+    Implemented as a horizontal title row with `flex:1` title +
+    `flex:0, gravity:top, height:22px` chip so it doesn't stretch
+    when the title wraps to two lines.
 - Recurrence: `daily` / `weekly (weekdays[], 0=Sun..6=Sat)` /
-  `monthly (month_day 1..28)` + HH:MM. All times interpreted as
-  `SCHEDULER_TZ` (default Asia/Taipei) and converted to UTC for
-  `next_run_at` storage. Helper: `main._compute_next_run()`.
+  `biweekly` / `monthly (month_day 1..28)` + HH:MM. All times
+  interpreted as `SCHEDULER_TZ` (default Asia/Taipei) and converted
+  to UTC for `next_run_at` storage. Helper: `main._compute_next_run()`.
 - Scheduler: single asyncio background task started in `lifespan`
-  ticking every 60s. `_scheduler_tick()` selects `enabled AND next_run_at <= NOW()` rows, pushes Flex, advances `next_run_at`.
+  ticking every 60s. `_scheduler_tick()` selects
+  `enabled AND next_run_at <= NOW()` rows, pushes Flex, advances `next_run_at`.
 - Failure policy: fail_count ≥ 3 → `enabled=false` (auto-disable).
   Every attempt is logged in `line_push_logs`.
 - Assumptions: **single uvicorn worker** (no advisory lock yet).
@@ -83,7 +104,7 @@ This means the scope is **safe to request even without review** — FB's behavio
 - Dashboard view: account list 240px | stats + 3-level tree table
 - 關注名單 view: account list 240px (dash-acct-item style) | 3 side-by-side alert cards
 - Finance view: account list 160px | toolbar + campaign table
-- Settings view: account list | detail panel
+- Settings view: split into 廣告帳號設定 (`/settings`) + LINE 推播設定 (`/line-push`)
 - Topbar: 60px, contains date picker + view-specific controls
 
 ## Views Renamed
@@ -183,3 +204,36 @@ Batch of UX fixes landed on branch `claude/read-all-files-Aj5R8`:
 
 ### Dashboard "empty block" fix (commit `6181a15`)
 - Tree card lost its `bg-white`. Only the search header carries an explicit `bg-white`. Table rows still paint their own white from globals.css. Result: when the table is shorter than the flex-1 card, the area below 合計 shows the page warm-white color inside the rounded card border instead of a large stark white block.
+
+## 2026-04-29 — LINE push UX overhaul + dashboard polish
+
+Branch `claude/audit-optimize-performance-pmMDU`. Sequence of fixes:
+
+### Optimistic toggle update (commit `2026ef0`)
+- `CampaignRow` / `AdsetRow` / `CreativeRow` keep a local `pendingStatus` state. Toggle / Badge read `pendingStatus ?? campaign.status`; `useEffect` clears `pendingStatus` whenever the server-side `campaign.status` updates. Result: clicking the switch flips visually within one frame instead of waiting on FB's round-trip.
+
+### Dashboard push button retired + LINE push centralised (commit `05c3a3d`)
+- Deleted `LinePushModal`, `useLinePushConfigs`, and the per-row push icon. The `/line-push` page is now the single source of truth.
+- Added per-config `include_report_button` (DB BOOLEAN, default FALSE) so the「查看完整報告」footer button is opt-in. UI checkbox lives in `GroupPushConfigModal`.
+
+### LINE flex polish (commits `4958bf0`, `aaa9ce6`, `391e57e`, `e1cae22`)
+- Subtitle (報告區間) restyled to `lg + bold` so it visually matches the title.
+- Added a status chip pinned to the **top-right of the header**:
+  - `status_color` = `#16A34A` (ACTIVE) / `#DC2626` (PAUSED) / `#888888` (ARCHIVED|DELETED)
+  - PAUSED prepends `M/D` parsed from FB's `updated_time` (closest free signal — Activity Log is a separate API and updated_time is the last modification, which for a paused campaign is typically when it was paused).
+  - Layout: horizontal title row with `flex:1` title + `flex:0, gravity:top, height:22px` chip + `justifyContent:center` so the chip stays small even when the title wraps.
+  - `_fetch_campaigns_for_account` now requests `updated_time` on both full and lite paths.
+- Added per-config `include_recommendations` (DB BOOLEAN, default FALSE). 優化建議 bullet list is now opt-in; many recipients are external (業主) who only want raw numbers.
+
+### Settings page defaults + line-push topbar (commits `ffe436e`, `6b253fc`, `a5f3a7b`)
+- `blankFreq()` defaults: `weekdays = [5]` (週五), `hour = 9`, `dateRange = "month_to_yesterday"`, `reportFields = ["spend_plus", "msgs", "msg_cost"]`, `includeReportButton = false`. `blankState()` defaults `activeFrequency = "weekly"` with `weekly.enabled = true` so a brand-new config is one click away from save.
+- `LinePushSettingsView` max-w widened from 640px → 1100px and gained a refresh icon in the Topbar. Click `await refetchQueries(['lineGroups', 'lineGroupConfigs'])` then toast「已重新整理」for explicit feedback (invalidate alone left a fast-network user wondering if anything happened).
+
+### History view loading copy (commit `884c009`)
+- `useHistoricalSpend` returns 6 month-counts but the loading subtitle defaulted to「個帳戶已載入」(LoadingState's fallback wording for `loaded`/`total` props). Single-account view passing 6 months looked like "4 / 6 個帳戶已載入". Fixed by passing an explicit `subtitle="X / 6 個月份已載入"`. Other views (Dashboard / Alerts / Analytics) genuinely track per-account counts and still use the default.
+
+### Finance % field clears to 0 (commit `e627694`)
+- `<input type="number">` controlled value snapped back when user cleared the field because `Number.parseFloat("")` is `NaN` → onChange skipped. Now we explicitly handle empty string as 0 (placeholder shows "0"). Applied to both row markup and global default markup.
+
+### Campaign picker shows status badge (commit `884c009`)
+- `GroupPushConfigModal`'s `SearchableCombobox` items now accept an optional `badge: ReactNode`. `CampaignPicker` passes `<Badge status={c.status} />` so the operator can avoid binding a push to a paused / archived campaign.

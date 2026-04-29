@@ -254,6 +254,13 @@ def build_flex_report(
         }
     ]
     if status_label:
+        # Conservative chip layout — vertical box with cornerRadius +
+        # backgroundColor + small symmetric padding, plus gravity:top so
+        # the chip pins to the top of the title row instead of stretching
+        # to fill it when the title wraps. Avoids `height` and
+        # `justifyContent` because some property combinations cause LINE
+        # to 400 the whole message ("messages[0] is invalid"); intrinsic
+        # text height + padding gives a clean small pill anyway.
         title_row_contents.append(
             {
                 "type": "box",
@@ -262,11 +269,11 @@ def build_flex_report(
                 "gravity": "top",
                 "cornerRadius": "md",
                 "backgroundColor": "#FFFFFF",
-                "height": "22px",
+                "paddingTop": "3px",
+                "paddingBottom": "3px",
                 "paddingStart": "8px",
                 "paddingEnd": "8px",
                 "margin": "sm",
-                "justifyContent": "center",
                 "contents": [
                     {
                         "type": "text",
@@ -274,8 +281,6 @@ def build_flex_report(
                         "size": "xs",
                         "weight": "bold",
                         "color": status_color,
-                        "align": "center",
-                        "gravity": "center",
                     }
                 ],
             }
