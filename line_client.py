@@ -163,17 +163,19 @@ def build_flex_report(
 ) -> dict:
     """Build a LINE Flex Message bubble for a campaign report.
 
-    Layout:
-        Header (orange)
-            {title}      [{status_label}]  (status chip pinned top-right)
-            {subtitle}                     (e.g. "報告區間: 4/1 - 4/25")
-            [目標 · {objective}]           (small chip, when objective_label set)
+    Layout (everything left-aligned for visual consistency):
+        Header (orange — slim, two lines only)
+            {title}                       (campaign nickname or name)
+            {subtitle}                    (e.g. "報告區間: 4/1 - 4/25")
 
         Body (white)
-            {kpi_rows}              (花費 / 曝光 / ... / 私訊成本)
-            ─── separator ───       (only if recommendations is non-empty)
-            優化建議                  (orange section title, only if any)
-            • {bullet}              (one row per recommendation)
+            [{status_label}]              (solid colored pill, top-left)
+            目標 · {objective}             (small grey label, when set)
+            ─── separator ───
+            {kpi_rows}                    (花費 / 曝光 / ... ;both columns left-aligned)
+            ─── separator ───             (only if recommendations is non-empty)
+            優化建議                       (orange section title, only if any)
+            • {bullet}                    (one row per recommendation)
 
         Footer (white)              (only if report_url is provided)
             [ 查看完整報告 ]         (primary button → uri action)
@@ -200,7 +202,6 @@ def build_flex_report(
                         "size": "sm",
                         "color": "#1A1A1A",
                         "weight": "bold",
-                        "align": "end",
                         "flex": 4,
                         "wrap": True,
                     },
@@ -251,43 +252,10 @@ def build_flex_report(
                 }
             )
 
-    # Header layout. The status chip is on its own thin row at the top,
-    # right-aligned via a `filler`, then title / subtitle / optional
-    # objective stack vertically below. Putting the chip on its own row
-    # (instead of beside the title) sidesteps two LINE Flex quirks:
-    #   1. `gravity` is NOT a valid property on a `box` component —
-    #      LINE rejects the whole message with "unknown field" when set.
-    #   2. Without `gravity:top`, a chip beside a wrapping title stretches
-    #      to fill the row height (the original 跑版 we tried to fix).
-    # `filler` is the LINE-supported way to push siblings to one edge.
-    header_contents: list[dict[str, Any]] = []
-    if status_label:
-        chip = {
-            "type": "box",
-            "layout": "vertical",
-            "flex": 0,
-            "cornerRadius": "md",
-            "backgroundColor": "#FFFFFF",
-            "paddingAll": "xs",
-            "contents": [
-                {
-                    "type": "text",
-                    "text": status_label,
-                    "size": "xs",
-                    "weight": "bold",
-                    "color": status_color,
-                }
-            ],
-        }
-        header_contents.append(
-            {
-                "type": "box",
-                "layout": "horizontal",
-                "contents": [{"type": "filler"}, chip],
-            }
-        )
-
-    header_contents.append(
+    # Header — slimmed to two lines (title + subtitle) at user request,
+    # so the orange band doesn't dominate. Chip + objective moved down
+    # into the white body where they read as data-context, not branding.
+    header_contents: list[dict[str, Any]] = [
         {
             "type": "text",
             "text": title,
@@ -295,10 +263,7 @@ def build_flex_report(
             "color": "#FFFFFF",
             "weight": "bold",
             "wrap": True,
-            "margin": "sm" if status_label else "none",
-        }
-    )
-    header_contents.append(
+        },
         {
             "type": "text",
             "text": subtitle,
@@ -307,18 +272,52 @@ def build_flex_report(
             "weight": "bold",
             "margin": "xs",
             "wrap": True,
-        }
-    )
+        },
+    ]
+
+    # Body meta row — status chip (solid colored bg + white text so it
+    # still reads as a badge against the white body) followed by an
+    # optional small grey "目標 · X" label.
+    body_meta: list[dict[str, Any]] = []
+    if status_label:
+        body_meta.append(
+            {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                    {
+                        "type": "box",
+                        "layout": "vertical",
+                        "flex": 0,
+                        "cornerRadius": "md",
+                        "backgroundColor": status_color,
+                        "paddingAll": "xs",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": status_label,
+                                "size": "xs",
+                                "weight": "bold",
+                                "color": "#FFFFFF",
+                            }
+                        ],
+                    },
+                    {"type": "filler"},
+                ],
+            }
+        )
     if objective_label:
-        header_contents.append(
+        body_meta.append(
             {
                 "type": "text",
                 "text": f"目標 · {objective_label}",
                 "size": "xs",
-                "color": "#FFE8D9",
-                "margin": "sm",
+                "color": "#888888",
+                "margin": "sm" if status_label else "none",
             }
         )
+    if body_meta:
+        body_meta.append({"type": "separator", "margin": "lg", "color": "#F0F0F0"})
 
     bubble: dict[str, Any] = {
         "type": "bubble",
@@ -336,6 +335,7 @@ def build_flex_report(
             "spacing": "sm",
             "paddingAll": "16px",
             "contents": [
+                *body_meta,
                 *kpi_rows,
                 *suggestion_rows,
             ],
