@@ -306,6 +306,17 @@ async def lifespan(app: FastAPI):
                     ADD COLUMN IF NOT EXISTS include_report_button BOOLEAN NOT NULL DEFAULT FALSE
                     """
                 )
+                # Migration (2026-04-29): include_recommendations toggles
+                # the 「優化建議」 section in the LINE flex body. Default
+                # FALSE — many recipients are external (業主) and don't
+                # want auto-generated advice; opt-in keeps existing rows
+                # quiet until the operator deliberately enables it.
+                await conn.execute(
+                    """
+                    ALTER TABLE campaign_line_push_configs
+                    ADD COLUMN IF NOT EXISTS include_recommendations BOOLEAN NOT NULL DEFAULT FALSE
+                    """
+                )
                 # `line_push_logs`: audit trail per push attempt, keeps
                 # the last N entries per config for the "最近推播" UI.
                 await conn.execute(
@@ -2859,13 +2870,17 @@ async def _build_flex_for_config(cfg: dict) -> dict:
             default_codes += ["msgs", "msg_cost"]
         kpis = [field_catalog[c] for c in default_codes]
 
-    recommendations = _evaluate_alert_recommendations(
-        spend=spend_f,
-        msgs=msgs,
-        msg_cost=msg_cost_f,
-        cpc=cpc_f,
-        frequency=freq_f,
-        objective=objective,
+    recommendations = (
+        _evaluate_alert_recommendations(
+            spend=spend_f,
+            msgs=msgs,
+            msg_cost=msg_cost_f,
+            cpc=cpc_f,
+            frequency=freq_f,
+            objective=objective,
+        )
+        if cfg.get("include_recommendations")
+        else None
     )
 
     # Title: campaign nickname (store · designer) if set, else FB name.
@@ -2873,6 +2888,19 @@ async def _build_flex_for_config(cfg: dict) -> dict:
     title = nickname or camp.get("name", campaign_id)
     concrete_range = _date_range_concrete(date_range)
     subtitle = f"報告區間: {concrete_range}" if concrete_range else _date_range_label(date_range)
+
+    # Status chip in header top-right — recipients can tell at a glance
+    # whether the campaign behind these numbers is still ACTIVE or has
+    # been paused / archived.
+    status_raw = (camp.get("status") or "").upper()
+    status_label_map = {
+        "ACTIVE": "進行中",
+        "PAUSED": "已暫停",
+        "ARCHIVED": "已封存",
+        "DELETED": "已刪除",
+    }
+    status_label = status_label_map.get(status_raw, status_raw or "")
+    status_active = status_raw == "ACTIVE"
 
     # Footer button is opt-in per config (column added 2026-04-29).
     report_url = (
@@ -2885,6 +2913,8 @@ async def _build_flex_for_config(cfg: dict) -> dict:
         title=title,
         subtitle=subtitle,
         objective_label=objective_label,
+        status_label=status_label,
+        status_active=status_active,
         kpis=kpis,
         recommendations=recommendations,
         report_url=report_url,
@@ -3101,6 +3131,10 @@ class LinePushConfigPayload(BaseModel):
     # When True, append a「查看完整報告」footer button linking to the
     # public share page. Default False so the button is opt-in.
     include_report_button: bool = False
+    # When True, render the「優化建議」bullet list in the flex body.
+    # Default False — recommendations are opt-in because many recipients
+    # are external (業主) and only want raw numbers.
+    include_recommendations: bool = False
 
 
 def _config_row_to_dict(r: asyncpg.Record) -> dict:
@@ -3118,6 +3152,7 @@ def _config_row_to_dict(r: asyncpg.Record) -> dict:
         "enabled": r["enabled"],
         "report_fields": list(r["report_fields"] or []),
         "include_report_button": bool(r["include_report_button"]),
+        "include_recommendations": bool(r["include_recommendations"]),
         "last_run_at": r["last_run_at"].isoformat() if r["last_run_at"] else None,
         "next_run_at": r["next_run_at"].isoformat() if r["next_run_at"] else None,
         "last_error": r["last_error"],
@@ -3195,9 +3230,10 @@ async def upsert_push_config(payload: LinePushConfigPayload):
                     frequency = $4, weekdays = $5, month_day = $6,
                     hour = $7, minute = $8, date_range = $9, enabled = $10,
                     report_fields = $11, include_report_button = $12,
-                    next_run_at = $13, fail_count = 0, last_error = NULL,
+                    include_recommendations = $13,
+                    next_run_at = $14, fail_count = 0, last_error = NULL,
                     updated_at = NOW()
-                WHERE id = $14::uuid
+                WHERE id = $15::uuid
                 RETURNING *
                 """,
                 payload.campaign_id,
@@ -3212,6 +3248,7 @@ async def upsert_push_config(payload: LinePushConfigPayload):
                 payload.enabled,
                 payload.report_fields,
                 payload.include_report_button,
+                payload.include_recommendations,
                 next_run,
                 payload.id,
             )
@@ -3227,9 +3264,9 @@ async def upsert_push_config(payload: LinePushConfigPayload):
                     campaign_id, account_id, group_id,
                     frequency, weekdays, month_day, hour, minute,
                     date_range, enabled, report_fields, include_report_button,
-                    next_run_at
+                    include_recommendations, next_run_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 ON CONFLICT (campaign_id, group_id, frequency) DO UPDATE
                 SET account_id = EXCLUDED.account_id,
                     weekdays = EXCLUDED.weekdays,
@@ -3240,6 +3277,7 @@ async def upsert_push_config(payload: LinePushConfigPayload):
                     enabled = EXCLUDED.enabled,
                     report_fields = EXCLUDED.report_fields,
                     include_report_button = EXCLUDED.include_report_button,
+                    include_recommendations = EXCLUDED.include_recommendations,
                     next_run_at = EXCLUDED.next_run_at,
                     fail_count = 0,
                     last_error = NULL,
@@ -3258,6 +3296,7 @@ async def upsert_push_config(payload: LinePushConfigPayload):
                 payload.enabled,
                 payload.report_fields,
                 payload.include_report_button,
+                payload.include_recommendations,
                 next_run,
             )
     return {"ok": True, "data": _config_row_to_dict(row)}
