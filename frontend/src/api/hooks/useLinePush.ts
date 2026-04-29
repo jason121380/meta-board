@@ -1,4 +1,4 @@
-import { type LinePushConfig, type LinePushConfigInput, api } from "@/api/client";
+import { type LinePushConfigInput, api } from "@/api/client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 /**
@@ -7,14 +7,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
  * Scope:
  *   - useLineGroups()                 — all groups the bot is in
  *   - useUpdateLineGroupLabel()       — rename a group
- *   - useLinePushConfigs(campaignId)  — configs for one campaign
+ *   - useLineGroupPushConfigs(gid)    — configs for one group
  *   - useSaveLinePushConfig()         — create / update
  *   - useDeleteLinePushConfig()       — delete
  *   - useTestLinePush()               — fire a push immediately
+ *
+ * Note: per-campaign listing was removed when the dashboard's per-row
+ * LINE push button was retired (2026-04-29). All push configuration
+ * now happens via the Settings → LINE 推播設定 page.
  */
 
 const GROUPS_KEY = ["lineGroups"] as const;
-const CONFIGS_KEY = (campaignId: string) => ["linePush", "configs", campaignId] as const;
 const GROUP_CONFIGS_PREFIX = ["lineGroupConfigs"] as const;
 
 export function useLineGroups() {
@@ -57,37 +60,21 @@ export function useLineGroupPushConfigs(groupId: string | null | undefined) {
   });
 }
 
-export function useLinePushConfigs(campaignId: string | null | undefined) {
-  return useQuery({
-    queryKey: CONFIGS_KEY(campaignId ?? ""),
-    queryFn: async (): Promise<LinePushConfig[]> =>
-      (await api.linePush.listConfigs(campaignId ?? undefined)).data,
-    enabled: !!campaignId,
-    staleTime: 30 * 1000,
-    gcTime: 5 * 60 * 1000,
-  });
-}
-
 export function useSaveLinePushConfig() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload: LinePushConfigInput) => api.linePush.upsertConfig(payload),
-    onSuccess: (_res, payload) => {
-      qc.invalidateQueries({ queryKey: CONFIGS_KEY(payload.campaign_id) });
-      // Invalidate group-keyed lists too — same config row also lives
-      // under "this group's configs". We don't know which group_id was
-      // affected (could be a re-bind), so blanket-invalidate.
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: GROUP_CONFIGS_PREFIX });
     },
   });
 }
 
-export function useDeleteLinePushConfig(campaignId: string) {
+export function useDeleteLinePushConfig() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.linePush.deleteConfig(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: CONFIGS_KEY(campaignId) });
       qc.invalidateQueries({ queryKey: GROUP_CONFIGS_PREFIX });
     },
   });

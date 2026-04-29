@@ -306,7 +306,7 @@ function PushConfigRow({
   const name = cfg.campaign_nickname?.trim() || cfg.campaign_id;
   const dateLabel = DATE_RANGE_LABELS[cfg.date_range] ?? cfg.date_range;
   const rule = formatPushRule(cfg);
-  const deleteMutation = useDeleteLinePushConfig(cfg.campaign_id);
+  const deleteMutation = useDeleteLinePushConfig();
   const testMutation = useTestLinePush();
 
   const onUnbind = async () => {

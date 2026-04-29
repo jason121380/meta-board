@@ -51,6 +51,8 @@ export interface LinePushConfig {
   /** User-selected KPI field codes for the LINE flex report.
    *  Empty = use defaults. See REPORT_FIELDS for the catalog. */
   report_fields: string[];
+  /** Show the「查看完整報告」footer button on the LINE flex card. */
+  include_report_button: boolean;
   last_run_at: string | null;
   next_run_at: string | null;
   last_error: string | null;
@@ -70,6 +72,7 @@ export interface LinePushConfigInput {
   date_range: LinePushDateRange;
   enabled: boolean;
   report_fields?: string[];
+  include_report_button?: boolean;
 }
 
 export class ApiError extends Error {
@@ -553,11 +556,6 @@ export const api = {
         "POST",
         `/api/line-groups/${encodeURIComponent(groupId)}/refresh-name`,
       ),
-    /** List push configs for a single campaign (omit campaignId to list all). */
-    listConfigs: (campaignId?: string) =>
-      request<{ data: LinePushConfig[] }>("GET", "/api/line-push/configs", {
-        query: campaignId ? { campaign_id: campaignId } : undefined,
-      }),
     upsertConfig: (payload: LinePushConfigInput) =>
       request<{ ok: boolean; data: LinePushConfig }>("POST", "/api/line-push/configs", {
         body: payload,

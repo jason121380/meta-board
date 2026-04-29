@@ -1,9 +1,6 @@
 /**
- * 共用的 LINE flex 推播報告欄位常數 + 工具。
- *
- * 兩個 modal 都會用到:
- *   - `views/dashboard/LinePushModal.tsx`         (儀表板 → 行銷活動推播)
- *   - `views/settings/GroupPushConfigModal.tsx`   (LINE 推播設定 → 群組推播)
+ * 共用的 LINE flex 推播報告欄位常數 + 工具。給
+ * `views/settings/GroupPushConfigModal.tsx` (LINE 推播設定 → 群組推播) 使用。
  *
  * code 必須跟 backend `_build_flex_for_config` 內的 `field_catalog`
  * 鍵值一致,否則新增/移除欄位時會兩邊不同步。
