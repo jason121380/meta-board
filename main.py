@@ -1685,8 +1685,8 @@ async def _fetch_campaigns_for_account(
         date_preset,
         time_range,
     )
-    full_fields = f"id,name,status,objective,daily_budget,lifetime_budget,{ins}"
-    no_ins_fields = "id,name,status,objective,daily_budget,lifetime_budget"
+    full_fields = f"id,name,status,objective,daily_budget,lifetime_budget,updated_time,{ins}"
+    no_ins_fields = "id,name,status,objective,daily_budget,lifetime_budget,updated_time"
     archived_filter = {"effective_status": '["ACTIVE","PAUSED","ARCHIVED","DELETED"]'}
 
     # Lite mode: skip insights entirely for fast first-paint.
@@ -2891,8 +2891,17 @@ async def _build_flex_for_config(cfg: dict) -> dict:
 
     # Status chip in header top-right — recipients can tell at a glance
     # whether the campaign behind these numbers is still ACTIVE or has
-    # been paused / archived.
+    # been paused / archived. For PAUSED we also prepend M/D parsed
+    # from `updated_time` (FB doesn't expose a dedicated paused-at
+    # timestamp without the Activity Log endpoint, but updated_time
+    # is the last modification — close enough for "paused since").
     status_raw = (camp.get("status") or "").upper()
+    status_color_map = {
+        "ACTIVE": "#16A34A",   # green
+        "PAUSED": "#DC2626",   # red
+        "ARCHIVED": "#888888", # grey
+        "DELETED": "#888888",  # grey
+    }
     status_label_map = {
         "ACTIVE": "進行中",
         "PAUSED": "已暫停",
@@ -2900,7 +2909,15 @@ async def _build_flex_for_config(cfg: dict) -> dict:
         "DELETED": "已刪除",
     }
     status_label = status_label_map.get(status_raw, status_raw or "")
-    status_active = status_raw == "ACTIVE"
+    status_color = status_color_map.get(status_raw, "#888888")
+    if status_raw == "PAUSED":
+        updated_raw = camp.get("updated_time") or ""
+        try:
+            # FB returns "2026-04-12T08:30:00+0000" — parse to local M/D
+            dt = datetime.fromisoformat(updated_raw.replace("+0000", "+00:00"))
+            status_label = f"{dt.month}/{dt.day} {status_label}"
+        except (TypeError, ValueError):
+            pass
 
     # Footer button is opt-in per config (column added 2026-04-29).
     report_url = (
@@ -2914,7 +2931,7 @@ async def _build_flex_for_config(cfg: dict) -> dict:
         subtitle=subtitle,
         objective_label=objective_label,
         status_label=status_label,
-        status_active=status_active,
+        status_color=status_color,
         kpis=kpis,
         recommendations=recommendations,
         report_url=report_url,
