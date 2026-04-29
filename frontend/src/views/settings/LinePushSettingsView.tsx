@@ -1,4 +1,7 @@
+import { Button } from "@/components/Button";
 import { Topbar } from "@/layout/Topbar";
+import { cn } from "@/lib/cn";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { LineGroupsContent } from "./LineGroupsContent";
 
 /**
@@ -8,9 +11,46 @@ import { LineGroupsContent } from "./LineGroupsContent";
  * without first opening Settings or a campaign's push dialog.
  */
 export function LinePushSettingsView() {
+  const qc = useQueryClient();
+  const fetchingGroups = useIsFetching({ queryKey: ["lineGroups"] });
+  const fetchingConfigs = useIsFetching({ queryKey: ["lineGroupConfigs"] });
+  const refreshing = fetchingGroups + fetchingConfigs > 0;
+
+  const onRefresh = () => {
+    qc.invalidateQueries({ queryKey: ["lineGroups"] });
+    qc.invalidateQueries({ queryKey: ["lineGroupConfigs"] });
+  };
+
   return (
     <>
-      <Topbar title="LINE 推播設定" />
+      <Topbar title="LINE 推播設定">
+        <Button
+          variant="ghost"
+          size="sm"
+          title="重新整理"
+          aria-label="重新整理"
+          onClick={onRefresh}
+          disabled={refreshing}
+          className="h-10 w-10 justify-center px-0 md:h-[30px] md:w-[30px]"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className={cn("block", refreshing && "animate-spin")}
+          >
+            <polyline points="23 4 23 10 17 10" />
+            <polyline points="1 20 1 14 7 14" />
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+          </svg>
+        </Button>
+      </Topbar>
       <div className="flex-1 overflow-y-auto bg-bg">
         <div className="mx-auto w-full max-w-[1100px] px-4 py-5 md:px-6 md:py-6">
           <div className="mb-4">
