@@ -75,12 +75,28 @@ async def line_push(
         timeout=15,
     )
     if resp.status_code >= 300:
-        # LINE returns JSON {"message": "...", "details": [...]}
+        # LINE returns JSON {"message": "...", "details": [{message, property}, ...]}.
+        # The top-level `message` is generic ("messages[0] is invalid"); the
+        # `details` array carries the exact property path and reason. Surface
+        # both so debugging doesn't require server-log diving.
         try:
             body = resp.json()
-            detail = body.get("message") or json.dumps(body)
+            top = body.get("message") or ""
+            details = body.get("details") or []
+            detail_strs = [
+                f"{(d.get('property') or '?')}: {(d.get('message') or '')}"
+                for d in details
+                if isinstance(d, dict)
+            ]
+            if detail_strs:
+                detail = f"{top} | {' ; '.join(detail_strs)}"
+            else:
+                detail = top or json.dumps(body, ensure_ascii=False)
         except Exception:
-            detail = resp.text[:400]
+            detail = resp.text[:600]
+        # Mirror to stdout so the same info shows up in server logs even
+        # if the caller swallows the exception.
+        print(f"[line_push] {resp.status_code} {detail}", flush=True)
         raise LinePushError(resp.status_code, detail)
 
 
