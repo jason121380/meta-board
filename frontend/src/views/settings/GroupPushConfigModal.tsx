@@ -93,12 +93,12 @@ interface EditorState {
 
 const blankFreq = (): PerFreqState => ({
   enabled: false,
-  weekdays: [1, 2, 3, 4, 5],
+  weekdays: [5],
   monthDay: 1,
   hour: 9,
   minute: 0,
-  dateRange: "last_7d",
-  reportFields: [...DEFAULT_REPORT_FIELDS],
+  dateRange: "month_to_yesterday",
+  reportFields: ["spend_plus", "msgs", "msg_cost"],
   includeReportButton: false,
 });
 
@@ -106,10 +106,11 @@ const blankState = (): EditorState => ({
   accountId: "",
   accountName: "",
   campaignId: "",
-  activeFrequency: "daily",
+  activeFrequency: "weekly",
   byFreq: {
     daily: blankFreq(),
-    weekly: blankFreq(),
+    // 新增推播時預設啟用每週,使用者只要選好帳號 / 行銷活動就能直接儲存。
+    weekly: { ...blankFreq(), enabled: true },
     biweekly: blankFreq(),
     monthly: blankFreq(),
   },
