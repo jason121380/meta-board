@@ -247,12 +247,18 @@ export function FinanceTable({ campaigns, multiAcct, search, hideZero, date }: F
                   <td className="px-1.5 text-right md:px-3.5">
                     <input
                       type="number"
-                      value={m}
+                      value={m === 0 ? "" : m}
+                      placeholder="0"
                       min={0}
                       max={999}
                       step={0.5}
                       onChange={(e) => {
-                        const v = Number.parseFloat(e.currentTarget.value);
+                        const raw = e.currentTarget.value;
+                        if (raw === "") {
+                          setRowMarkup(camp.id, 0);
+                          return;
+                        }
+                        const v = Number.parseFloat(raw);
                         if (!Number.isNaN(v)) setRowMarkup(camp.id, v);
                       }}
                       className="h-6 w-[44px] rounded border-[1.5px] border-border bg-white px-1 text-center text-xs md:w-[52px]"

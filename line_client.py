@@ -253,8 +253,9 @@ def build_flex_report(
                 {
                     "type": "text",
                     "text": subtitle,
-                    "size": "xs",
+                    "size": "lg",
                     "color": "#FFE8D9",
+                    "weight": "bold",
                     "margin": "xs",
                     "wrap": True,
                 },
