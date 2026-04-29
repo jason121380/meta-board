@@ -251,13 +251,43 @@ def build_flex_report(
                 }
             )
 
-    # Status pill — pinned to the top-right of the header. White chip
-    # with caller-supplied color (green for ACTIVE, red for PAUSED,
-    # grey for archived/deleted). `gravity: top` keeps it at the top
-    # of the row even when the title wraps to two lines, and the
-    # explicit small height + xs text keeps the pill from stretching
-    # into a tall white square.
-    title_row_contents: list[dict[str, Any]] = [
+    # Header layout. The status chip is on its own thin row at the top,
+    # right-aligned via a `filler`, then title / subtitle / optional
+    # objective stack vertically below. Putting the chip on its own row
+    # (instead of beside the title) sidesteps two LINE Flex quirks:
+    #   1. `gravity` is NOT a valid property on a `box` component —
+    #      LINE rejects the whole message with "unknown field" when set.
+    #   2. Without `gravity:top`, a chip beside a wrapping title stretches
+    #      to fill the row height (the original 跑版 we tried to fix).
+    # `filler` is the LINE-supported way to push siblings to one edge.
+    header_contents: list[dict[str, Any]] = []
+    if status_label:
+        chip = {
+            "type": "box",
+            "layout": "vertical",
+            "flex": 0,
+            "cornerRadius": "md",
+            "backgroundColor": "#FFFFFF",
+            "paddingAll": "xs",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": status_label,
+                    "size": "xs",
+                    "weight": "bold",
+                    "color": status_color,
+                }
+            ],
+        }
+        header_contents.append(
+            {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [{"type": "filler"}, chip],
+            }
+        )
+
+    header_contents.append(
         {
             "type": "text",
             "text": title,
@@ -265,38 +295,28 @@ def build_flex_report(
             "color": "#FFFFFF",
             "weight": "bold",
             "wrap": True,
-            "flex": 1,
-            "gravity": "top",
+            "margin": "sm" if status_label else "none",
         }
-    ]
-    if status_label:
-        # Minimum-surface-area chip layout. Earlier iterations with
-        # `height`, `justifyContent`, mixed pixel paddings, or inner
-        # text gravity all triggered LINE 400 ("messages[0] is invalid")
-        # in some combination — LINE is silently picky about which
-        # property bundles it accepts. Stick to: single `paddingAll`
-        # keyword, `cornerRadius`, `backgroundColor`, and `gravity:top`
-        # to pin the chip to the top of the title row. Intrinsic text
-        # height + symmetric padding gives a clean small pill.
-        title_row_contents.append(
+    )
+    header_contents.append(
+        {
+            "type": "text",
+            "text": subtitle,
+            "size": "lg",
+            "color": "#FFE8D9",
+            "weight": "bold",
+            "margin": "xs",
+            "wrap": True,
+        }
+    )
+    if objective_label:
+        header_contents.append(
             {
-                "type": "box",
-                "layout": "vertical",
-                "flex": 0,
-                "gravity": "top",
-                "cornerRadius": "md",
-                "backgroundColor": "#FFFFFF",
-                "paddingAll": "xs",
+                "type": "text",
+                "text": f"目標 · {objective_label}",
+                "size": "xs",
+                "color": "#FFE8D9",
                 "margin": "sm",
-                "contents": [
-                    {
-                        "type": "text",
-                        "text": status_label,
-                        "size": "xs",
-                        "weight": "bold",
-                        "color": status_color,
-                    }
-                ],
             }
         )
 
@@ -308,35 +328,7 @@ def build_flex_report(
             "layout": "vertical",
             "backgroundColor": "#FF6B2C",
             "paddingAll": "16px",
-            "contents": [
-                {
-                    "type": "box",
-                    "layout": "horizontal",
-                    "contents": title_row_contents,
-                },
-                {
-                    "type": "text",
-                    "text": subtitle,
-                    "size": "lg",
-                    "color": "#FFE8D9",
-                    "weight": "bold",
-                    "margin": "xs",
-                    "wrap": True,
-                },
-                *(
-                    [
-                        {
-                            "type": "text",
-                            "text": f"目標 · {objective_label}",
-                            "size": "xs",
-                            "color": "#FFE8D9",
-                            "margin": "sm",
-                        }
-                    ]
-                    if objective_label
-                    else []
-                ),
-            ],
+            "contents": header_contents,
         },
         "body": {
             "type": "box",
