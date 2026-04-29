@@ -4,12 +4,11 @@ import {
   useLineGroupPushConfigs,
   useLineGroups,
   useTestLinePush,
-  useUpdateLineGroupLabel,
 } from "@/api/hooks/useLinePush";
 import { confirm } from "@/components/ConfirmDialog";
 import { toast } from "@/components/Toast";
 import { cn } from "@/lib/cn";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { GroupPushConfigModal } from "./GroupPushConfigModal";
 
 type EditTarget = {
@@ -50,20 +49,18 @@ interface LineGroup {
 }
 
 /**
- * Shared list UI for LINE groups the bot has joined. Used both by
- * the inline `LineGroupsModal` (Dashboard / legacy entry) and the
- * standalone `LinePushSettingsView` page.
+ * Shared list UI for LINE groups the bot has joined. Standalone page
+ * is `LinePushSettingsView`; that view's Topbar refresh button calls
+ * `/api/line-groups/refresh-all` to bulk-update group names from
+ * LINE and drop any whose membership ended.
  *
- * Two-column table (no per-row "重新抓取" action — the lifespan
- * backfill on startup keeps `group_name` filled in automatically):
- *   群組(主名稱 + ID + 弱化暱稱輸入) | 已設定的推播
+ * Two-column table:
+ *   群組(LINE 顯示名 + ID) | 已設定的推播
  *
- * Top-of-page search filters by group_name / label / group_id —
- * essential when the bot is in dozens of groups.
+ * Top-of-page search filters by group_name / group_id.
  */
 export function LineGroupsContent() {
   const groupsQuery = useLineGroups();
-  const renameMutation = useUpdateLineGroupLabel();
   const groups = groupsQuery.data ?? [];
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
   const [query, setQuery] = useState("");
@@ -74,7 +71,6 @@ export function LineGroupsContent() {
     return groups.filter(
       (g) =>
         (g.group_name ?? "").toLowerCase().includes(q) ||
-        (g.label ?? "").toLowerCase().includes(q) ||
         g.group_id.toLowerCase().includes(q),
     );
   }, [groups, query]);
@@ -103,7 +99,7 @@ export function LineGroupsContent() {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
-          placeholder="搜尋群組名稱、暱稱或 ID"
+          placeholder="搜尋群組名稱或 ID"
           className="h-9 w-full rounded-lg border border-border bg-white px-3 text-[13px] outline-none focus:border-orange"
         />
         <span className="shrink-0 text-[11px] text-gray-300">
@@ -127,24 +123,11 @@ export function LineGroupsContent() {
               </tr>
             ) : (
               filtered.map((g) => {
-                const displayName = g.group_name?.trim() || g.label?.trim() || g.group_id;
+                const displayName = g.group_name?.trim() || g.group_id;
                 return (
                   <GroupRow
                     key={g.group_id}
                     group={g}
-                    saving={renameMutation.isPending}
-                    onSave={async (label) => {
-                      try {
-                        await renameMutation.mutateAsync({ groupId: g.group_id, label });
-                        toast("已更新群組暱稱", "success");
-                      } catch (e) {
-                        toast(
-                          `更新失敗:${e instanceof Error ? e.message : String(e)}`,
-                          "error",
-                          4500,
-                        );
-                      }
-                    }}
                     onAddPush={() =>
                       setEditTarget({
                         groupId: g.group_id,
@@ -183,30 +166,18 @@ export function LineGroupsContent() {
 
 function GroupRow({
   group,
-  onSave,
   onAddPush,
   onEditPush,
-  saving,
 }: {
   group: LineGroup;
-  onSave: (label: string) => Promise<void> | void;
   onAddPush: () => void;
   onEditPush: (cfg: LinePushConfig) => void;
-  saving: boolean;
 }) {
-  const [draft, setDraft] = useState(group.label ?? "");
-  useEffect(() => {
-    setDraft(group.label ?? "");
-  }, [group.label]);
-
-  const dirty = draft.trim() !== (group.label ?? "").trim();
-  const left = !!group.left_at;
   const displayName = group.group_name?.trim() || "（尚未取得群組名稱）";
   const hasName = !!group.group_name?.trim();
 
   return (
-    <tr className={cn("border-b border-border last:border-b-0 align-top", left && "opacity-60")}>
-      {/* 群組欄: 名稱(主) + ID(mono 小) + 暱稱(弱化 inline) */}
+    <tr className="border-b border-border last:border-b-0 align-top">
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-2">
           <span
@@ -215,43 +186,12 @@ function GroupRow({
           >
             {displayName}
           </span>
-          {left && (
-            <span className="rounded-full bg-red-bg px-1.5 py-[1px] text-[10px] font-semibold text-red">
-              已退出
-            </span>
-          )}
         </div>
         <div className="mt-0.5 truncate font-mono text-[10px] text-gray-300">{group.group_id}</div>
-        {/* Nickname — visually de-emphasised: small inline row, no border on input */}
-        <div className="mt-1 flex items-center gap-1">
-          <span className="shrink-0 text-[10px] text-gray-300">暱稱</span>
-          <input
-            type="text"
-            value={draft}
-            onChange={(e) => setDraft(e.currentTarget.value)}
-            placeholder="—"
-            className="h-6 w-32 rounded border-0 bg-bg px-1.5 text-[11px] text-gray-500 outline-none focus:bg-white focus:ring-1 focus:ring-orange"
-          />
-          {dirty && (
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => onSave(draft.trim())}
-              className="text-[10px] font-semibold text-orange disabled:opacity-50"
-            >
-              儲存
-            </button>
-          )}
-        </div>
       </td>
 
-      {/* 推播設定 */}
       <td className="px-3 py-2.5">
-        <GroupPushConfigsList
-          groupId={group.group_id}
-          onEdit={onEditPush}
-          onAdd={left ? undefined : onAddPush}
-        />
+        <GroupPushConfigsList groupId={group.group_id} onEdit={onEditPush} onAdd={onAddPush} />
       </td>
     </tr>
   );

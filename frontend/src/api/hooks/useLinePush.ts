@@ -6,15 +6,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
  *
  * Scope:
  *   - useLineGroups()                 — all groups the bot is in
- *   - useUpdateLineGroupLabel()       — rename a group
  *   - useLineGroupPushConfigs(gid)    — configs for one group
  *   - useSaveLinePushConfig()         — create / update
  *   - useDeleteLinePushConfig()       — delete
  *   - useTestLinePush()               — fire a push immediately
  *
  * Note: per-campaign listing was removed when the dashboard's per-row
- * LINE push button was retired (2026-04-29). All push configuration
- * now happens via the Settings → LINE 推播設定 page.
+ * LINE push button was retired (2026-04-29). The group-nickname
+ * (`label`) feature was removed (2026-04-29) — group display name now
+ * comes solely from LINE's `/v2/bot/group/{id}/summary`. All push
+ * configuration happens via the Settings → LINE 推播設定 page.
  */
 
 const GROUPS_KEY = ["lineGroups"] as const;
@@ -26,17 +27,6 @@ export function useLineGroups() {
     queryFn: async () => (await api.linePush.listGroups()).data,
     staleTime: 60 * 1000,
     gcTime: 10 * 60 * 1000,
-  });
-}
-
-export function useUpdateLineGroupLabel() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ groupId, label }: { groupId: string; label: string }) =>
-      api.linePush.setGroupLabel(groupId, label),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: GROUPS_KEY });
-    },
   });
 }
 
