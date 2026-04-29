@@ -12,7 +12,7 @@ export function LinePushSettingsView() {
     <>
       <Topbar title="LINE 推播設定" />
       <div className="flex-1 overflow-y-auto bg-bg">
-        <div className="mx-auto w-full max-w-[640px] px-4 py-5 md:px-6 md:py-6">
+        <div className="mx-auto w-full max-w-[1100px] px-4 py-5 md:px-6 md:py-6">
           <div className="mb-4">
             <div className="text-[15px] font-bold text-ink">LINE 群組管理</div>
             <div className="mt-0.5 text-[12px] text-gray-500">
