@@ -1,7 +1,9 @@
 import { Button } from "@/components/Button";
+import { toast } from "@/components/Toast";
 import { Topbar } from "@/layout/Topbar";
 import { cn } from "@/lib/cn";
-import { useIsFetching, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { LineGroupsContent } from "./LineGroupsContent";
 
 /**
@@ -12,13 +14,22 @@ import { LineGroupsContent } from "./LineGroupsContent";
  */
 export function LinePushSettingsView() {
   const qc = useQueryClient();
-  const fetchingGroups = useIsFetching({ queryKey: ["lineGroups"] });
-  const fetchingConfigs = useIsFetching({ queryKey: ["lineGroupConfigs"] });
-  const refreshing = fetchingGroups + fetchingConfigs > 0;
+  const [refreshing, setRefreshing] = useState(false);
 
-  const onRefresh = () => {
-    qc.invalidateQueries({ queryKey: ["lineGroups"] });
-    qc.invalidateQueries({ queryKey: ["lineGroupConfigs"] });
+  const onRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        qc.refetchQueries({ queryKey: ["lineGroups"] }),
+        qc.refetchQueries({ queryKey: ["lineGroupConfigs"] }),
+      ]);
+      toast("已重新整理", "success");
+    } catch (e) {
+      toast(`重新整理失敗:${e instanceof Error ? e.message : String(e)}`, "error", 4500);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   return (
