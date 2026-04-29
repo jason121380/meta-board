@@ -24,10 +24,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 /**
  * Group-side push config editor — opened from the LINE 群組管理 table.
- *
- * Differs from the campaign-side `LinePushModal` by inverting the picker:
- * here the group is fixed and the user picks an account → campaign,
- * with substring search on both since we may have 80+ accounts and
+ * The group is fixed and the user picks an account → campaign, with
+ * substring search on both since we may have 80+ accounts and
  * thousands of campaigns.
  */
 
@@ -79,6 +77,8 @@ interface PerFreqState {
   dateRange: LinePushDateRange;
   /** KPI field codes to include in the report. */
   reportFields: string[];
+  /** Show「查看完整報告」footer button on the flex card. */
+  includeReportButton: boolean;
 }
 
 interface EditorState {
@@ -99,6 +99,7 @@ const blankFreq = (): PerFreqState => ({
   minute: 0,
   dateRange: "last_7d",
   reportFields: [...DEFAULT_REPORT_FIELDS],
+  includeReportButton: false,
 });
 
 const blankState = (): EditorState => ({
@@ -127,6 +128,7 @@ function freqFromConfig(c: LinePushConfig): PerFreqState {
     // Backend stores [] for "use defaults"; surface that as the
     // explicit default list so the UI checkboxes start populated.
     reportFields: c.report_fields?.length ? c.report_fields : [...DEFAULT_REPORT_FIELDS],
+    includeReportButton: !!c.include_report_button,
   };
 }
 
@@ -142,11 +144,8 @@ export function GroupPushConfigModal({
   const nicknamesQuery = useNicknames();
   const nicknames = nicknamesQuery.data ?? {};
   const saveMutation = useSaveLinePushConfig();
-  // Need a deleteMutation tied to the eventual campaign id to invalidate
-  // the right query key; we pass the live campaignId through so the
-  // hook's onSuccess invalidator targets the active campaign's list.
   const [state, setState] = useState<EditorState>(() => blankState());
-  const deleteMutation = useDeleteLinePushConfig(state.campaignId);
+  const deleteMutation = useDeleteLinePushConfig();
 
   // Pull all configs for this group so we can find sibling rows
   // (same group, same campaign, different frequency) and pre-fill
@@ -262,6 +261,7 @@ export function GroupPushConfigModal({
           date_range: s.dateRange,
           enabled: true,
           report_fields: s.reportFields,
+          include_report_button: s.includeReportButton,
         };
         await saveMutation.mutateAsync(payload);
       }
@@ -488,6 +488,18 @@ export function GroupPushConfigModal({
           value={active.reportFields}
           onChange={(next) => updateActive({ reportFields: next })}
         />
+
+        {/* Footer report-button toggle. Default off so old configs keep
+            their "no button" behaviour after migration. */}
+        <label className="flex items-center gap-2 text-[13px] text-ink">
+          <input
+            type="checkbox"
+            className="custom-cb"
+            checked={active.includeReportButton}
+            onChange={(e) => updateActive({ includeReportButton: e.currentTarget.checked })}
+          />
+          是否出現按鈕
+        </label>
 
         {/* Enabled — per-tab. Drives both create-on-save and
             delete-on-save (a tab that was previously enabled but is

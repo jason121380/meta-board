@@ -1,7 +1,6 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useAdsets } from "@/api/hooks/useAdsets";
 import { mutationErrorMessage, useEntityStatusMutation } from "@/api/hooks/useEntityMutations";
-import { useLinePushConfigs } from "@/api/hooks/useLinePush";
 import { Badge } from "@/components/Badge";
 import { confirm } from "@/components/ConfirmDialog";
 import { FbCampaignLink } from "@/components/FbCampaignLink";
@@ -12,11 +11,10 @@ import type { DateConfig } from "@/lib/datePicker";
 import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
 import { useUiStore } from "@/stores/uiStore";
-import type { FbCampaign } from "@/types/fb";
-import { memo, useState } from "react";
+import type { FbCampaign, FbEntityStatus } from "@/types/fb";
+import { memo, useEffect, useState } from "react";
 import { AdsetRow } from "./AdsetRow";
 import type { BudgetModalTarget } from "./BudgetModal";
-import { LinePushModal } from "./LinePushModal";
 import { ReportModal } from "./ReportModal";
 
 export interface CampaignRowProps {
@@ -58,13 +56,12 @@ function CampaignRowInner({
   const accountsQuery = useAccounts();
   const businessId = accountsQuery.data?.find((a) => a.id === campaign._accountId)?.business?.id;
   const [reportOpen, setReportOpen] = useState(false);
-  const [linePushOpen, setLinePushOpen] = useState(false);
-  // Lightly-cached query (30s staleTime) so the LINE icon can light
-  // up orange when the campaign already has at least one active
-  // pairing. Only fetched when the row is mounted, i.e. when the
-  // parent TreeTable decides to render it.
-  const linePushConfigs = useLinePushConfigs(campaign.id);
-  const hasActivePush = (linePushConfigs.data ?? []).some((c) => c.enabled);
+  const [pendingStatus, setPendingStatus] = useState<FbEntityStatus | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: trigger-only dep — clear optimistic override whenever server status changes
+  useEffect(() => {
+    setPendingStatus(null);
+  }, [campaign.status]);
+  const displayStatus = pendingStatus ?? campaign.status;
 
   const ins = getIns(campaign);
   const msgs = getMsgCount(campaign);
@@ -73,14 +70,16 @@ function CampaignRowInner({
   const onRowClick = () => toggleCamp(campaign.id);
 
   const onToggleStatus = async (nextChecked: boolean) => {
-    const status = nextChecked ? "ACTIVE" : "PAUSED";
+    const status: FbEntityStatus = nextChecked ? "ACTIVE" : "PAUSED";
     const action = nextChecked ? "開啟" : "暫停";
     const ok = await confirm(`確定要${action}此行銷活動？`);
     if (!ok) return;
+    setPendingStatus(status);
     try {
       await mutation.mutateAsync({ kind: "campaign", id: campaign.id, status });
       toast(`已${action}行銷活動`, "success");
     } catch (e) {
+      setPendingStatus(null);
       toast(`${action}行銷活動失敗：${mutationErrorMessage(e)}`, "error", 4500);
     }
   };
@@ -128,7 +127,7 @@ function CampaignRowInner({
           </td>
         )}
         <td>
-          <Badge status={campaign.status} />
+          <Badge status={displayStatus} />
         </td>
         <td className="num">{fM(ins.spend)}</td>
         <td className="num">{fN(ins.impressions)}</td>
@@ -143,7 +142,8 @@ function CampaignRowInner({
         <td onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center gap-1.5">
             <Toggle
-              checked={campaign.status === "ACTIVE"}
+              checked={displayStatus === "ACTIVE"}
+              disabled={mutation.isPending}
               onChange={(e) => {
                 void onToggleStatus(e.currentTarget.checked);
               }}
@@ -170,29 +170,6 @@ function CampaignRowInner({
               >
                 <line x1="12" y1="1" x2="12" y2="23" />
                 <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              title={hasActivePush ? "LINE 推播已啟用" : "LINE 推播設定"}
-              aria-label="LINE 推播設定"
-              className={`cursor-pointer border-0 bg-transparent p-1 outline-none hover:text-orange ${
-                hasActivePush ? "text-orange" : "text-gray-400"
-              }`}
-              onClick={() => setLinePushOpen(true)}
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
               </svg>
             </button>
             <button
@@ -224,7 +201,6 @@ function CampaignRowInner({
         </td>
       </tr>
       <ReportModal open={reportOpen} onOpenChange={setReportOpen} campaign={campaign} date={date} />
-      <LinePushModal open={linePushOpen} onOpenChange={setLinePushOpen} campaign={campaign} />
       {expanded && (
         <CampaignAdsets
           query={adsetsQuery}

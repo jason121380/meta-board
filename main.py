@@ -296,6 +296,16 @@ async def lifespan(app: FastAPI):
                     ADD COLUMN IF NOT EXISTS report_fields TEXT[] NOT NULL DEFAULT '{}'
                     """
                 )
+                # Migration (2026-04-29): include_report_button toggles
+                # the LINE flex card's "查看完整報告" footer button.
+                # Default FALSE so existing rows surface the new option
+                # as opt-in rather than retroactively losing the button.
+                await conn.execute(
+                    """
+                    ALTER TABLE campaign_line_push_configs
+                    ADD COLUMN IF NOT EXISTS include_report_button BOOLEAN NOT NULL DEFAULT FALSE
+                    """
+                )
                 # `line_push_logs`: audit trail per push attempt, keeps
                 # the last N entries per config for the "最近推播" UI.
                 await conn.execute(
@@ -2864,7 +2874,12 @@ async def _build_flex_for_config(cfg: dict) -> dict:
     concrete_range = _date_range_concrete(date_range)
     subtitle = f"報告區間: {concrete_range}" if concrete_range else _date_range_label(date_range)
 
-    report_url = _share_url_for_config(account_id, campaign_id, date_range)
+    # Footer button is opt-in per config (column added 2026-04-29).
+    report_url = (
+        _share_url_for_config(account_id, campaign_id, date_range)
+        if cfg.get("include_report_button")
+        else None
+    )
 
     return line_client.build_flex_report(
         title=title,
@@ -3083,6 +3098,9 @@ class LinePushConfigPayload(BaseModel):
     # (spend/impressions/clicks/ctr/cpc + msgs/msg_cost when not
     # traffic-objective).
     report_fields: List[str] = []
+    # When True, append a「查看完整報告」footer button linking to the
+    # public share page. Default False so the button is opt-in.
+    include_report_button: bool = False
 
 
 def _config_row_to_dict(r: asyncpg.Record) -> dict:
@@ -3099,6 +3117,7 @@ def _config_row_to_dict(r: asyncpg.Record) -> dict:
         "date_range": r["date_range"],
         "enabled": r["enabled"],
         "report_fields": list(r["report_fields"] or []),
+        "include_report_button": bool(r["include_report_button"]),
         "last_run_at": r["last_run_at"].isoformat() if r["last_run_at"] else None,
         "next_run_at": r["next_run_at"].isoformat() if r["next_run_at"] else None,
         "last_error": r["last_error"],
@@ -3175,10 +3194,10 @@ async def upsert_push_config(payload: LinePushConfigPayload):
                 SET campaign_id = $1, account_id = $2, group_id = $3,
                     frequency = $4, weekdays = $5, month_day = $6,
                     hour = $7, minute = $8, date_range = $9, enabled = $10,
-                    report_fields = $11,
-                    next_run_at = $12, fail_count = 0, last_error = NULL,
+                    report_fields = $11, include_report_button = $12,
+                    next_run_at = $13, fail_count = 0, last_error = NULL,
                     updated_at = NOW()
-                WHERE id = $13::uuid
+                WHERE id = $14::uuid
                 RETURNING *
                 """,
                 payload.campaign_id,
@@ -3192,6 +3211,7 @@ async def upsert_push_config(payload: LinePushConfigPayload):
                 payload.date_range,
                 payload.enabled,
                 payload.report_fields,
+                payload.include_report_button,
                 next_run,
                 payload.id,
             )
@@ -3206,9 +3226,10 @@ async def upsert_push_config(payload: LinePushConfigPayload):
                 INSERT INTO campaign_line_push_configs (
                     campaign_id, account_id, group_id,
                     frequency, weekdays, month_day, hour, minute,
-                    date_range, enabled, report_fields, next_run_at
+                    date_range, enabled, report_fields, include_report_button,
+                    next_run_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 ON CONFLICT (campaign_id, group_id, frequency) DO UPDATE
                 SET account_id = EXCLUDED.account_id,
                     weekdays = EXCLUDED.weekdays,
@@ -3218,6 +3239,7 @@ async def upsert_push_config(payload: LinePushConfigPayload):
                     date_range = EXCLUDED.date_range,
                     enabled = EXCLUDED.enabled,
                     report_fields = EXCLUDED.report_fields,
+                    include_report_button = EXCLUDED.include_report_button,
                     next_run_at = EXCLUDED.next_run_at,
                     fail_count = 0,
                     last_error = NULL,
@@ -3235,6 +3257,7 @@ async def upsert_push_config(payload: LinePushConfigPayload):
                 payload.date_range,
                 payload.enabled,
                 payload.report_fields,
+                payload.include_report_button,
                 next_run,
             )
     return {"ok": True, "data": _config_row_to_dict(row)}

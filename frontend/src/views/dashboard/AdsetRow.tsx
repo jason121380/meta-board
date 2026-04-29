@@ -9,8 +9,8 @@ import type { DateConfig } from "@/lib/datePicker";
 import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
 import { useUiStore } from "@/stores/uiStore";
-import type { FbAdset } from "@/types/fb";
-import { memo } from "react";
+import type { FbAdset, FbEntityStatus } from "@/types/fb";
+import { memo, useEffect, useState } from "react";
 import type { BudgetModalTarget } from "./BudgetModal";
 import { CreativeRow } from "./CreativeRow";
 
@@ -40,6 +40,12 @@ function AdsetRowInner({ adset, multiAcct, colCount, date, onOpenBudget }: Adset
   const toggleAdset = useUiStore((s) => s.toggleAdset);
   const creativesQuery = useCreatives(adset.id, date, expanded);
   const mutation = useEntityStatusMutation();
+  const [pendingStatus, setPendingStatus] = useState<FbEntityStatus | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: trigger-only dep — clear optimistic override whenever server status changes
+  useEffect(() => {
+    setPendingStatus(null);
+  }, [adset.status]);
+  const displayStatus = pendingStatus ?? adset.status;
 
   const ins = getIns(adset);
   const msgs = getMsgCount(adset);
@@ -48,14 +54,16 @@ function AdsetRowInner({ adset, multiAcct, colCount, date, onOpenBudget }: Adset
   const onRowClick = () => toggleAdset(adset.id);
 
   const onToggleStatus = async (nextChecked: boolean) => {
-    const status = nextChecked ? "ACTIVE" : "PAUSED";
+    const status: FbEntityStatus = nextChecked ? "ACTIVE" : "PAUSED";
     const action = nextChecked ? "開啟" : "暫停";
     const ok = await confirm(`確定要${action}此廣告組合？`);
     if (!ok) return;
+    setPendingStatus(status);
     try {
       await mutation.mutateAsync({ kind: "adset", id: adset.id, status });
       toast(`已${action}廣告組合`, "success");
     } catch (e) {
+      setPendingStatus(null);
       toast(`${action}廣告組合失敗：${mutationErrorMessage(e)}`, "error", 4500);
     }
   };
@@ -90,7 +98,7 @@ function AdsetRowInner({ adset, multiAcct, colCount, date, onOpenBudget }: Adset
         </td>
         {multiAcct && <td />}
         <td>
-          <Badge status={adset.status} />
+          <Badge status={displayStatus} />
         </td>
         <td className="num">{fM(ins.spend)}</td>
         <td className="num">{fN(ins.impressions)}</td>
@@ -103,7 +111,8 @@ function AdsetRowInner({ adset, multiAcct, colCount, date, onOpenBudget }: Adset
         <td onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center gap-1.5">
             <Toggle
-              checked={adset.status === "ACTIVE"}
+              checked={displayStatus === "ACTIVE"}
+              disabled={mutation.isPending}
               onChange={(e) => {
                 void onToggleStatus(e.currentTarget.checked);
               }}

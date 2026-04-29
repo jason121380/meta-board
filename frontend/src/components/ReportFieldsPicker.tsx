@@ -8,8 +8,7 @@ import {
 
 /**
  * Multi-select chip picker for the LINE flex push report fields.
- * Used by both `LinePushModal` (dashboard) and `GroupPushConfigModal`
- * (LINE 推播設定 group page) so the two surfaces stay in sync.
+ * Used by `GroupPushConfigModal` (LINE 推播設定 group page).
  *
  * Behavior:
  *   - Tap a chip → toggle. Mutex groups (spend / spend_plus) auto-
