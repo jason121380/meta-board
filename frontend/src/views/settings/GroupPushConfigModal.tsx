@@ -12,6 +12,7 @@ import {
   useSaveLinePushConfig,
 } from "@/api/hooks/useLinePush";
 import { useNicknames } from "@/api/hooks/useNicknames";
+import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
 import { ReportFieldsPicker } from "@/components/ReportFieldsPicker";
@@ -20,7 +21,7 @@ import { cn } from "@/lib/cn";
 import { DEFAULT_REPORT_FIELDS } from "@/lib/reportFields";
 import { formatNickname } from "@/views/finance/financeData";
 import * as Popover from "@radix-ui/react-popover";
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 /**
  * Group-side push config editor — opened from the LINE 群組管理 table.
@@ -564,6 +565,7 @@ function CampaignPicker({
         value: c.id,
         primary: nick ?? c.name ?? c.id,
         secondary: nick ? c.name : c.id,
+        badge: <Badge status={c.status} />,
         raw: c,
       };
     });
@@ -590,6 +592,7 @@ interface ComboItem<T = unknown> {
   value: string;
   primary: string;
   secondary?: string;
+  badge?: React.ReactNode;
   raw?: T;
 }
 
@@ -707,7 +710,12 @@ function SearchableCombobox<T>({
                       active ? "bg-orange-bg text-orange" : "text-ink hover:bg-orange-bg",
                     )}
                   >
-                    <span className="w-full truncate text-[13px] font-semibold">{it.primary}</span>
+                    <span className="flex w-full items-center gap-1.5">
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">
+                        {it.primary}
+                      </span>
+                      {it.badge}
+                    </span>
                     {it.secondary && (
                       <span className="w-full truncate font-mono text-[10px] text-gray-300">
                         {it.secondary}
