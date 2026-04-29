@@ -163,13 +163,14 @@ def build_flex_report(
 ) -> dict:
     """Build a LINE Flex Message bubble for a campaign report.
 
-    Layout:
+    Layout (everything left-aligned for visual consistency):
         Header (orange)
-            {title}      [{status_label}]  (status chip pinned top-right)
-            {subtitle}                     (e.g. "報告區間: 4/1 - 4/25")
-            [目標 · {objective}]           (small chip, when objective_label set)
+            [{status_label}]              (status chip on its own row, top-left)
+            {title}                       (campaign nickname or name)
+            {subtitle}                    (e.g. "報告區間: 4/1 - 4/25")
+            [目標 · {objective}]          (when objective_label set)
 
-        Body (white)
+        Body (white) — labels and values both left-aligned
             {kpi_rows}              (花費 / 曝光 / ... / 私訊成本)
             ─── separator ───       (only if recommendations is non-empty)
             優化建議                  (orange section title, only if any)
@@ -200,7 +201,6 @@ def build_flex_report(
                         "size": "sm",
                         "color": "#1A1A1A",
                         "weight": "bold",
-                        "align": "end",
                         "flex": 4,
                         "wrap": True,
                     },
@@ -283,7 +283,7 @@ def build_flex_report(
             {
                 "type": "box",
                 "layout": "horizontal",
-                "contents": [{"type": "filler"}, chip],
+                "contents": [chip, {"type": "filler"}],
             }
         )
 
