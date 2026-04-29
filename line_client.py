@@ -140,7 +140,7 @@ def build_flex_report(
     kpis: list[tuple[str, str]],
     objective_label: str = "",
     status_label: str = "",
-    status_active: bool = False,
+    status_color: str = "#888888",
     recommendations: Optional[List[str]] = None,
     report_url: Optional[str] = None,
     alt_text: Optional[str] = None,
@@ -235,10 +235,12 @@ def build_flex_report(
                 }
             )
 
-    # Status pill — pinned to the top-right of the header. Renders as a
-    # white chip with green text for ACTIVE and grey text for everything
-    # else, so a quick glance tells the operator if the campaign behind
-    # the numbers is still running.
+    # Status pill — pinned to the top-right of the header. White chip
+    # with caller-supplied color (green for ACTIVE, red for PAUSED,
+    # grey for archived/deleted). `gravity: top` keeps it at the top
+    # of the row even when the title wraps to two lines, and the
+    # explicit small height + xs text keeps the pill from stretching
+    # into a tall white square.
     title_row_contents: list[dict[str, Any]] = [
         {
             "type": "text",
@@ -257,20 +259,23 @@ def build_flex_report(
                 "type": "box",
                 "layout": "vertical",
                 "flex": 0,
-                "cornerRadius": "lg",
+                "gravity": "top",
+                "cornerRadius": "md",
                 "backgroundColor": "#FFFFFF",
-                "paddingTop": "2px",
-                "paddingBottom": "2px",
+                "height": "22px",
                 "paddingStart": "8px",
                 "paddingEnd": "8px",
                 "margin": "sm",
+                "justifyContent": "center",
                 "contents": [
                     {
                         "type": "text",
                         "text": status_label,
                         "size": "xs",
                         "weight": "bold",
-                        "color": "#16A34A" if status_active else "#888888",
+                        "color": status_color,
+                        "align": "center",
+                        "gravity": "center",
                     }
                 ],
             }
