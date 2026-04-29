@@ -133,7 +133,7 @@ export function HistoryView() {
 
             <div className="w-full overflow-x-auto">
               {!settingsReady ? (
-                <LoadingState title="載入歷史花費中..." loaded={loadedCount} total={totalCount} />
+                <LoadingState title="載入歷史花費中..." />
               ) : visibleAccounts.length === 0 ? (
                 <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
               ) : !selectedId ? (
@@ -143,6 +143,11 @@ export function HistoryView() {
                   title="載入歷史花費中..."
                   loaded={loadedCount}
                   total={totalCount}
+                  subtitle={
+                    totalCount > 1 && loadedCount > 0
+                      ? `${loadedCount} / ${totalCount} 個月份已載入`
+                      : undefined
+                  }
                   estimatedDurationMs={12000}
                 />
               ) : rows.length === 0 ? (
