@@ -127,11 +127,6 @@ function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => vo
               未指派
             </span>
           )}
-          {channel.is_default && !channel.is_orphan && (
-            <span className="shrink-0 whitespace-nowrap rounded-full bg-orange-bg px-1.5 py-[1px] text-[10px] font-semibold text-orange">
-              預設
-            </span>
-          )}
           {!channel.enabled && (
             <span className="shrink-0 whitespace-nowrap rounded-full bg-red-bg px-1.5 py-[1px] text-[10px] font-semibold text-red">
               已停用
@@ -216,13 +211,11 @@ function ChannelEditModal({
   const [secret, setSecret] = useState("");
   const [token, setToken] = useState("");
   const [enabled, setEnabled] = useState(channel?.enabled ?? true);
-  const [isDefault, setIsDefault] = useState(channel?.is_default ?? false);
 
   useEffect(() => {
     if (channel) {
       setName(channel.name);
       setEnabled(channel.enabled);
-      setIsDefault(channel.is_default);
     }
   }, [channel]);
 
@@ -244,7 +237,7 @@ function ChannelEditModal({
           channel_secret: secret.trim(),
           access_token: token.trim(),
           enabled,
-          is_default: isDefault,
+          is_default: false,
         });
         toast("已新增官方帳號", "success");
       } else if (channel) {
@@ -255,7 +248,7 @@ function ChannelEditModal({
             channel_secret: secret.trim(),
             access_token: token.trim(),
             enabled,
-            is_default: isDefault,
+            is_default: false,
           },
         });
         toast("已更新", "success");
@@ -307,26 +300,15 @@ function ChannelEditModal({
             className="h-9 w-full rounded-lg border border-border bg-white px-2.5 font-mono text-[12px] outline-none focus:border-orange"
           />
         </Field>
-        <div className="flex items-center gap-4">
-          <label className="flex cursor-pointer items-center gap-1.5 text-[13px] text-ink">
-            <input
-              type="checkbox"
-              className="custom-cb"
-              checked={enabled}
-              onChange={(e) => setEnabled(e.currentTarget.checked)}
-            />
-            啟用
-          </label>
-          <label className="flex cursor-pointer items-center gap-1.5 text-[13px] text-ink">
-            <input
-              type="checkbox"
-              className="custom-cb"
-              checked={isDefault}
-              onChange={(e) => setIsDefault(e.currentTarget.checked)}
-            />
-            設為預設(舊版 webhook URL 會路由到這個)
-          </label>
-        </div>
+        <label className="flex cursor-pointer items-center gap-1.5 text-[13px] text-ink">
+          <input
+            type="checkbox"
+            className="custom-cb"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.currentTarget.checked)}
+          />
+          啟用
+        </label>
         <div className="mt-1 flex items-center justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={onClose}>
             取消
