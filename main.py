@@ -2503,6 +2503,25 @@ def _compute_next_run(
     raise HTTPException(status_code=400, detail=f"Unknown frequency: {frequency}")
 
 
+def _coerce_date(v: Any) -> Any:
+    """Accept date / datetime / ISO string / None → return a date or None.
+
+    Helpers like `_date_range_to_preset` are called with values pulled
+    from both Pydantic payloads (str) and asyncpg row dicts already
+    serialised by `_config_row_to_dict` (also str via .isoformat()) AND
+    raw asyncpg.Record values (date). Normalise here so the helpers
+    don't have to care which path the value came from.
+    """
+    if v is None:
+        return None
+    if hasattr(v, "month"):  # date / datetime
+        return v
+    try:
+        return datetime.fromisoformat(str(v)).date()
+    except (TypeError, ValueError):
+        return None
+
+
 def _month_to_yesterday_bounds() -> tuple[Any, Any]:
     """Return (since, until) date objects for 本月1日 → 昨日 in SCHEDULER_TZ.
 
@@ -2544,9 +2563,14 @@ def _date_range_to_preset(
         )
         return ("last_30d", tr)
     if date_range == "custom" and date_from and date_to:
-        s = date_from.isoformat() if hasattr(date_from, "isoformat") else str(date_from)
-        u = date_to.isoformat() if hasattr(date_to, "isoformat") else str(date_to)
-        tr = _json.dumps({"since": s, "until": u}, separators=(",", ":"))
+        s = _coerce_date(date_from)
+        u = _coerce_date(date_to)
+        if s is None or u is None:
+            return ("last_7d", None)
+        tr = _json.dumps(
+            {"since": s.isoformat(), "until": u.isoformat()},
+            separators=(",", ":"),
+        )
         return ("last_30d", tr)
     return ("last_7d", None)
 
@@ -2559,9 +2583,9 @@ def _date_range_label(
     if date_range == "month_to_yesterday":
         since, until = _month_to_yesterday_bounds()
         return f"本月1日-昨日 ({since.month}/{since.day}-{until.month}/{until.day})"
-    if date_range == "custom" and date_from and date_to:
-        s = date_from if hasattr(date_from, "month") else None
-        u = date_to if hasattr(date_to, "month") else None
+    if date_range == "custom":
+        s = _coerce_date(date_from)
+        u = _coerce_date(date_to)
         if s and u:
             return f"自訂 ({s.month}/{s.day}-{u.month}/{u.day})"
         return "自訂"
@@ -2635,9 +2659,9 @@ def _date_range_concrete(
     if date_range == "month_to_yesterday":
         since, until = _month_to_yesterday_bounds()
         return f"{since.month}/{since.day} - {until.month}/{until.day}"
-    if date_range == "custom" and date_from and date_to:
-        s = date_from if hasattr(date_from, "month") else None
-        u = date_to if hasattr(date_to, "month") else None
+    if date_range == "custom":
+        s = _coerce_date(date_from)
+        u = _coerce_date(date_to)
         if s and u:
             return f"{s.month}/{s.day} - {u.month}/{u.day}"
     days = {"last_7d": 7, "last_14d": 14, "last_30d": 30}.get(date_range)
