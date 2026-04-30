@@ -183,12 +183,12 @@ function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => vo
         </button>
       </div>
 
-      {/* Secret + token masked — single line, comma-separated */}
+      {/* Secret + token masked — short preview only (4 dots + last 4 chars) */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-gray-300">
-        <span>
+        <span className="whitespace-nowrap">
           secret: <span className="font-mono">{channel.channel_secret_masked || "—"}</span>
         </span>
-        <span>
+        <span className="whitespace-nowrap">
           token: <span className="font-mono">{channel.access_token_masked || "—"}</span>
         </span>
       </div>
