@@ -2794,22 +2794,36 @@ async def _markup_for_campaign(campaign_id: str) -> float:
 async def _build_flex_for_config(cfg: dict) -> dict:
     """Produce the LINE Flex Message for one push config row.
 
-    Pulls the campaign via _fetch_campaigns_for_account and picks the
-    matching one by id. `_fetch_account_insights` would give an
-    account-level roll-up; we use per-campaign insights instead so
-    the recipient sees the exact campaign they're subscribed to.
+    Hits FB's per-campaign Graph endpoint directly (`GET /{campaign_id}`)
+    instead of `_fetch_campaigns_for_account` which would page through
+    every campaign on the account just to pick one — that fan-out is
+    the dominant latency in the manual「測試」button (5–15 s for big
+    accounts). Single-campaign lookup is one HTTP round-trip and
+    completes in well under a second.
     """
     account_id = cfg["account_id"]
     campaign_id = cfg["campaign_id"]
     date_range = cfg["date_range"]
     date_preset, time_range = _date_range_to_preset(date_range)
 
-    campaigns = await _fetch_campaigns_for_account(
-        account_id, date_preset, time_range, include_archived=True, lite=False
+    ins_clause = _insights_clause(
+        "spend,impressions,clicks,ctr,cpc,cpm,frequency,reach,actions",
+        date_preset,
+        time_range,
     )
-    camp = next((c for c in campaigns if c.get("id") == campaign_id), None)
-    if camp is None:
-        raise RuntimeError(f"Campaign {campaign_id} not found under {account_id}")
+    fields = f"id,name,status,objective,daily_budget,lifetime_budget,updated_time,{ins_clause}"
+    try:
+        camp = await fb_get(campaign_id, {"fields": fields})
+    except HTTPException:
+        # Fall back to the account-wide path if FB rejects the
+        # single-campaign request (e.g. campaign was archived in a
+        # way that needs the account-level filter to surface).
+        campaigns = await _fetch_campaigns_for_account(
+            account_id, date_preset, time_range, include_archived=True, lite=False
+        )
+        camp = next((c for c in campaigns if c.get("id") == campaign_id), None)
+        if camp is None:
+            raise RuntimeError(f"Campaign {campaign_id} not found under {account_id}")
 
     ins_list = (camp.get("insights") or {}).get("data") or []
     ins = ins_list[0] if ins_list else {}
