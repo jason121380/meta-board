@@ -126,9 +126,10 @@ export function LineGroupsContent() {
         </span>
       </div>
       <div className="overflow-x-auto rounded-xl border border-border bg-white">
-        <table className="w-full min-w-[480px] border-collapse text-[13px]">
+        <table className="w-full min-w-[600px] border-collapse text-[13px]">
           <thead className="border-b border-border bg-bg text-left">
             <tr>
+              <th className="px-3 py-2 font-semibold text-gray-500">推播官方帳號</th>
               <th className="px-3 py-2 font-semibold text-gray-500">群組</th>
               <th className="px-3 py-2 font-semibold text-gray-500">已設定的推播</th>
             </tr>
@@ -136,7 +137,7 @@ export function LineGroupsContent() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td className="px-3 py-4 text-center text-[12px] text-gray-300" colSpan={2}>
+                <td className="px-3 py-4 text-center text-[12px] text-gray-300" colSpan={3}>
                   無符合搜尋條件的群組
                 </td>
               </tr>
@@ -204,22 +205,21 @@ function GroupRow({
   return (
     <tr className="border-b border-border last:border-b-0 align-top">
       <td className="px-3 py-2.5">
-        <div className="flex items-center gap-2">
-          <span
-            className={cn("truncate font-bold", hasName ? "text-ink" : "text-gray-300")}
-            title={displayName}
-          >
-            {displayName}
+        {group.channel_name ? (
+          <span className="inline-block rounded-full bg-orange-bg px-2 py-[1px] text-[11px] font-semibold text-orange">
+            {group.channel_name}
           </span>
-          {group.channel_name && (
-            <span
-              className="shrink-0 rounded-full bg-orange-bg px-1.5 py-[1px] text-[10px] font-semibold text-orange"
-              title={`官方帳號:${group.channel_name}`}
-            >
-              {group.channel_name}
-            </span>
-          )}
-        </div>
+        ) : (
+          <span className="text-[11px] text-gray-300">—</span>
+        )}
+      </td>
+      <td className="px-3 py-2.5">
+        <span
+          className={cn("block truncate font-bold", hasName ? "text-ink" : "text-gray-300")}
+          title={displayName}
+        >
+          {displayName}
+        </span>
         <div className="mt-0.5 truncate font-mono text-[10px] text-gray-300">{group.group_id}</div>
       </td>
 
