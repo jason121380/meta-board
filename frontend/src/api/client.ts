@@ -32,7 +32,8 @@ export type LinePushDateRange =
   | "last_14d"
   | "last_30d"
   | "this_month"
-  | "month_to_yesterday";
+  | "month_to_yesterday"
+  | "custom";
 
 export interface LinePushConfig {
   id: string;
@@ -55,6 +56,11 @@ export interface LinePushConfig {
   include_report_button: boolean;
   /** Render the「優化建議」bullet list in the flex body. */
   include_recommendations: boolean;
+  /** Cached FB campaign name at save-time. Falls back to ID when empty. */
+  campaign_name?: string;
+  /** ISO YYYY-MM-DD; populated only when date_range === "custom". */
+  date_from?: string | null;
+  date_to?: string | null;
   last_run_at: string | null;
   next_run_at: string | null;
   last_error: string | null;
@@ -82,6 +88,12 @@ export interface LinePushConfigInput {
   report_fields?: string[];
   include_report_button?: boolean;
   include_recommendations?: boolean;
+  /** FB campaign name; cached on the row at save-time so the group
+   *  management UI doesn't have to fall back to the bare campaign_id. */
+  campaign_name?: string;
+  /** ISO YYYY-MM-DD; required when date_range === "custom". */
+  date_from?: string;
+  date_to?: string;
 }
 
 export class ApiError extends Error {

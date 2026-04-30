@@ -28,7 +28,20 @@ const DATE_RANGE_LABELS: Record<LinePushDateRange, string> = {
   last_30d: "過去 30 天",
   this_month: "本月",
   month_to_yesterday: "本月1日-昨日",
+  custom: "自訂區間",
 };
+
+function formatDateRangeLabel(cfg: LinePushConfig): string {
+  if (cfg.date_range === "custom" && cfg.date_from && cfg.date_to) {
+    // ISO YYYY-MM-DD → M/D - M/D for compact display
+    const f = (s: string) => {
+      const [, m, d] = s.split("-");
+      return `${Number.parseInt(m ?? "0", 10)}/${Number.parseInt(d ?? "0", 10)}`;
+    };
+    return `${f(cfg.date_from)}-${f(cfg.date_to)}`;
+  }
+  return DATE_RANGE_LABELS[cfg.date_range] ?? cfg.date_range;
+}
 
 function formatPushRule(cfg: LinePushConfig): string {
   const time = `${String(cfg.hour).padStart(2, "0")}:${String(cfg.minute).padStart(2, "0")}`;
@@ -358,8 +371,12 @@ function PushConfigRow({
   cfg: LinePushConfig & { campaign_nickname?: string };
   onEdit: (cfg: LinePushConfig) => void;
 }) {
-  const name = cfg.campaign_nickname?.trim() || cfg.campaign_id;
-  const dateLabel = DATE_RANGE_LABELS[cfg.date_range] ?? cfg.date_range;
+  // Display fallback: nickname (店家·設計師) → cached FB campaign name
+  // → campaign_id. Cached name comes from `campaign_name` persisted on
+  // the row at save-time, so the user sees「ICONI 南京 · Cherry 燙髮」
+  // instead of「6949544757391」when no team-wide nickname is set.
+  const name = cfg.campaign_nickname?.trim() || cfg.campaign_name?.trim() || cfg.campaign_id;
+  const dateLabel = formatDateRangeLabel(cfg);
   const rule = formatPushRule(cfg);
   const deleteMutation = useDeleteLinePushConfig();
   const testMutation = useTestLinePush();
