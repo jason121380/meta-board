@@ -3268,13 +3268,22 @@ async def list_line_channels(request: Request, fb_user_id: Optional[str] = None)
     if not uid:
         return {"data": []}
     async with _db_pool.acquire() as conn:
+        # LEFT JOIN to count active group bindings per channel — used
+        # by the UI to show「綁定 N 群組」 and gate the delete button.
         rows = await conn.fetch(
             """
-            SELECT id, name, channel_secret, access_token, enabled, is_default,
-                   owner_fb_user_id, created_at, updated_at
-            FROM line_channels
-            WHERE owner_fb_user_id = $1 OR owner_fb_user_id IS NULL
-            ORDER BY (owner_fb_user_id IS NULL) ASC, is_default DESC, created_at ASC
+            SELECT c.id, c.name, c.channel_secret, c.access_token, c.enabled, c.is_default,
+                   c.owner_fb_user_id, c.created_at, c.updated_at,
+                   COALESCE(g.cnt, 0) AS bound_groups_count
+            FROM line_channels c
+            LEFT JOIN (
+                SELECT channel_id, COUNT(*) AS cnt
+                FROM line_groups
+                WHERE left_at IS NULL
+                GROUP BY channel_id
+            ) g ON g.channel_id = c.id
+            WHERE c.owner_fb_user_id = $1 OR c.owner_fb_user_id IS NULL
+            ORDER BY (c.owner_fb_user_id IS NULL) ASC, c.is_default DESC, c.created_at ASC
             """,
             uid,
         )
@@ -3305,6 +3314,7 @@ async def list_line_channels(request: Request, fb_user_id: Optional[str] = None)
                 "is_default": r["is_default"],
                 "is_orphan": is_orphan,
                 "editable": owner == uid,
+                "bound_groups_count": int(r["bound_groups_count"] or 0),
                 "webhook_url": _public_channel_url(request, cid),
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None,
                 "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,

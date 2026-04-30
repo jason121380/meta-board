@@ -552,6 +552,7 @@ export const api = {
           is_default: boolean;
           is_orphan: boolean;
           editable: boolean;
+          bound_groups_count: number;
           webhook_url: string;
           created_at: string | null;
           updated_at: string | null;
