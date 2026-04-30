@@ -1,4 +1,5 @@
 import {
+  useClaimLineChannel,
   useCreateLineChannel,
   useDeleteLineChannel,
   useLineChannels,
@@ -18,6 +19,8 @@ interface ChannelRow {
   access_token_masked: string;
   enabled: boolean;
   is_default: boolean;
+  is_orphan: boolean;
+  editable: boolean;
   webhook_url: string;
 }
 
@@ -70,6 +73,7 @@ export function LineChannelsContent() {
 
 function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => void }) {
   const deleteMutation = useDeleteLineChannel();
+  const claimMutation = useClaimLineChannel();
 
   const onCopyWebhook = async () => {
     try {
@@ -91,6 +95,17 @@ function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => vo
     }
   };
 
+  const onClaim = async () => {
+    const ok = await confirm(`認領「${channel.name}」這個官方帳號?認領後它會歸屬於你的 FB 帳號。`);
+    if (!ok) return;
+    try {
+      await claimMutation.mutateAsync(channel.id);
+      toast("已認領", "success");
+    } catch (e) {
+      toast(`認領失敗:${e instanceof Error ? e.message : String(e)}`, "error", 4500);
+    }
+  };
+
   return (
     <li className="flex flex-col gap-2 px-3 py-3">
       {/* Top row: name + chips on left, action buttons on right */}
@@ -99,12 +114,20 @@ function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => vo
           <span
             className={cn(
               "truncate text-[13px] font-bold",
-              !channel.enabled && "text-gray-300",
+              (!channel.enabled || channel.is_orphan) && "text-gray-300",
             )}
           >
             {channel.name}
           </span>
-          {channel.is_default && (
+          {channel.is_orphan && (
+            <span
+              className="shrink-0 whitespace-nowrap rounded-full bg-bg px-1.5 py-[1px] text-[10px] font-semibold text-gray-500"
+              title="此官方帳號目前沒有擁有者(舊資料);點認領變成你的"
+            >
+              未指派
+            </span>
+          )}
+          {channel.is_default && !channel.is_orphan && (
             <span className="shrink-0 whitespace-nowrap rounded-full bg-orange-bg px-1.5 py-[1px] text-[10px] font-semibold text-orange">
               預設
             </span>
@@ -116,21 +139,34 @@ function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => vo
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={onEdit}
-            className="rounded border border-border px-1.5 py-0.5 text-[10px] text-gray-500 hover:border-orange hover:text-orange"
-          >
-            編輯
-          </button>
-          <button
-            type="button"
-            onClick={onDelete}
-            disabled={deleteMutation.isPending}
-            className="rounded border border-border px-1.5 py-0.5 text-[10px] text-red hover:border-red hover:bg-red-bg disabled:opacity-50"
-          >
-            {deleteMutation.isPending ? "刪除中" : "刪除"}
-          </button>
+          {channel.is_orphan ? (
+            <button
+              type="button"
+              onClick={onClaim}
+              disabled={claimMutation.isPending}
+              className="rounded border border-orange px-1.5 py-0.5 text-[10px] font-semibold text-orange hover:bg-orange-bg disabled:opacity-50"
+            >
+              {claimMutation.isPending ? "認領中..." : "認領"}
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onEdit}
+                className="rounded border border-border px-1.5 py-0.5 text-[10px] text-gray-500 hover:border-orange hover:text-orange"
+              >
+                編輯
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={deleteMutation.isPending}
+                className="rounded border border-border px-1.5 py-0.5 text-[10px] text-red hover:border-red hover:bg-red-bg disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? "刪除中" : "刪除"}
+              </button>
+            </>
+          )}
         </div>
       </div>
 

@@ -77,6 +77,19 @@ export function useDeleteLineChannel() {
   });
 }
 
+export function useClaimLineChannel() {
+  const qc = useQueryClient();
+  const { user } = useFbAuth();
+  return useMutation({
+    mutationFn: (id: string) => api.lineChannels.claim(user?.id ?? "", id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: CHANNELS_KEY });
+      qc.invalidateQueries({ queryKey: GROUPS_KEY });
+      qc.invalidateQueries({ queryKey: GROUP_CONFIGS_PREFIX });
+    },
+  });
+}
+
 export function useLineGroups() {
   return useQuery({
     queryKey: GROUPS_KEY,

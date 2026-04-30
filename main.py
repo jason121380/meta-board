@@ -3251,10 +3251,16 @@ def _public_channel_url(request: Request, channel_id: str) -> str:
 
 @app.get("/api/line-channels")
 async def list_line_channels(request: Request, fb_user_id: Optional[str] = None):
-    """List LINE Official Accounts owned by the calling FB user.
+    """List LINE Official Accounts visible to the calling FB user.
 
-    Strict per-user model — channels owned by other users (or NULL,
-    legacy/orphan) are invisible. Each user adds their own OAs.
+    Visibility:
+      - Channels owned by the caller → editable
+      - Orphan channels (`owner_fb_user_id IS NULL`, pre-2026-04-30
+        seed/legacy) → shown to ALL users with `is_orphan: true` and
+        a「認領」button. First-come-first-served: clicking 認領 calls
+        POST /api/line-channels/{id}/claim and sets the caller as
+        owner. Other users with their own owned channels won't see
+        someone else's private OA.
     """
     if _db_pool is None:
         return {"data": []}
@@ -3267,8 +3273,8 @@ async def list_line_channels(request: Request, fb_user_id: Optional[str] = None)
             SELECT id, name, channel_secret, access_token, enabled, is_default,
                    owner_fb_user_id, created_at, updated_at
             FROM line_channels
-            WHERE owner_fb_user_id = $1
-            ORDER BY is_default DESC, created_at ASC
+            WHERE owner_fb_user_id = $1 OR owner_fb_user_id IS NULL
+            ORDER BY (owner_fb_user_id IS NULL) ASC, is_default DESC, created_at ASC
             """,
             uid,
         )
@@ -3277,6 +3283,8 @@ async def list_line_channels(request: Request, fb_user_id: Optional[str] = None)
         cid = str(r["id"])
         tok = r["access_token"] or ""
         sec = r["channel_secret"] or ""
+        owner = r["owner_fb_user_id"]
+        is_orphan = owner is None
         out.append(
             {
                 "id": cid,
@@ -3285,14 +3293,42 @@ async def list_line_channels(request: Request, fb_user_id: Optional[str] = None)
                 "access_token_masked": ("•" * max(0, len(tok) - 4)) + tok[-4:] if tok else "",
                 "enabled": r["enabled"],
                 "is_default": r["is_default"],
-                "is_shared": False,
-                "editable": True,
+                "is_orphan": is_orphan,
+                "editable": owner == uid,
                 "webhook_url": _public_channel_url(request, cid),
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None,
                 "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
             }
         )
     return {"data": out}
+
+
+@app.post("/api/line-channels/{channel_id}/claim")
+async def claim_line_channel(channel_id: str, fb_user_id: Optional[str] = None):
+    """Take ownership of an orphan channel (one created pre-ownership
+    migration, owner_fb_user_id IS NULL). Refuses if the channel
+    already has an owner — caller would have to ask the existing
+    owner to transfer.
+    """
+    pool = _require_db()
+    uid = (fb_user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="fb_user_id 必填")
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT owner_fb_user_id FROM line_channels WHERE id = $1::uuid",
+            channel_id,
+        )
+        if row is None:
+            raise HTTPException(status_code=404, detail="Channel not found")
+        if row["owner_fb_user_id"] is not None:
+            raise HTTPException(status_code=409, detail="此官方帳號已有擁有者")
+        await conn.execute(
+            "UPDATE line_channels SET owner_fb_user_id = $1, updated_at = NOW() WHERE id = $2::uuid",
+            uid,
+            channel_id,
+        )
+    return {"ok": True}
 
 
 @app.post("/api/line-channels")

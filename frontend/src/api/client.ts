@@ -550,7 +550,7 @@ export const api = {
           access_token_masked: string;
           enabled: boolean;
           is_default: boolean;
-          is_shared: boolean;
+          is_orphan: boolean;
           editable: boolean;
           webhook_url: string;
           created_at: string | null;
@@ -590,6 +590,13 @@ export const api = {
       request<{ ok: boolean }>("DELETE", `/api/line-channels/${encodeURIComponent(id)}`, {
         query: { fb_user_id: fbUserId },
       }),
+    /** Claim a NULL-owner orphan channel for the calling user. */
+    claim: (fbUserId: string, id: string) =>
+      request<{ ok: boolean }>(
+        "POST",
+        `/api/line-channels/${encodeURIComponent(id)}/claim`,
+        { query: { fb_user_id: fbUserId } },
+      ),
   },
 
   linePush: {
