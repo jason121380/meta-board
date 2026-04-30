@@ -91,9 +91,12 @@ export function useClaimLineChannel() {
 }
 
 export function useLineGroups() {
+  const { user } = useFbAuth();
+  const uid = user?.id ?? "";
   return useQuery({
-    queryKey: GROUPS_KEY,
-    queryFn: async () => (await api.linePush.listGroups()).data,
+    queryKey: ["lineGroups", uid] as const,
+    queryFn: async () => (await api.linePush.listGroups(uid)).data,
+    enabled: !!uid,
     staleTime: 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });
@@ -110,10 +113,12 @@ export function useRefreshLineGroupName() {
 }
 
 export function useLineGroupPushConfigs(groupId: string | null | undefined) {
+  const { user } = useFbAuth();
+  const uid = user?.id ?? "";
   return useQuery({
-    queryKey: ["lineGroupConfigs", groupId ?? ""] as const,
-    queryFn: async () => (await api.linePush.listGroupConfigs(groupId ?? "")).data,
-    enabled: !!groupId,
+    queryKey: ["lineGroupConfigs", uid, groupId ?? ""] as const,
+    queryFn: async () => (await api.linePush.listGroupConfigs(uid, groupId ?? "")).data,
+    enabled: !!groupId && !!uid,
     staleTime: 30 * 1000,
     gcTime: 5 * 60 * 1000,
   });

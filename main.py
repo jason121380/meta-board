@@ -3471,16 +3471,23 @@ async def delete_line_channel(channel_id: str, fb_user_id: Optional[str] = None)
 
 
 @app.get("/api/line-groups")
-async def list_line_groups():
-    """Return only groups the bot is currently a member of.
+async def list_line_groups(fb_user_id: Optional[str] = None):
+    """Return groups visible to the calling FB user.
+
+    Visibility rule (matches the channel list):
+      - Groups whose channel is owned by the caller → visible
+      - Groups whose channel is orphan (owner IS NULL) → visible
+        (so the caller can claim the channel)
+      - Groups whose channel is owned by someone else → invisible
 
     Rows with `left_at IS NOT NULL` (bot was kicked / left the group)
     stay in DB for history but are filtered out so the management UI
-    only shows actionable groups. Use POST /api/line-groups/refresh-all
-    to detect groups whose membership ended without a `leave` webhook
-    (e.g. token rotation, missed webhook delivery).
+    only shows actionable groups.
     """
     if _db_pool is None:
+        return {"data": []}
+    uid = (fb_user_id or "").strip()
+    if not uid:
         return {"data": []}
     async with _db_pool.acquire() as conn:
         rows = await conn.fetch(
@@ -3492,8 +3499,10 @@ async def list_line_groups():
             FROM line_groups g
             LEFT JOIN line_channels c ON c.id = g.channel_id
             WHERE g.left_at IS NULL
+              AND (c.owner_fb_user_id = $1 OR c.owner_fb_user_id IS NULL)
             ORDER BY g.joined_at DESC
-            """
+            """,
+            uid,
         )
     return {
         "data": [
@@ -3513,19 +3522,36 @@ async def list_line_groups():
 
 
 @app.get("/api/line-groups/{group_id}/push-configs")
-async def list_group_push_configs(group_id: str):
+async def list_group_push_configs(group_id: str, fb_user_id: Optional[str] = None):
     """List push configs that target this LINE group, joined with the
     campaign nickname (店家 · 設計師) so the UI can show "this group
     receives X campaigns" without making the user open every campaign.
 
-    The FB-side campaign name is NOT included — fetching it would
-    require an FB Graph API call per row, and operators usually pin
-    a nickname anyway. Falls back to campaign_id when the nickname
-    is empty.
+    Scoped to the caller: refuses to list configs on a group whose
+    channel is owned by another user (matches the channel/group
+    visibility rule).
     """
     if _db_pool is None:
         return {"data": []}
+    uid = (fb_user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="fb_user_id 必填")
     async with _db_pool.acquire() as conn:
+        owner_row = await conn.fetchrow(
+            """
+            SELECT c.owner_fb_user_id
+            FROM line_groups g
+            LEFT JOIN line_channels c ON c.id = g.channel_id
+            WHERE g.group_id = $1
+            """,
+            group_id,
+        )
+        if owner_row is None:
+            raise HTTPException(status_code=404, detail="Group not found")
+        owner = owner_row["owner_fb_user_id"]
+        # Visible if caller owns the channel OR channel is orphan.
+        if owner is not None and owner != uid:
+            raise HTTPException(status_code=403, detail="無權限檢視此群組的推播設定")
         rows = await conn.fetch(
             """
             SELECT pc.*, n.store, n.designer,
@@ -3593,12 +3619,12 @@ async def refresh_line_group_name(group_id: str):
 
 
 @app.post("/api/line-groups/refresh-all")
-async def refresh_all_line_groups():
-    """Bulk refresh: for every active group, re-fetch the LINE display
-    name and detect stale memberships.
+async def refresh_all_line_groups(fb_user_id: Optional[str] = None):
+    """Bulk refresh: for the calling user's channels only, re-fetch
+    each group's LINE display name and detect stale memberships.
 
     Powered by the LINE 推播設定 page's top-right refresh button. For
-    each row with `left_at IS NULL` we call `get_group_summary`:
+    each row whose channel is owned by the caller (or is orphan, NULL):
       - Success → update `group_name` (picks up rename inside LINE).
       - None    → bot can't see the group anymore (kicked / token bad
                   / etc.). Set `left_at = NOW()` so the row drops out
@@ -3610,15 +3636,20 @@ async def refresh_all_line_groups():
     pool = _require_db()
     if _http_client is None:
         raise HTTPException(status_code=503, detail="HTTP client not ready")
+    uid = (fb_user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="fb_user_id 必填")
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT g.group_id, c.access_token
             FROM line_groups g
-            LEFT JOIN line_channels c
-                ON c.id = COALESCE(g.channel_id, (SELECT id FROM line_channels WHERE is_default LIMIT 1))
-            WHERE g.left_at IS NULL AND c.enabled
-            """
+            LEFT JOIN line_channels c ON c.id = g.channel_id
+            WHERE g.left_at IS NULL
+              AND c.enabled
+              AND (c.owner_fb_user_id = $1 OR c.owner_fb_user_id IS NULL)
+            """,
+            uid,
         )
     targets = [(r["group_id"], r["access_token"] or "") for r in rows]
     if not targets:
