@@ -18,8 +18,52 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
  * configuration happens via the Settings → LINE 推播設定 page.
  */
 
+const CHANNELS_KEY = ["lineChannels"] as const;
 const GROUPS_KEY = ["lineGroups"] as const;
 const GROUP_CONFIGS_PREFIX = ["lineGroupConfigs"] as const;
+
+// ── Channels (multi-OA) ───────────────────────────────────────
+
+export function useLineChannels() {
+  return useQuery({
+    queryKey: CHANNELS_KEY,
+    queryFn: async () => (await api.lineChannels.list()).data,
+    staleTime: 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+}
+
+export function useCreateLineChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.lineChannels.create,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: CHANNELS_KEY });
+    },
+  });
+}
+
+export function useUpdateLineChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Parameters<typeof api.lineChannels.update>[1] }) =>
+      api.lineChannels.update(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: CHANNELS_KEY });
+      qc.invalidateQueries({ queryKey: GROUPS_KEY });
+    },
+  });
+}
+
+export function useDeleteLineChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.lineChannels.delete(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: CHANNELS_KEY });
+    },
+  });
+}
 
 export function useLineGroups() {
   return useQuery({

@@ -190,6 +190,32 @@ async def lifespan(app: FastAPI):
                     await conn.execute('CREATE EXTENSION IF NOT EXISTS "pgcrypto"')
                 except Exception as exc:
                     print(f"[startup] DB: pgcrypto extension skipped ({exc})", flush=True)
+                # `line_channels` (multi-OA, 2026-04-30): one row per
+                # LINE Official Account we push from. Tokens are stored
+                # plaintext for now to match `_fb_runtime_token`'s
+                # current handling; the P0 audit will encrypt both at
+                # the same time using TOKEN_ENC_KEY (Fernet).
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS line_channels (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        name TEXT NOT NULL,
+                        channel_secret TEXT NOT NULL,
+                        access_token TEXT NOT NULL,
+                        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                        is_default BOOLEAN NOT NULL DEFAULT FALSE,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+                # Only one row may carry is_default = TRUE.
+                await conn.execute(
+                    """
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_line_channels_one_default
+                    ON line_channels ((1)) WHERE is_default
+                    """
+                )
                 # `line_groups`: populated from the /api/line/webhook
                 # join/leave events. We keep left_at instead of deleting
                 # so existing push configs don't lose their FK target.
@@ -210,6 +236,16 @@ async def lifespan(app: FastAPI):
                     """
                     ALTER TABLE line_groups
                     ADD COLUMN IF NOT EXISTS group_name TEXT NOT NULL DEFAULT ''
+                    """
+                )
+                # Multi-channel (2026-04-30): which OA owns this group.
+                # NULL means "default channel" (the one seeded from env).
+                # Webhook handler sets it to the channel whose URL the
+                # join event came in on.
+                await conn.execute(
+                    """
+                    ALTER TABLE line_groups
+                    ADD COLUMN IF NOT EXISTS channel_id UUID REFERENCES line_channels(id)
                     """
                 )
                 # `campaign_line_push_configs`: one row per
@@ -407,6 +443,52 @@ async def lifespan(app: FastAPI):
                     print("[startup] runtime FB token: restored from PG", flush=True)
         except Exception as exc:
             print(f"[startup] runtime token restore failed: {exc}", flush=True)
+
+    # Seed the default LINE channel from env vars if no channels exist
+    # yet. This preserves backward compat: the existing single-OA
+    # deployment migrates seamlessly to the new multi-channel schema.
+    # Also retroactively assigns existing line_groups (channel_id NULL)
+    # to the default channel so per-channel token lookup works for them.
+    if _db_pool is not None:
+        try:
+            async with _db_pool.acquire() as conn:
+                count = await conn.fetchval("SELECT COUNT(*) FROM line_channels")
+                if count == 0:
+                    env_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
+                    env_secret = os.getenv("LINE_CHANNEL_SECRET", "")
+                    if env_token and env_secret:
+                        new_id = await conn.fetchval(
+                            """
+                            INSERT INTO line_channels
+                                (name, channel_secret, access_token, is_default)
+                            VALUES ($1, $2, $3, TRUE)
+                            RETURNING id
+                            """,
+                            "預設",
+                            env_secret,
+                            env_token,
+                        )
+                        print(
+                            f"[startup] LINE channels: seeded default from env (id={new_id})",
+                            flush=True,
+                        )
+                # Backfill orphan groups → default channel.
+                default_id = await conn.fetchval(
+                    "SELECT id FROM line_channels WHERE is_default LIMIT 1"
+                )
+                if default_id is not None:
+                    n = await conn.fetchval(
+                        """
+                        UPDATE line_groups
+                        SET channel_id = $1
+                        WHERE channel_id IS NULL
+                        """,
+                        default_id,
+                    )
+                    if n:
+                        print(f"[startup] LINE channels: backfilled {n} orphan groups", flush=True)
+        except Exception as exc:
+            print(f"[startup] LINE channels seed failed: {exc}", flush=True)
 
     # Start the LINE push scheduler loop only when the DB is available.
     # Without DB there's nothing to schedule off, so skip silently.
@@ -2506,6 +2588,65 @@ def _date_range_concrete(date_range: str) -> str:
     return ""
 
 
+# ── LINE channel helpers (multi-OA) ───────────────────────────
+#
+# Every push or summary call needs the right (channel_secret,
+# access_token) pair, picked by the group's `channel_id`. These
+# helpers centralise the lookup so call sites don't all carry the
+# same JOIN / fallback logic.
+
+
+async def _channel_creds_by_id(channel_id: str) -> Optional[tuple[str, str, str]]:
+    """Return (id, channel_secret, access_token) for one channel, or None."""
+    if _db_pool is None:
+        return None
+    async with _db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, channel_secret, access_token FROM line_channels WHERE id = $1::uuid AND enabled",
+            channel_id,
+        )
+    if row is None:
+        return None
+    return str(row["id"]), row["channel_secret"], row["access_token"]
+
+
+async def _default_channel_creds() -> Optional[tuple[str, str, str]]:
+    """Return (id, secret, access_token) for the default channel."""
+    if _db_pool is None:
+        return None
+    async with _db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, channel_secret, access_token FROM line_channels WHERE is_default AND enabled LIMIT 1"
+        )
+    if row is None:
+        return None
+    return str(row["id"]), row["channel_secret"], row["access_token"]
+
+
+async def _channel_creds_for_group(group_id: str) -> Optional[tuple[str, str, str]]:
+    """Resolve a group_id to its channel's (id, secret, token).
+
+    Falls back to the default channel if the group's channel_id is NULL
+    (legacy rows that haven't been backfilled yet).
+    """
+    if _db_pool is None:
+        return None
+    async with _db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT c.id, c.channel_secret, c.access_token
+            FROM line_groups g
+            LEFT JOIN line_channels c
+                ON c.id = COALESCE(g.channel_id, (SELECT id FROM line_channels WHERE is_default LIMIT 1))
+            WHERE g.group_id = $1 AND c.enabled
+            """,
+            group_id,
+        )
+    if row is None:
+        return None
+    return str(row["id"]), row["channel_secret"], row["access_token"]
+
+
 async def _backfill_line_group_names() -> None:
     """One-shot startup task: pull `groupName` from LINE for any
     `line_groups` rows where the bot is still in the group
@@ -2519,9 +2660,12 @@ async def _backfill_line_group_names() -> None:
         async with _db_pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT group_id FROM line_groups
-                WHERE left_at IS NULL AND COALESCE(group_name, '') = ''
-                ORDER BY joined_at DESC
+                SELECT g.group_id, c.access_token
+                FROM line_groups g
+                LEFT JOIN line_channels c
+                    ON c.id = COALESCE(g.channel_id, (SELECT id FROM line_channels WHERE is_default LIMIT 1))
+                WHERE g.left_at IS NULL AND COALESCE(g.group_name, '') = ''
+                ORDER BY g.joined_at DESC
                 """
             )
         if not rows:
@@ -2531,16 +2675,14 @@ async def _backfill_line_group_names() -> None:
             flush=True,
         )
 
-        # Parallelize the LINE summary fetches — sequential calls used
-        # to take O(N × LINE_API_LATENCY) on every restart, blocking
-        # this background task for minutes. Cap concurrency at 8 to
-        # stay polite to the LINE bot endpoint.
         sem = asyncio.Semaphore(8)
 
-        async def _fetch_one(gid: str) -> tuple[str, Optional[str]]:
+        async def _fetch_one(gid: str, token: str) -> tuple[str, Optional[str]]:
             async with sem:
                 try:
-                    summary = await line_client.get_group_summary(_http_client, gid)
+                    summary = await line_client.get_group_summary(
+                        _http_client, gid, access_token=token or ""
+                    )
                 except Exception as exc:
                     print(f"[startup] backfill summary failed {gid}: {exc}", flush=True)
                     return gid, None
@@ -2549,7 +2691,8 @@ async def _backfill_line_group_names() -> None:
                 return gid, (summary.get("groupName") or "").strip() or None
 
         results = await asyncio.gather(
-            *[_fetch_one(r["group_id"]) for r in rows], return_exceptions=False
+            *[_fetch_one(r["group_id"], r["access_token"] or "") for r in rows],
+            return_exceptions=False,
         )
 
         async with _db_pool.acquire() as conn:
@@ -2955,22 +3098,18 @@ async def _build_flex_for_config(cfg: dict) -> dict:
 
 # ── LINE webhook ──────────────────────────────────────────────
 
-@app.post("/api/line/webhook")
-async def line_webhook(request: Request):
-    """Receive LINE join/leave events and upsert line_groups rows.
 
-    LINE Platform expects a <10s 200 OK response. We do the minimum
-    here (verify signature, write DB) and return fast. Any parsing
-    error is swallowed and still returns 200 to keep LINE from
-    retrying aggressively.
+async def _handle_line_webhook(request: Request, channel: tuple[str, str, str]) -> dict:
+    """Shared webhook handling: verify signature with the channel's
+    secret, then upsert line_groups rows tagged with the channel's id.
     """
+    channel_id, channel_secret, access_token = channel
     raw = await request.body()
     sig = request.headers.get("X-Line-Signature")
-    if not line_client.verify_webhook_signature(raw, sig):
+    if not line_client.verify_webhook_signature(raw, sig, secret=channel_secret):
         raise HTTPException(status_code=401, detail="Invalid signature")
 
     if _db_pool is None:
-        # Still 200 so LINE doesn't retry; operator can fix DB later.
         return {"ok": True, "skipped": "no DB"}
 
     try:
@@ -2991,22 +3130,21 @@ async def line_webhook(request: Request):
             if not group_id:
                 continue
             if etype == "join":
-                # Fetch the real LINE group display name so the UI
-                # can show something more meaningful than a 32-char
-                # hash. Failure is non-fatal — we still record the
-                # join so push configs can be created.
                 group_name = ""
                 if _http_client is not None:
-                    summary = await line_client.get_group_summary(_http_client, group_id)
+                    summary = await line_client.get_group_summary(
+                        _http_client, group_id, access_token=access_token
+                    )
                     if summary:
                         group_name = (summary.get("groupName") or "").strip()
                 await conn.execute(
                     """
-                    INSERT INTO line_groups (group_id, group_name, joined_at, left_at)
-                    VALUES ($1, $2, NOW(), NULL)
+                    INSERT INTO line_groups (group_id, group_name, channel_id, joined_at, left_at)
+                    VALUES ($1, $2, $3::uuid, NOW(), NULL)
                     ON CONFLICT (group_id) DO UPDATE
                     SET joined_at = NOW(),
                         left_at = NULL,
+                        channel_id = EXCLUDED.channel_id,
                         group_name = CASE
                             WHEN EXCLUDED.group_name <> '' THEN EXCLUDED.group_name
                             ELSE line_groups.group_name
@@ -3014,14 +3152,192 @@ async def line_webhook(request: Request):
                     """,
                     group_id,
                     group_name,
+                    channel_id,
                 )
-                print(f"[line_webhook] joined group={group_id} name={group_name!r}", flush=True)
+                print(
+                    f"[line_webhook] joined group={group_id} name={group_name!r} channel={channel_id}",
+                    flush=True,
+                )
             elif etype == "leave":
                 await conn.execute(
                     "UPDATE line_groups SET left_at = NOW() WHERE group_id = $1",
                     group_id,
                 )
-                print(f"[line_webhook] left group={group_id}", flush=True)
+                print(f"[line_webhook] left group={group_id} channel={channel_id}", flush=True)
+    return {"ok": True}
+
+
+@app.post("/api/line/webhook")
+async def line_webhook_default(request: Request):
+    """Legacy webhook URL — routes to the default channel.
+
+    Existing LINE Console setups point at this URL; we keep it as
+    an alias so users don't have to update the webhook URL there
+    after the multi-channel migration.
+    """
+    creds = await _default_channel_creds()
+    if creds is None:
+        raise HTTPException(status_code=503, detail="No default LINE channel configured")
+    return await _handle_line_webhook(request, creds)
+
+
+@app.post("/api/line/webhook/{channel_id}")
+async def line_webhook_channel(channel_id: str, request: Request):
+    """Per-channel webhook URL — paste this into LINE Developers
+    Console for additional Official Accounts. Each OA has its own
+    channel_id and verifies signatures with its own secret.
+    """
+    creds = await _channel_creds_by_id(channel_id)
+    if creds is None:
+        raise HTTPException(status_code=404, detail="Channel not found or disabled")
+    return await _handle_line_webhook(request, creds)
+
+
+# ── LINE channels (multi-OA) management ───────────────────────
+
+
+class LineChannelPayload(BaseModel):
+    name: str
+    channel_secret: str
+    access_token: str
+    enabled: bool = True
+    is_default: bool = False
+
+
+def _public_channel_url(request: Request, channel_id: str) -> str:
+    """Build the public webhook URL the user pastes into LINE Console."""
+    base = str(request.base_url).rstrip("/")
+    return f"{base}/api/line/webhook/{channel_id}"
+
+
+@app.get("/api/line-channels")
+async def list_line_channels(request: Request):
+    """List all configured LINE Official Accounts.
+
+    Tokens are returned masked (last 4 chars only) — full values stay
+    server-side. Webhook URL is computed from the request host so the
+    operator can copy-paste it straight into LINE Developers Console.
+    """
+    if _db_pool is None:
+        return {"data": []}
+    async with _db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, name, channel_secret, access_token, enabled, is_default,
+                   created_at, updated_at
+            FROM line_channels
+            ORDER BY is_default DESC, created_at ASC
+            """
+        )
+    out = []
+    for r in rows:
+        cid = str(r["id"])
+        tok = r["access_token"] or ""
+        sec = r["channel_secret"] or ""
+        out.append(
+            {
+                "id": cid,
+                "name": r["name"],
+                "channel_secret_masked": ("•" * max(0, len(sec) - 4)) + sec[-4:] if sec else "",
+                "access_token_masked": ("•" * max(0, len(tok) - 4)) + tok[-4:] if tok else "",
+                "enabled": r["enabled"],
+                "is_default": r["is_default"],
+                "webhook_url": _public_channel_url(request, cid),
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+            }
+        )
+    return {"data": out}
+
+
+@app.post("/api/line-channels")
+async def create_line_channel(payload: LineChannelPayload):
+    pool = _require_db()
+    name = (payload.name or "").strip()
+    secret = (payload.channel_secret or "").strip()
+    token = (payload.access_token or "").strip()
+    if not name or not secret or not token:
+        raise HTTPException(status_code=400, detail="name / channel_secret / access_token 都必填")
+    async with pool.acquire() as conn:
+        if payload.is_default:
+            await conn.execute("UPDATE line_channels SET is_default = FALSE WHERE is_default")
+        new_id = await conn.fetchval(
+            """
+            INSERT INTO line_channels (name, channel_secret, access_token, enabled, is_default)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+            """,
+            name,
+            secret,
+            token,
+            payload.enabled,
+            payload.is_default,
+        )
+    return {"ok": True, "id": str(new_id)}
+
+
+@app.put("/api/line-channels/{channel_id}")
+async def update_line_channel(channel_id: str, payload: LineChannelPayload):
+    pool = _require_db()
+    name = (payload.name or "").strip()
+    secret = (payload.channel_secret or "").strip()
+    token = (payload.access_token or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name 必填")
+    async with pool.acquire() as conn:
+        if payload.is_default:
+            await conn.execute(
+                "UPDATE line_channels SET is_default = FALSE WHERE is_default AND id <> $1::uuid",
+                channel_id,
+            )
+        # Empty secret/token = "keep existing" so the masked UI doesn't
+        # have to round-trip the real value.
+        result = await conn.execute(
+            """
+            UPDATE line_channels
+            SET name = $1,
+                channel_secret = CASE WHEN $2 = '' THEN channel_secret ELSE $2 END,
+                access_token = CASE WHEN $3 = '' THEN access_token ELSE $3 END,
+                enabled = $4,
+                is_default = $5,
+                updated_at = NOW()
+            WHERE id = $6::uuid
+            """,
+            name,
+            secret,
+            token,
+            payload.enabled,
+            payload.is_default,
+            channel_id,
+        )
+        if result.endswith("0"):
+            raise HTTPException(status_code=404, detail="Channel not found")
+    return {"ok": True}
+
+
+@app.delete("/api/line-channels/{channel_id}")
+async def delete_line_channel(channel_id: str):
+    """Refuse to delete a channel that still owns groups — would orphan
+    them and break per-channel push routing. Caller must reassign or
+    leave those groups first.
+    """
+    pool = _require_db()
+    async with pool.acquire() as conn:
+        n = await conn.fetchval(
+            "SELECT COUNT(*) FROM line_groups WHERE channel_id = $1::uuid AND left_at IS NULL",
+            channel_id,
+        )
+        if n and int(n) > 0:
+            raise HTTPException(
+                status_code=409,
+                detail=f"無法刪除:此官方帳號仍有 {n} 個進行中的群組綁定",
+            )
+        result = await conn.execute(
+            "DELETE FROM line_channels WHERE id = $1::uuid",
+            channel_id,
+        )
+        if result.endswith("0"):
+            raise HTTPException(status_code=404, detail="Channel not found")
     return {"ok": True}
 
 
@@ -3043,10 +3359,13 @@ async def list_line_groups():
     async with _db_pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT group_id, group_name, label, joined_at, left_at
-            FROM line_groups
-            WHERE left_at IS NULL
-            ORDER BY joined_at DESC
+            SELECT g.group_id, g.group_name, g.label, g.joined_at, g.left_at,
+                   g.channel_id,
+                   COALESCE(c.name, '') AS channel_name
+            FROM line_groups g
+            LEFT JOIN line_channels c ON c.id = g.channel_id
+            WHERE g.left_at IS NULL
+            ORDER BY g.joined_at DESC
             """
         )
     return {
@@ -3055,6 +3374,8 @@ async def list_line_groups():
                 "group_id": r["group_id"],
                 "group_name": r["group_name"],
                 "label": r["label"],
+                "channel_id": str(r["channel_id"]) if r["channel_id"] else None,
+                "channel_name": r["channel_name"] or "",
                 "joined_at": r["joined_at"].isoformat() if r["joined_at"] else None,
                 "left_at": r["left_at"].isoformat() if r["left_at"] else None,
             }
@@ -3112,7 +3433,12 @@ async def refresh_line_group_name(group_id: str):
     pool = _require_db()
     if _http_client is None:
         raise HTTPException(status_code=503, detail="HTTP client not ready")
-    summary = await line_client.get_group_summary(_http_client, group_id)
+    creds = await _channel_creds_for_group(group_id)
+    if creds is None:
+        raise HTTPException(status_code=404, detail="Group not bound to an enabled channel")
+    summary = await line_client.get_group_summary(
+        _http_client, group_id, access_token=creds[2]
+    )
     if not summary:
         raise HTTPException(
             status_code=502,
@@ -3150,24 +3476,34 @@ async def refresh_all_line_groups():
         raise HTTPException(status_code=503, detail="HTTP client not ready")
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT group_id FROM line_groups WHERE left_at IS NULL"
+            """
+            SELECT g.group_id, c.access_token
+            FROM line_groups g
+            LEFT JOIN line_channels c
+                ON c.id = COALESCE(g.channel_id, (SELECT id FROM line_channels WHERE is_default LIMIT 1))
+            WHERE g.left_at IS NULL AND c.enabled
+            """
         )
-    group_ids = [r["group_id"] for r in rows]
-    if not group_ids:
+    targets = [(r["group_id"], r["access_token"] or "") for r in rows]
+    if not targets:
         return {"ok": True, "refreshed": 0, "marked_left": 0}
 
     sem = asyncio.Semaphore(8)
     refreshed = 0
     marked_left = 0
 
-    async def _one(gid: str) -> tuple[str, Optional[str]]:
+    async def _one(gid: str, token: str) -> tuple[str, Optional[str]]:
         async with sem:
-            summary = await line_client.get_group_summary(_http_client, gid)
+            summary = await line_client.get_group_summary(
+                _http_client, gid, access_token=token
+            )
         if summary is None:
             return gid, None
         return gid, (summary.get("groupName") or "").strip()
 
-    results = await asyncio.gather(*(_one(g) for g in group_ids), return_exceptions=True)
+    results = await asyncio.gather(
+        *(_one(gid, tok) for gid, tok in targets), return_exceptions=True
+    )
     async with pool.acquire() as conn:
         for r in results:
             if isinstance(r, Exception):
@@ -3412,7 +3748,12 @@ async def test_push_config(config_id: str):
     try:
         flex = await _build_flex_for_config(cfg)
         assert _http_client is not None
-        await line_client.line_push(_http_client, cfg["group_id"], [flex])
+        creds = await _channel_creds_for_group(cfg["group_id"])
+        if creds is None:
+            raise RuntimeError("No enabled LINE channel for this group")
+        await line_client.line_push(
+            _http_client, cfg["group_id"], [flex], access_token=creds[2]
+        )
         async with pool.acquire() as conn:
             await conn.execute(
                 """
@@ -3525,7 +3866,12 @@ async def _scheduler_tick() -> None:
         try:
             flex = await _build_flex_for_config(cfg)
             assert _http_client is not None
-            await line_client.line_push(_http_client, cfg["group_id"], [flex])
+            creds = await _channel_creds_for_group(cfg["group_id"])
+            if creds is None:
+                raise RuntimeError("No enabled LINE channel for this group")
+            await line_client.line_push(
+                _http_client, cfg["group_id"], [flex], access_token=creds[2]
+            )
             next_run = _compute_next_run(
                 cfg["frequency"],
                 cfg["weekdays"],

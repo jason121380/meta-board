@@ -5,6 +5,12 @@ verifier. Kept deliberately small — all heavy lifting (scheduling,
 persistence, report building) lives in main.py. This module only
 knows how to shove a pre-built payload into LINE's HTTP API.
 
+Multi-channel support (2026-04-30): callers pass `access_token`
+explicitly so we can route different push configs to different LINE
+Official Accounts. Webhook signature verification likewise takes
+`secret` explicitly. Env-based defaults are gone — main.py is the
+single source of truth for "which channel goes where".
+
 Mock mode (``LINE_MOCK=1``) prints payloads to stdout instead of
 calling the real API, so the full scheduler → push pipeline can be
 exercised locally without a channel token.
@@ -25,14 +31,6 @@ LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 LINE_GROUP_SUMMARY_URL = "https://api.line.me/v2/bot/group/{group_id}/summary"
 
 
-def _access_token() -> str:
-    return os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "") or ""
-
-
-def _channel_secret() -> str:
-    return os.getenv("LINE_CHANNEL_SECRET", "") or ""
-
-
 def _mock_enabled() -> bool:
     return os.getenv("LINE_MOCK", "0") == "1"
 
@@ -50,35 +48,34 @@ async def line_push(
     client: httpx.AsyncClient,
     group_id: str,
     messages: List[dict],
+    *,
+    access_token: str,
 ) -> None:
     """Push `messages` (1-5 Message objects) to a LINE group.
 
     `client` is the shared `_http_client` owned by main.py's lifespan
-    so we reuse connection pooling and timeouts.
+    so we reuse connection pooling and timeouts. `access_token` is the
+    channel-specific bot token; main.py looks it up from `line_channels`
+    via the group's `channel_id` before calling.
     """
     if _mock_enabled():
         preview = json.dumps(messages, ensure_ascii=False)[:400]
         print(f"[line_push] mock group={group_id} msgs={preview}", flush=True)
         return
 
-    token = _access_token()
-    if not token:
-        raise LinePushError(0, "LINE_CHANNEL_ACCESS_TOKEN not set")
+    if not access_token:
+        raise LinePushError(0, "LINE channel access_token is empty")
 
     resp = await client.post(
         LINE_PUSH_URL,
         headers={
-            "Authorization": f"Bearer {token}",
+            "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
         },
         json={"to": group_id, "messages": messages},
         timeout=15,
     )
     if resp.status_code >= 300:
-        # LINE returns JSON {"message": "...", "details": [{message, property}, ...]}.
-        # The top-level `message` is generic ("messages[0] is invalid"); the
-        # `details` array carries the exact property path and reason. Surface
-        # both so debugging doesn't require server-log diving.
         try:
             body = resp.json()
             top = body.get("message") or ""
@@ -94,8 +91,6 @@ async def line_push(
                 detail = top or json.dumps(body, ensure_ascii=False)
         except Exception:
             detail = resp.text[:600]
-        # Mirror to stdout so the same info shows up in server logs even
-        # if the caller swallows the exception.
         print(f"[line_push] {resp.status_code} {detail}", flush=True)
         raise LinePushError(resp.status_code, detail)
 
@@ -103,25 +98,26 @@ async def line_push(
 async def get_group_summary(
     client: httpx.AsyncClient,
     group_id: str,
+    *,
+    access_token: str,
 ) -> Optional[dict]:
     """Fetch a group's display name + picture URL from LINE.
 
     Returns ``{"groupId", "groupName", "pictureUrl"}`` on success,
     or ``None`` if the bot has no permission / group is gone / token
-    is missing. Errors are logged but never raised — the caller
-    treats a missing summary as "name unknown" and keeps going.
+    is empty. Errors are logged but never raised — the caller treats
+    a missing summary as "name unknown" and keeps going.
     """
     if _mock_enabled():
         return {"groupId": group_id, "groupName": f"Mock Group {group_id[:6]}", "pictureUrl": ""}
 
-    token = _access_token()
-    if not token:
+    if not access_token:
         return None
 
     try:
         resp = await client.get(
             LINE_GROUP_SUMMARY_URL.format(group_id=group_id),
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {access_token}"},
             timeout=10,
         )
         if resp.status_code >= 300:
@@ -134,18 +130,16 @@ async def get_group_summary(
         return None
 
 
-def verify_webhook_signature(body: bytes, signature: Optional[str]) -> bool:
+def verify_webhook_signature(body: bytes, signature: Optional[str], *, secret: str) -> bool:
     """Verify `X-Line-Signature` header against the raw request body.
 
     LINE docs: sign = base64(hmac-sha256(channelSecret, body)). A
     missing secret OR header is treated as invalid.
     """
-    secret = _channel_secret()
     if not secret or not signature:
         return False
     digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).digest()
     expected = base64.b64encode(digest).decode("ascii")
-    # Constant-time compare to avoid timing leaks.
     return hmac.compare_digest(expected, signature)
 
 
