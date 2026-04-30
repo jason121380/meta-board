@@ -53,39 +53,16 @@ export function LineChannelsContent() {
           尚未設定官方帳號 — 請先新增至少一個
         </div>
       ) : (
-        <table className="w-full border-collapse text-[12px]">
-          <thead className="bg-bg text-left text-gray-500">
-            <tr>
-              <th className="px-3 py-2 font-semibold">名稱</th>
-              <th className="px-3 py-2 font-semibold">Webhook URL</th>
-              <th className="px-3 py-2 font-semibold">狀態</th>
-              <th className="px-3 py-2 font-semibold" />
-            </tr>
-          </thead>
-          <tbody>
-            {channels.map((c) => (
-              <ChannelRow
-                key={c.id}
-                channel={c}
-                onEdit={() => setEditing(c)}
-              />
-            ))}
-          </tbody>
-        </table>
+        <ul className="divide-y divide-border">
+          {channels.map((c) => (
+            <ChannelRow key={c.id} channel={c} onEdit={() => setEditing(c)} />
+          ))}
+        </ul>
       )}
 
-      {creating && (
-        <ChannelEditModal
-          mode="create"
-          onClose={() => setCreating(false)}
-        />
-      )}
+      {creating && <ChannelEditModal mode="create" onClose={() => setCreating(false)} />}
       {editing && (
-        <ChannelEditModal
-          mode="edit"
-          channel={editing}
-          onClose={() => setEditing(null)}
-        />
+        <ChannelEditModal mode="edit" channel={editing} onClose={() => setEditing(null)} />
       )}
     </div>
   );
@@ -115,43 +92,30 @@ function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => vo
   };
 
   return (
-    <tr className="border-t border-border align-middle">
-      <td className="px-3 py-2">
-        <div className="flex items-center gap-1.5">
-          <span className={cn("font-bold", !channel.enabled && "text-gray-300")}>{channel.name}</span>
+    <li className="flex flex-col gap-2 px-3 py-3">
+      {/* Top row: name + chips on left, action buttons on right */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={cn(
+              "truncate text-[13px] font-bold",
+              !channel.enabled && "text-gray-300",
+            )}
+          >
+            {channel.name}
+          </span>
           {channel.is_default && (
-            <span className="rounded-full bg-orange-bg px-1.5 py-[1px] text-[10px] font-semibold text-orange">
+            <span className="shrink-0 whitespace-nowrap rounded-full bg-orange-bg px-1.5 py-[1px] text-[10px] font-semibold text-orange">
               預設
             </span>
           )}
           {!channel.enabled && (
-            <span className="rounded-full bg-red-bg px-1.5 py-[1px] text-[10px] font-semibold text-red">
+            <span className="shrink-0 whitespace-nowrap rounded-full bg-red-bg px-1.5 py-[1px] text-[10px] font-semibold text-red">
               已停用
             </span>
           )}
         </div>
-      </td>
-      <td className="px-3 py-2">
-        <div className="flex items-center gap-1.5">
-          <code className="truncate font-mono text-[10px] text-gray-500" title={channel.webhook_url}>
-            {channel.webhook_url}
-          </code>
-          <button
-            type="button"
-            onClick={onCopyWebhook}
-            className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-gray-500 hover:border-orange hover:text-orange"
-          >
-            複製
-          </button>
-        </div>
-      </td>
-      <td className="px-3 py-2 text-gray-500">
-        secret: <span className="font-mono">{channel.channel_secret_masked || "—"}</span>
-        <br />
-        token: <span className="font-mono">{channel.access_token_masked || "—"}</span>
-      </td>
-      <td className="px-3 py-2">
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
             onClick={onEdit}
@@ -168,8 +132,36 @@ function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => vo
             {deleteMutation.isPending ? "刪除中" : "刪除"}
           </button>
         </div>
-      </td>
-    </tr>
+      </div>
+
+      {/* Webhook URL row — truncate, with copy button */}
+      <div className="flex items-center gap-1.5">
+        <span className="shrink-0 text-[10px] text-gray-300">Webhook</span>
+        <code
+          className="min-w-0 flex-1 truncate rounded bg-bg px-1.5 py-0.5 font-mono text-[10px] text-gray-500"
+          title={channel.webhook_url}
+        >
+          {channel.webhook_url}
+        </code>
+        <button
+          type="button"
+          onClick={onCopyWebhook}
+          className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-gray-500 hover:border-orange hover:text-orange"
+        >
+          複製
+        </button>
+      </div>
+
+      {/* Secret + token masked — single line, comma-separated */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-gray-300">
+        <span>
+          secret: <span className="font-mono">{channel.channel_secret_masked || "—"}</span>
+        </span>
+        <span>
+          token: <span className="font-mono">{channel.access_token_masked || "—"}</span>
+        </span>
+      </div>
+    </li>
   );
 }
 
