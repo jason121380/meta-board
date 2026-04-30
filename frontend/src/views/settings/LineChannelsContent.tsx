@@ -21,6 +21,7 @@ interface ChannelRow {
   is_default: boolean;
   is_orphan: boolean;
   editable: boolean;
+  bound_groups_count: number;
   webhook_url: string;
 }
 
@@ -85,7 +86,18 @@ function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => vo
   };
 
   const onDelete = async () => {
-    const ok = await confirm(`確定刪除官方帳號「${channel.name}」？`);
+    const n = channel.bound_groups_count;
+    if (n > 0) {
+      // Surface the constraint upfront via toast — server would 409
+      // anyway. The user needs to break the bindings first.
+      toast(
+        `「${channel.name}」仍綁定 ${n} 個群組,無法刪除。請先讓 LINE bot 退出這些群組或解除全部推播。`,
+        "error",
+        6000,
+      );
+      return;
+    }
+    const ok = await confirm(`確定刪除官方帳號「${channel.name}」？此操作無法復原。`);
     if (!ok) return;
     try {
       await deleteMutation.mutateAsync(channel.id);
@@ -132,6 +144,14 @@ function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => vo
               已停用
             </span>
           )}
+          {channel.bound_groups_count > 0 && (
+            <span
+              className="shrink-0 whitespace-nowrap rounded-full bg-orange-bg px-1.5 py-[1px] text-[10px] font-semibold text-orange"
+              title="此官方帳號目前綁定的 LINE 群組數;有綁定就不能刪除"
+            >
+              綁定 {channel.bound_groups_count} 群組
+            </span>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {channel.is_orphan ? (
@@ -156,7 +176,17 @@ function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => vo
                 type="button"
                 onClick={onDelete}
                 disabled={deleteMutation.isPending}
-                className="rounded border border-border px-1.5 py-0.5 text-[10px] text-red hover:border-red hover:bg-red-bg disabled:opacity-50"
+                title={
+                  channel.bound_groups_count > 0
+                    ? "尚有群組綁定,無法刪除"
+                    : "刪除此官方帳號"
+                }
+                className={cn(
+                  "rounded border px-1.5 py-0.5 text-[10px] disabled:opacity-50",
+                  channel.bound_groups_count > 0
+                    ? "border-border text-gray-300 hover:border-gray-300"
+                    : "border-border text-red hover:border-red hover:bg-red-bg",
+                )}
               >
                 {deleteMutation.isPending ? "刪除中" : "刪除"}
               </button>
