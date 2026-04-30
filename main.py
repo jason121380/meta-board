@@ -370,6 +370,30 @@ async def lifespan(app: FastAPI):
                     ADD COLUMN IF NOT EXISTS include_recommendations BOOLEAN NOT NULL DEFAULT FALSE
                     """
                 )
+                # Migration (2026-04-30): cache the FB campaign name on
+                # the push config row at save time. Without this, the
+                # group-management UI fell back to displaying the bare
+                # campaign_id (a long opaque number) when no nickname
+                # was set. The frontend has the name in hand at
+                # save-time (from the searchable combobox), so just
+                # persist it for display use.
+                await conn.execute(
+                    """
+                    ALTER TABLE campaign_line_push_configs
+                    ADD COLUMN IF NOT EXISTS campaign_name TEXT NOT NULL DEFAULT ''
+                    """
+                )
+                # Migration (2026-04-30): custom date range support.
+                # When date_range = 'custom', date_from / date_to are
+                # the user-picked ISO calendar dates (inclusive on
+                # both ends). For preset ranges these stay NULL.
+                await conn.execute(
+                    """
+                    ALTER TABLE campaign_line_push_configs
+                    ADD COLUMN IF NOT EXISTS date_from DATE,
+                    ADD COLUMN IF NOT EXISTS date_to DATE
+                    """
+                )
                 # `line_push_logs`: audit trail per push attempt, keeps
                 # the last N entries per config for the "最近推播" UI.
                 await conn.execute(
@@ -2385,6 +2409,7 @@ _VALID_DATE_RANGES = {
     "last_30d",
     "this_month",
     "month_to_yesterday",
+    "custom",
 }
 
 
@@ -2492,8 +2517,15 @@ def _month_to_yesterday_bounds() -> tuple[Any, Any]:
     return (today.replace(day=1), today - timedelta(days=1))
 
 
-def _date_range_to_preset(date_range: str) -> tuple[str, Optional[str]]:
-    """Map the UI's date_range choice to FB insights (date_preset, time_range)."""
+def _date_range_to_preset(
+    date_range: str,
+    date_from: Any = None,
+    date_to: Any = None,
+) -> tuple[str, Optional[str]]:
+    """Map the UI's date_range choice to FB insights (date_preset, time_range).
+
+    `custom` reads date_from / date_to (Python date or ISO string).
+    """
     if date_range == "yesterday":
         return ("yesterday", None)
     if date_range == "last_7d":
@@ -2511,13 +2543,28 @@ def _date_range_to_preset(date_range: str) -> tuple[str, Optional[str]]:
             separators=(",", ":"),
         )
         return ("last_30d", tr)
+    if date_range == "custom" and date_from and date_to:
+        s = date_from.isoformat() if hasattr(date_from, "isoformat") else str(date_from)
+        u = date_to.isoformat() if hasattr(date_to, "isoformat") else str(date_to)
+        tr = _json.dumps({"since": s, "until": u}, separators=(",", ":"))
+        return ("last_30d", tr)
     return ("last_7d", None)
 
 
-def _date_range_label(date_range: str) -> str:
+def _date_range_label(
+    date_range: str,
+    date_from: Any = None,
+    date_to: Any = None,
+) -> str:
     if date_range == "month_to_yesterday":
         since, until = _month_to_yesterday_bounds()
         return f"本月1日-昨日 ({since.month}/{since.day}-{until.month}/{until.day})"
+    if date_range == "custom" and date_from and date_to:
+        s = date_from if hasattr(date_from, "month") else None
+        u = date_to if hasattr(date_to, "month") else None
+        if s and u:
+            return f"自訂 ({s.month}/{s.day}-{u.month}/{u.day})"
+        return "自訂"
     return {
         "yesterday": "昨日",
         "last_7d": "過去 7 天",
@@ -2569,7 +2616,11 @@ def _fmt_pct(v: Any) -> str:
     return f"{n:.2f}%"
 
 
-def _date_range_concrete(date_range: str) -> str:
+def _date_range_concrete(
+    date_range: str,
+    date_from: Any = None,
+    date_to: Any = None,
+) -> str:
     """Concrete `M/D - M/D` (or single `M/D`) string for the given range,
     in SCHEDULER_TZ. Used for the LINE flex report header subtitle so
     recipients see the exact reporting window."""
@@ -2584,6 +2635,11 @@ def _date_range_concrete(date_range: str) -> str:
     if date_range == "month_to_yesterday":
         since, until = _month_to_yesterday_bounds()
         return f"{since.month}/{since.day} - {until.month}/{until.day}"
+    if date_range == "custom" and date_from and date_to:
+        s = date_from if hasattr(date_from, "month") else None
+        u = date_to if hasattr(date_to, "month") else None
+        if s and u:
+            return f"{s.month}/{s.day} - {u.month}/{u.day}"
     days = {"last_7d": 7, "last_14d": 14, "last_30d": 30}.get(date_range)
     if days is not None:
         since = today - timedelta(days=days)
@@ -2986,7 +3042,9 @@ async def _build_flex_for_config(cfg: dict) -> dict:
     account_id = cfg["account_id"]
     campaign_id = cfg["campaign_id"]
     date_range = cfg["date_range"]
-    date_preset, time_range = _date_range_to_preset(date_range)
+    date_from = cfg.get("date_from")
+    date_to = cfg.get("date_to")
+    date_preset, time_range = _date_range_to_preset(date_range, date_from, date_to)
 
     ins_clause = _insights_clause(
         "spend,impressions,clicks,ctr,cpc,cpm,frequency,reach,actions",
@@ -3082,8 +3140,12 @@ async def _build_flex_for_config(cfg: dict) -> dict:
     # Title: campaign nickname (store · designer) if set, else FB name.
     nickname = await _campaign_nickname_display(campaign_id)
     title = nickname or camp.get("name", campaign_id)
-    concrete_range = _date_range_concrete(date_range)
-    subtitle = f"報告區間: {concrete_range}" if concrete_range else _date_range_label(date_range)
+    concrete_range = _date_range_concrete(date_range, date_from, date_to)
+    subtitle = (
+        f"報告區間: {concrete_range}"
+        if concrete_range
+        else _date_range_label(date_range, date_from, date_to)
+    )
 
     # Status chip in header top-right — recipients can tell at a glance
     # whether the campaign behind these numbers is still ACTIVE or has
@@ -3131,7 +3193,7 @@ async def _build_flex_for_config(cfg: dict) -> dict:
         kpis=kpis,
         recommendations=recommendations,
         report_url=report_url,
-        alt_text=f"{title} {concrete_range or _date_range_label(date_range)}",
+        alt_text=f"{title} {concrete_range or _date_range_label(date_range, date_from, date_to)}",
     )
 
 
@@ -3719,6 +3781,14 @@ class LinePushConfigPayload(BaseModel):
     # Default False — recommendations are opt-in because many recipients
     # are external (業主) and only want raw numbers.
     include_recommendations: bool = False
+    # FB-side campaign name captured at save-time (frontend already has
+    # it in the searchable combobox). Cached on the row so the group
+    # management UI can show「ICONI 南京 · Cherry 燙髮」 instead of the
+    # bare 16-digit campaign_id when no team-wide nickname is set.
+    campaign_name: str = ""
+    # Used only when date_range == "custom"; ISO YYYY-MM-DD strings.
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
 
 
 def _config_row_to_dict(r: asyncpg.Record) -> dict:
@@ -3737,6 +3807,9 @@ def _config_row_to_dict(r: asyncpg.Record) -> dict:
         "report_fields": list(r["report_fields"] or []),
         "include_report_button": bool(r["include_report_button"]),
         "include_recommendations": bool(r["include_recommendations"]),
+        "campaign_name": r["campaign_name"] or "",
+        "date_from": r["date_from"].isoformat() if r["date_from"] else None,
+        "date_to": r["date_to"].isoformat() if r["date_to"] else None,
         "last_run_at": r["last_run_at"].isoformat() if r["last_run_at"] else None,
         "next_run_at": r["next_run_at"].isoformat() if r["next_run_at"] else None,
         "last_error": r["last_error"],
@@ -3807,6 +3880,23 @@ async def upsert_push_config(payload: LinePushConfigPayload, fb_user_id: Optiona
         )
         if grp is None:
             raise HTTPException(status_code=404, detail="LINE group not found")
+        # Parse custom-range dates (YYYY-MM-DD strings) into Python date
+        # objects for the asyncpg DATE binding. Non-custom ranges store
+        # NULL in both columns regardless of what the payload carries.
+        date_from_val = None
+        date_to_val = None
+        if payload.date_range == "custom":
+            try:
+                if payload.date_from:
+                    date_from_val = datetime.fromisoformat(payload.date_from).date()
+                if payload.date_to:
+                    date_to_val = datetime.fromisoformat(payload.date_to).date()
+            except ValueError:
+                raise HTTPException(status_code=400, detail="自訂區間日期格式錯誤")
+            if date_from_val is None or date_to_val is None:
+                raise HTTPException(status_code=400, detail="自訂區間需要起訖日期")
+            if date_from_val > date_to_val:
+                raise HTTPException(status_code=400, detail="自訂區間起始日期不能晚於結束日期")
         if payload.id:
             row = await conn.fetchrow(
                 """
@@ -3815,10 +3905,11 @@ async def upsert_push_config(payload: LinePushConfigPayload, fb_user_id: Optiona
                     frequency = $4, weekdays = $5, month_day = $6,
                     hour = $7, minute = $8, date_range = $9, enabled = $10,
                     report_fields = $11, include_report_button = $12,
-                    include_recommendations = $13,
-                    next_run_at = $14, fail_count = 0, last_error = NULL,
+                    include_recommendations = $13, campaign_name = $14,
+                    date_from = $15, date_to = $16,
+                    next_run_at = $17, fail_count = 0, last_error = NULL,
                     updated_at = NOW()
-                WHERE id = $15::uuid
+                WHERE id = $18::uuid
                 RETURNING *
                 """,
                 payload.campaign_id,
@@ -3834,6 +3925,9 @@ async def upsert_push_config(payload: LinePushConfigPayload, fb_user_id: Optiona
                 payload.report_fields,
                 payload.include_report_button,
                 payload.include_recommendations,
+                (payload.campaign_name or "").strip(),
+                date_from_val,
+                date_to_val,
                 next_run,
                 payload.id,
             )
@@ -3849,9 +3943,10 @@ async def upsert_push_config(payload: LinePushConfigPayload, fb_user_id: Optiona
                     campaign_id, account_id, group_id,
                     frequency, weekdays, month_day, hour, minute,
                     date_range, enabled, report_fields, include_report_button,
-                    include_recommendations, next_run_at
+                    include_recommendations, campaign_name,
+                    date_from, date_to, next_run_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
                 ON CONFLICT (campaign_id, group_id, frequency) DO UPDATE
                 SET account_id = EXCLUDED.account_id,
                     weekdays = EXCLUDED.weekdays,
@@ -3863,6 +3958,9 @@ async def upsert_push_config(payload: LinePushConfigPayload, fb_user_id: Optiona
                     report_fields = EXCLUDED.report_fields,
                     include_report_button = EXCLUDED.include_report_button,
                     include_recommendations = EXCLUDED.include_recommendations,
+                    campaign_name = EXCLUDED.campaign_name,
+                    date_from = EXCLUDED.date_from,
+                    date_to = EXCLUDED.date_to,
                     next_run_at = EXCLUDED.next_run_at,
                     fail_count = 0,
                     last_error = NULL,
@@ -3882,6 +3980,9 @@ async def upsert_push_config(payload: LinePushConfigPayload, fb_user_id: Optiona
                 payload.report_fields,
                 payload.include_report_button,
                 payload.include_recommendations,
+                (payload.campaign_name or "").strip(),
+                date_from_val,
+                date_to_val,
                 next_run,
             )
     return {"ok": True, "data": _config_row_to_dict(row)}

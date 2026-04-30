@@ -49,6 +49,7 @@ const DATE_RANGE_OPTIONS: Array<{ value: LinePushDateRange; label: string }> = (
     { value: "last_30d", label: "過去 30 天" },
     { value: "this_month", label: "本月" },
     { value: "month_to_yesterday", label: `本月1日-昨日 (${monthToYesterdayLabel})` },
+    { value: "custom", label: "自訂區間" },
   ];
 })();
 
@@ -82,12 +83,20 @@ interface PerFreqState {
   includeReportButton: boolean;
   /** Render「優化建議」bullet list in the flex body. */
   includeRecommendations: boolean;
+  /** ISO YYYY-MM-DD; only meaningful when dateRange === "custom". */
+  customFrom: string;
+  customTo: string;
 }
 
 interface EditorState {
   accountId: string;
   accountName: string;
   campaignId: string;
+  /** Cached at the moment the user picks a campaign. Sent on save so
+   *  the backend can persist it next to the row, sparing the group
+   *  management UI from displaying the bare campaign_id when no
+   *  team-wide nickname is set. */
+  campaignName: string;
   /** Which tab is currently visible — purely a UI selector, doesn't
    *  affect what gets saved. */
   activeFrequency: LinePushFrequency;
@@ -104,12 +113,15 @@ const blankFreq = (): PerFreqState => ({
   reportFields: ["spend_plus", "msgs", "msg_cost"],
   includeReportButton: false,
   includeRecommendations: false,
+  customFrom: "",
+  customTo: "",
 });
 
 const blankState = (): EditorState => ({
   accountId: "",
   accountName: "",
   campaignId: "",
+  campaignName: "",
   activeFrequency: "weekly",
   byFreq: {
     daily: blankFreq(),
@@ -135,6 +147,8 @@ function freqFromConfig(c: LinePushConfig): PerFreqState {
     reportFields: c.report_fields?.length ? c.report_fields : [...DEFAULT_REPORT_FIELDS],
     includeReportButton: !!c.include_report_button,
     includeRecommendations: !!c.include_recommendations,
+    customFrom: c.date_from ?? "",
+    customTo: c.date_to ?? "",
   };
 }
 
@@ -168,6 +182,7 @@ export function GroupPushConfigModal({
         accountId: editing.account_id,
         accountName: acct?.name ?? "",
         campaignId: editing.campaign_id,
+        campaignName: editing.campaign_name ?? "",
         activeFrequency: editing.frequency,
         byFreq: {
           daily: blankFreq(),
@@ -251,6 +266,20 @@ export function GroupPushConfigModal({
         const id = state.byFreq[f].id;
         if (id) await deleteMutation.mutateAsync(id);
       }
+      // 自訂區間驗證 — 兩端都必填,且 from ≤ to
+      for (const f of enabledFreqs) {
+        const s = state.byFreq[f];
+        if (s.dateRange === "custom") {
+          if (!s.customFrom || !s.customTo) {
+            toast(`「${tabLabel(f)}」自訂區間需要起訖日期`, "error");
+            return;
+          }
+          if (s.customFrom > s.customTo) {
+            toast(`「${tabLabel(f)}」自訂區間起始日不能晚於結束日`, "error");
+            return;
+          }
+        }
+      }
       // 再 upsert 啟用的 config(每個頻率一筆)
       for (const f of enabledFreqs) {
         const s = state.byFreq[f];
@@ -269,6 +298,10 @@ export function GroupPushConfigModal({
           report_fields: s.reportFields,
           include_report_button: s.includeReportButton,
           include_recommendations: s.includeRecommendations,
+          campaign_name: state.campaignName,
+          ...(s.dateRange === "custom"
+            ? { date_from: s.customFrom, date_to: s.customTo }
+            : {}),
         };
         await saveMutation.mutateAsync(payload);
       }
@@ -330,10 +363,11 @@ export function GroupPushConfigModal({
             accountId={state.accountId}
             accountName={state.accountName}
             value={state.campaignId}
-            onChange={(v) =>
+            onChange={(v, name) =>
               setState((prev) => ({
                 ...prev,
                 campaignId: v,
+                campaignName: name,
                 // Re-blank per-freq state when campaign changes so the
                 // hydration effect can re-populate from the new
                 // campaign's siblings.
@@ -489,6 +523,31 @@ export function GroupPushConfigModal({
           </select>
         </label>
 
+        {/* Custom date range — only shown when 自訂區間 is selected.
+            FB requires both ends; we send YYYY-MM-DD on save. */}
+        {active.dateRange === "custom" && (
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold text-ink">起始日</span>
+              <input
+                type="date"
+                value={active.customFrom}
+                onChange={(e) => updateActive({ customFrom: e.currentTarget.value })}
+                className="h-9 rounded-lg border border-border bg-white px-2.5 text-[13px] outline-none focus:border-orange"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold text-ink">結束日</span>
+              <input
+                type="date"
+                value={active.customTo}
+                onChange={(e) => updateActive({ customTo: e.currentTarget.value })}
+                className="h-9 rounded-lg border border-border bg-white px-2.5 text-[13px] outline-none focus:border-orange"
+              />
+            </label>
+          </div>
+        )}
+
         {/* Report fields multi-select — per-tab. Each frequency can
             include a different set of KPIs in its flex report. */}
         <ReportFieldsPicker
@@ -562,7 +621,7 @@ function CampaignPicker({
   accountId: string;
   accountName: string;
   value: string;
-  onChange: (campaignId: string) => void;
+  onChange: (campaignId: string, campaignName: string) => void;
   nicknames: Record<string, { store: string; designer: string }>;
 }) {
   // Always last-30d for the picker — we just need the campaign list
@@ -592,7 +651,12 @@ function CampaignPicker({
     <SearchableCombobox
       items={items}
       value={value}
-      onChange={(v) => onChange(v)}
+      onChange={(v, raw) => {
+        // raw is the FbCampaign object — capture name so the modal
+        // can persist it to the row at save-time.
+        const c = raw as { name?: string } | undefined;
+        onChange(v, c?.name ?? "");
+      }}
       placeholder="搜尋行銷活動暱稱、名稱或 ID"
       triggerEmpty={accountId ? "請選擇行銷活動" : "請先選擇廣告帳號"}
       disabled={!accountId || campaignsQuery.isLoading}
