@@ -5,6 +5,7 @@ import { Topbar } from "@/layout/Topbar";
 import { cn } from "@/lib/cn";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { LineChannelsContent } from "./LineChannelsContent";
 import { LineGroupsContent } from "./LineGroupsContent";
 
 /**
@@ -73,9 +74,18 @@ export function LinePushSettingsView() {
       <div className="flex-1 overflow-y-auto bg-bg">
         <div className="mx-auto w-full max-w-[1100px] px-4 py-5 md:px-6 md:py-6">
           <div className="mb-4">
+            <div className="text-[15px] font-bold text-ink">LINE 官方帳號設定</div>
+            <div className="mt-0.5 text-[12px] text-gray-500">
+              管理可用來推播的 LINE Official Account;每個 OA 各自的 Webhook URL 請貼到 LINE
+              Developers Console
+            </div>
+          </div>
+          <LineChannelsContent />
+
+          <div className="mb-4 mt-8">
             <div className="text-[15px] font-bold text-ink">LINE 群組管理</div>
             <div className="mt-0.5 text-[12px] text-gray-500">
-              編輯群組暱稱;群組由 LINE bot 加入時自動登錄
+              群組由 LINE bot 加入時自動登錄,每個群組屬於收到 join 事件的那個 OA
             </div>
           </div>
           <LineGroupsContent />

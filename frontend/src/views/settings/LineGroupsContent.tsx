@@ -45,6 +45,8 @@ interface LineGroup {
   group_id: string;
   group_name: string;
   label: string;
+  channel_id: string | null;
+  channel_name: string;
   joined_at: string | null;
   left_at: string | null;
 }
@@ -202,6 +204,14 @@ function GroupRow({
           >
             {displayName}
           </span>
+          {group.channel_name && (
+            <span
+              className="shrink-0 rounded-full bg-orange-bg px-1.5 py-[1px] text-[10px] font-semibold text-orange"
+              title={`官方帳號:${group.channel_name}`}
+            >
+              {group.channel_name}
+            </span>
+          )}
         </div>
         <div className="mt-0.5 truncate font-mono text-[10px] text-gray-300">{group.group_id}</div>
       </td>

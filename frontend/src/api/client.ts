@@ -187,7 +187,7 @@ function composeSignals(...signals: Array<AbortSignal | undefined>): AbortSignal
 }
 
 async function request<T>(
-  method: "GET" | "POST" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
   options?: {
     body?: unknown;
@@ -530,6 +530,47 @@ export const api = {
       request<{ ok: boolean }>("DELETE", `/api/nicknames/${encodeURIComponent(campaignId)}`),
   },
 
+  lineChannels: {
+    /** List configured LINE Official Accounts. Server returns secrets/
+     *  tokens MASKED — full values stay server-side. */
+    list: () =>
+      request<{
+        data: Array<{
+          id: string;
+          name: string;
+          channel_secret_masked: string;
+          access_token_masked: string;
+          enabled: boolean;
+          is_default: boolean;
+          webhook_url: string;
+          created_at: string | null;
+          updated_at: string | null;
+        }>;
+      }>("GET", "/api/line-channels"),
+    create: (body: {
+      name: string;
+      channel_secret: string;
+      access_token: string;
+      enabled: boolean;
+      is_default: boolean;
+    }) => request<{ ok: boolean; id: string }>("POST", "/api/line-channels", { body }),
+    update: (
+      id: string,
+      body: {
+        name: string;
+        channel_secret: string;
+        access_token: string;
+        enabled: boolean;
+        is_default: boolean;
+      },
+    ) =>
+      request<{ ok: boolean }>("PUT", `/api/line-channels/${encodeURIComponent(id)}`, {
+        body,
+      }),
+    delete: (id: string) =>
+      request<{ ok: boolean }>("DELETE", `/api/line-channels/${encodeURIComponent(id)}`),
+  },
+
   linePush: {
     /** List LINE groups the bot has been invited to (from webhook join events). */
     listGroups: () =>
@@ -538,6 +579,8 @@ export const api = {
           group_id: string;
           group_name: string;
           label: string;
+          channel_id: string | null;
+          channel_name: string;
           joined_at: string | null;
           left_at: string | null;
         }>;
