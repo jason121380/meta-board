@@ -1,4 +1,5 @@
 import type { LinePushConfig, LinePushDateRange } from "@/api/client";
+import { useAccounts } from "@/api/hooks/useAccounts";
 import {
   useDeleteLinePushConfig,
   useLineGroupPushConfigs,
@@ -62,6 +63,18 @@ interface LineGroup {
 export function LineGroupsContent() {
   const groupsQuery = useLineGroups();
   const groups = groupsQuery.data ?? [];
+  // Set of account IDs the current FB user has Marketing API access to.
+  // `useAccounts()` calls /me/adaccounts which FB itself filters by the
+  // user's permissions, so this is the authoritative "what they can see".
+  // We use it to hide push configs that target accounts outside the
+  // current user's reach — matches the principle of "看不到的帳戶,
+  // 不該看到它的推播". Backend-side gating is still needed for hard
+  // security but this kills the visibility leak.
+  const accountsQuery = useAccounts();
+  const accessibleAccountIds = useMemo(
+    () => new Set((accountsQuery.data ?? []).map((a) => a.id)),
+    [accountsQuery.data],
+  );
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
   const [query, setQuery] = useState("");
 
@@ -128,6 +141,7 @@ export function LineGroupsContent() {
                   <GroupRow
                     key={g.group_id}
                     group={g}
+                    accessibleAccountIds={accessibleAccountIds}
                     onAddPush={() =>
                       setEditTarget({
                         groupId: g.group_id,
@@ -166,10 +180,12 @@ export function LineGroupsContent() {
 
 function GroupRow({
   group,
+  accessibleAccountIds,
   onAddPush,
   onEditPush,
 }: {
   group: LineGroup;
+  accessibleAccountIds: Set<string>;
   onAddPush: () => void;
   onEditPush: (cfg: LinePushConfig) => void;
 }) {
@@ -191,7 +207,12 @@ function GroupRow({
       </td>
 
       <td className="px-3 py-2.5">
-        <GroupPushConfigsList groupId={group.group_id} onEdit={onEditPush} onAdd={onAddPush} />
+        <GroupPushConfigsList
+          groupId={group.group_id}
+          accessibleAccountIds={accessibleAccountIds}
+          onEdit={onEditPush}
+          onAdd={onAddPush}
+        />
       </td>
     </tr>
   );
@@ -199,16 +220,24 @@ function GroupRow({
 
 function GroupPushConfigsList({
   groupId,
+  accessibleAccountIds,
   onEdit,
   onAdd,
 }: {
   groupId: string;
+  accessibleAccountIds: Set<string>;
   onEdit: (cfg: LinePushConfig) => void;
   /** Optional: omit when the bot has left the group (cannot create new). */
   onAdd?: () => void;
 }) {
   const query = useLineGroupPushConfigs(groupId);
-  const configs = query.data ?? [];
+  const allConfigs = query.data ?? [];
+  // Hide configs whose account_id isn't in the current FB user's
+  // accessible set — they belong to a teammate's account scope.
+  const configs = useMemo(
+    () => allConfigs.filter((c) => accessibleAccountIds.has(c.account_id)),
+    [allConfigs, accessibleAccountIds],
+  );
 
   return (
     <div className="flex flex-col gap-1.5">
