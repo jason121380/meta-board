@@ -602,7 +602,7 @@ export const api = {
 
   linePush: {
     /** List LINE groups the bot has been invited to (from webhook join events). */
-    listGroups: () =>
+    listGroups: (fbUserId: string) =>
       request<{
         data: Array<{
           group_id: string;
@@ -614,12 +614,13 @@ export const api = {
           joined_at: string | null;
           left_at: string | null;
         }>;
-      }>("GET", "/api/line-groups"),
+      }>("GET", "/api/line-groups", { query: { fb_user_id: fbUserId } }),
     /** List push configs targeting this group (with campaign nickname joined). */
-    listGroupConfigs: (groupId: string) =>
+    listGroupConfigs: (fbUserId: string, groupId: string) =>
       request<{ data: Array<LinePushConfig & { campaign_nickname: string }> }>(
         "GET",
         `/api/line-groups/${encodeURIComponent(groupId)}/push-configs`,
+        { query: { fb_user_id: fbUserId } },
       ),
     /** Re-fetch a group's display name from LINE (manual backfill / rename pickup). */
     refreshGroupName: (groupId: string) =>
@@ -628,11 +629,13 @@ export const api = {
         `/api/line-groups/${encodeURIComponent(groupId)}/refresh-name`,
       ),
     /** Bulk refresh: re-fetch every active group's display name AND mark
-     *  any whose membership ended (LINE returns no summary) as left. */
-    refreshAllGroups: () =>
+     *  any whose membership ended (LINE returns no summary) as left.
+     *  Scoped to channels owned by `fbUserId`. */
+    refreshAllGroups: (fbUserId: string) =>
       request<{ ok: boolean; refreshed: number; marked_left: number }>(
         "POST",
         "/api/line-groups/refresh-all",
+        { query: { fb_user_id: fbUserId } },
       ),
     upsertConfig: (fbUserId: string, payload: LinePushConfigInput) =>
       request<{ ok: boolean; data: LinePushConfig }>("POST", "/api/line-push/configs", {
