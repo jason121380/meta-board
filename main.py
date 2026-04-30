@@ -209,6 +209,23 @@ async def lifespan(app: FastAPI):
                     )
                     """
                 )
+                # Multi-user (2026-04-30): each channel "belongs to" the
+                # FB user who created it. NULL means "shared / legacy"
+                # (the env-seeded default — visible to everyone but
+                # only editable by admins). Per-user channels are
+                # invisible to other users.
+                await conn.execute(
+                    """
+                    ALTER TABLE line_channels
+                    ADD COLUMN IF NOT EXISTS owner_fb_user_id TEXT
+                    """
+                )
+                await conn.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_line_channels_owner
+                    ON line_channels (owner_fb_user_id)
+                    """
+                )
                 # Only one row may carry is_default = TRUE.
                 await conn.execute(
                     """
@@ -444,51 +461,38 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             print(f"[startup] runtime token restore failed: {exc}", flush=True)
 
-    # Seed the default LINE channel from env vars if no channels exist
-    # yet. This preserves backward compat: the existing single-OA
-    # deployment migrates seamlessly to the new multi-channel schema.
-    # Also retroactively assigns existing line_groups (channel_id NULL)
-    # to the default channel so per-channel token lookup works for them.
+    # Multi-user (2026-04-30): no auto-seeded default channel.
+    # Each user adds their own LINE Official Accounts via the UI;
+    # there is no shared/team-wide channel anymore. Existing
+    # NULL-owner rows from earlier seed runs are left as-is — they
+    # stay in DB so previously-bound groups don't lose their FK
+    # target, but they're invisible to every user (the list endpoint
+    # filters by owner_fb_user_id = current user).
+    #
+    # If you need to claim an existing NULL-owner channel, set
+    # ADMIN_FB_USER_ID in env: lifespan startup reassigns any
+    # orphans to that user as a one-shot rescue.
     if _db_pool is not None:
-        try:
-            async with _db_pool.acquire() as conn:
-                count = await conn.fetchval("SELECT COUNT(*) FROM line_channels")
-                if count == 0:
-                    env_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
-                    env_secret = os.getenv("LINE_CHANNEL_SECRET", "")
-                    if env_token and env_secret:
-                        new_id = await conn.fetchval(
-                            """
-                            INSERT INTO line_channels
-                                (name, channel_secret, access_token, is_default)
-                            VALUES ($1, $2, $3, TRUE)
-                            RETURNING id
-                            """,
-                            "預設",
-                            env_secret,
-                            env_token,
-                        )
-                        print(
-                            f"[startup] LINE channels: seeded default from env (id={new_id})",
-                            flush=True,
-                        )
-                # Backfill orphan groups → default channel.
-                default_id = await conn.fetchval(
-                    "SELECT id FROM line_channels WHERE is_default LIMIT 1"
-                )
-                if default_id is not None:
+        admin_id = (os.getenv("ADMIN_FB_USER_ID") or "").strip()
+        if admin_id:
+            try:
+                async with _db_pool.acquire() as conn:
                     n = await conn.fetchval(
                         """
-                        UPDATE line_groups
-                        SET channel_id = $1
-                        WHERE channel_id IS NULL
+                        UPDATE line_channels
+                        SET owner_fb_user_id = $1
+                        WHERE owner_fb_user_id IS NULL
                         """,
-                        default_id,
+                        admin_id,
                     )
                     if n:
-                        print(f"[startup] LINE channels: backfilled {n} orphan groups", flush=True)
-        except Exception as exc:
-            print(f"[startup] LINE channels seed failed: {exc}", flush=True)
+                        print(
+                            f"[startup] LINE channels: claimed {n} orphan channel(s) "
+                            f"for admin {admin_id[-4:]}",
+                            flush=True,
+                        )
+            except Exception as exc:
+                print(f"[startup] LINE channels admin claim failed: {exc}", flush=True)
 
     # Start the LINE push scheduler loop only when the DB is available.
     # Without DB there's nothing to schedule off, so skip silently.
@@ -2623,6 +2627,41 @@ async def _default_channel_creds() -> Optional[tuple[str, str, str]]:
     return str(row["id"]), row["channel_secret"], row["access_token"]
 
 
+async def _assert_can_modify_config_for_group(group_id: str, fb_user_id: Optional[str]) -> None:
+    """Authorize a config write (create/update/delete/test) on this group.
+
+    Rule (strict per-user):
+      - Caller must own the channel that the group is bound to.
+      - Orphan channels (owner_fb_user_id IS NULL, legacy seeded data)
+        cannot be modified by anyone — set ADMIN_FB_USER_ID env to
+        claim them at startup.
+    """
+    pool = _require_db()
+    uid = (fb_user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="fb_user_id 必填")
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT c.owner_fb_user_id
+            FROM line_groups g
+            LEFT JOIN line_channels c ON c.id = g.channel_id
+            WHERE g.group_id = $1
+            """,
+            group_id,
+        )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Group not found")
+    owner = row["owner_fb_user_id"]
+    if owner is None:
+        raise HTTPException(
+            status_code=403,
+            detail="此群組綁定的官方帳號沒有擁有者(舊資料);請設 ADMIN_FB_USER_ID 認領後再操作",
+        )
+    if owner != uid:
+        raise HTTPException(status_code=403, detail="此推播由其他用戶的官方帳號管理,無權限修改")
+
+
 async def _channel_creds_for_group(group_id: str) -> Optional[tuple[str, str, str]]:
     """Resolve a group_id to its channel's (id, secret, token).
 
@@ -3211,23 +3250,27 @@ def _public_channel_url(request: Request, channel_id: str) -> str:
 
 
 @app.get("/api/line-channels")
-async def list_line_channels(request: Request):
-    """List all configured LINE Official Accounts.
+async def list_line_channels(request: Request, fb_user_id: Optional[str] = None):
+    """List LINE Official Accounts owned by the calling FB user.
 
-    Tokens are returned masked (last 4 chars only) — full values stay
-    server-side. Webhook URL is computed from the request host so the
-    operator can copy-paste it straight into LINE Developers Console.
+    Strict per-user model — channels owned by other users (or NULL,
+    legacy/orphan) are invisible. Each user adds their own OAs.
     """
     if _db_pool is None:
+        return {"data": []}
+    uid = (fb_user_id or "").strip()
+    if not uid:
         return {"data": []}
     async with _db_pool.acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT id, name, channel_secret, access_token, enabled, is_default,
-                   created_at, updated_at
+                   owner_fb_user_id, created_at, updated_at
             FROM line_channels
+            WHERE owner_fb_user_id = $1
             ORDER BY is_default DESC, created_at ASC
-            """
+            """,
+            uid,
         )
     out = []
     for r in rows:
@@ -3242,6 +3285,8 @@ async def list_line_channels(request: Request):
                 "access_token_masked": ("•" * max(0, len(tok) - 4)) + tok[-4:] if tok else "",
                 "enabled": r["enabled"],
                 "is_default": r["is_default"],
+                "is_shared": False,
+                "editable": True,
                 "webhook_url": _public_channel_url(request, cid),
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None,
                 "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
@@ -3251,8 +3296,11 @@ async def list_line_channels(request: Request):
 
 
 @app.post("/api/line-channels")
-async def create_line_channel(payload: LineChannelPayload):
+async def create_line_channel(payload: LineChannelPayload, fb_user_id: Optional[str] = None):
     pool = _require_db()
+    uid = (fb_user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="fb_user_id 必填")
     name = (payload.name or "").strip()
     secret = (payload.channel_secret or "").strip()
     token = (payload.access_token or "").strip()
@@ -3263,8 +3311,9 @@ async def create_line_channel(payload: LineChannelPayload):
             await conn.execute("UPDATE line_channels SET is_default = FALSE WHERE is_default")
         new_id = await conn.fetchval(
             """
-            INSERT INTO line_channels (name, channel_secret, access_token, enabled, is_default)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO line_channels
+                (name, channel_secret, access_token, enabled, is_default, owner_fb_user_id)
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id
             """,
             name,
@@ -3272,27 +3321,41 @@ async def create_line_channel(payload: LineChannelPayload):
             token,
             payload.enabled,
             payload.is_default,
+            uid,
         )
     return {"ok": True, "id": str(new_id)}
 
 
 @app.put("/api/line-channels/{channel_id}")
-async def update_line_channel(channel_id: str, payload: LineChannelPayload):
+async def update_line_channel(
+    channel_id: str, payload: LineChannelPayload, fb_user_id: Optional[str] = None
+):
     pool = _require_db()
+    uid = (fb_user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="fb_user_id 必填")
     name = (payload.name or "").strip()
     secret = (payload.channel_secret or "").strip()
     token = (payload.access_token or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="name 必填")
     async with pool.acquire() as conn:
+        # Ownership gate — can only edit channels you own. Shared
+        # (NULL owner) channels can't be edited per-user.
+        existing = await conn.fetchrow(
+            "SELECT owner_fb_user_id FROM line_channels WHERE id = $1::uuid",
+            channel_id,
+        )
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Channel not found")
+        if existing["owner_fb_user_id"] != uid:
+            raise HTTPException(status_code=403, detail="無權限修改此官方帳號")
         if payload.is_default:
             await conn.execute(
                 "UPDATE line_channels SET is_default = FALSE WHERE is_default AND id <> $1::uuid",
                 channel_id,
             )
-        # Empty secret/token = "keep existing" so the masked UI doesn't
-        # have to round-trip the real value.
-        result = await conn.execute(
+        await conn.execute(
             """
             UPDATE line_channels
             SET name = $1,
@@ -3310,19 +3373,28 @@ async def update_line_channel(channel_id: str, payload: LineChannelPayload):
             payload.is_default,
             channel_id,
         )
-        if result.endswith("0"):
-            raise HTTPException(status_code=404, detail="Channel not found")
     return {"ok": True}
 
 
 @app.delete("/api/line-channels/{channel_id}")
-async def delete_line_channel(channel_id: str):
+async def delete_line_channel(channel_id: str, fb_user_id: Optional[str] = None):
     """Refuse to delete a channel that still owns groups — would orphan
-    them and break per-channel push routing. Caller must reassign or
-    leave those groups first.
+    them and break per-channel push routing. Also requires ownership:
+    only the user who created the channel can delete it.
     """
     pool = _require_db()
+    uid = (fb_user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="fb_user_id 必填")
     async with pool.acquire() as conn:
+        existing = await conn.fetchrow(
+            "SELECT owner_fb_user_id FROM line_channels WHERE id = $1::uuid",
+            channel_id,
+        )
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Channel not found")
+        if existing["owner_fb_user_id"] != uid:
+            raise HTTPException(status_code=403, detail="無權限刪除此官方帳號")
         n = await conn.fetchval(
             "SELECT COUNT(*) FROM line_groups WHERE channel_id = $1::uuid AND left_at IS NULL",
             channel_id,
@@ -3332,12 +3404,10 @@ async def delete_line_channel(channel_id: str):
                 status_code=409,
                 detail=f"無法刪除:此官方帳號仍有 {n} 個進行中的群組綁定",
             )
-        result = await conn.execute(
+        await conn.execute(
             "DELETE FROM line_channels WHERE id = $1::uuid",
             channel_id,
         )
-        if result.endswith("0"):
-            raise HTTPException(status_code=404, detail="Channel not found")
     return {"ok": True}
 
 
@@ -3361,7 +3431,8 @@ async def list_line_groups():
             """
             SELECT g.group_id, g.group_name, g.label, g.joined_at, g.left_at,
                    g.channel_id,
-                   COALESCE(c.name, '') AS channel_name
+                   COALESCE(c.name, '') AS channel_name,
+                   c.owner_fb_user_id AS channel_owner_fb_user_id
             FROM line_groups g
             LEFT JOIN line_channels c ON c.id = g.channel_id
             WHERE g.left_at IS NULL
@@ -3376,6 +3447,7 @@ async def list_line_groups():
                 "label": r["label"],
                 "channel_id": str(r["channel_id"]) if r["channel_id"] else None,
                 "channel_name": r["channel_name"] or "",
+                "channel_owner_fb_user_id": r["channel_owner_fb_user_id"],
                 "joined_at": r["joined_at"].isoformat() if r["joined_at"] else None,
                 "left_at": r["left_at"].isoformat() if r["left_at"] else None,
             }
@@ -3400,9 +3472,13 @@ async def list_group_push_configs(group_id: str):
     async with _db_pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT pc.*, n.store, n.designer
+            SELECT pc.*, n.store, n.designer,
+                   c.owner_fb_user_id AS channel_owner,
+                   c.name AS channel_name
             FROM campaign_line_push_configs pc
             LEFT JOIN campaign_nicknames n ON n.campaign_id = pc.campaign_id
+            LEFT JOIN line_groups g ON g.group_id = pc.group_id
+            LEFT JOIN line_channels c ON c.id = g.channel_id
             WHERE pc.group_id = $1
             ORDER BY pc.created_at ASC
             """,
@@ -3419,6 +3495,10 @@ async def list_group_push_configs(group_id: str):
             d["campaign_nickname"] = store or designer
         else:
             d["campaign_nickname"] = ""
+        # Channel ownership info — frontend gates edit/delete/test buttons
+        # by comparing `channel_owner` to the current user's id.
+        d["channel_owner_fb_user_id"] = r["channel_owner"]
+        d["channel_name"] = r["channel_name"] or ""
         out.append(d)
     return {"data": out}
 
@@ -3620,8 +3700,9 @@ async def list_push_configs(campaign_id: Optional[str] = None):
 
 
 @app.post("/api/line-push/configs")
-async def upsert_push_config(payload: LinePushConfigPayload):
+async def upsert_push_config(payload: LinePushConfigPayload, fb_user_id: Optional[str] = None):
     pool = _require_db()
+    await _assert_can_modify_config_for_group(payload.group_id, fb_user_id)
     _validate_push_payload(payload)
     next_run = _compute_next_run(
         payload.frequency,
@@ -3720,8 +3801,16 @@ async def upsert_push_config(payload: LinePushConfigPayload):
 
 
 @app.delete("/api/line-push/configs/{config_id}")
-async def delete_push_config(config_id: str):
+async def delete_push_config(config_id: str, fb_user_id: Optional[str] = None):
     pool = _require_db()
+    async with pool.acquire() as conn:
+        cfg_row = await conn.fetchrow(
+            "SELECT group_id FROM campaign_line_push_configs WHERE id = $1::uuid",
+            config_id,
+        )
+    if cfg_row is None:
+        return {"ok": True}
+    await _assert_can_modify_config_for_group(cfg_row["group_id"], fb_user_id)
     async with pool.acquire() as conn:
         await conn.execute(
             "DELETE FROM campaign_line_push_configs WHERE id = $1::uuid",
@@ -3731,7 +3820,7 @@ async def delete_push_config(config_id: str):
 
 
 @app.post("/api/line-push/configs/{config_id}/test")
-async def test_push_config(config_id: str):
+async def test_push_config(config_id: str, fb_user_id: Optional[str] = None):
     """Fire a push immediately without advancing next_run_at.
 
     Handy for validating a newly-saved config or a fresh group label.
@@ -3745,6 +3834,7 @@ async def test_push_config(config_id: str):
     if row is None:
         raise HTTPException(status_code=404, detail="Config not found")
     cfg = _config_row_to_dict(row)
+    await _assert_can_modify_config_for_group(cfg["group_id"], fb_user_id)
     try:
         flex = await _build_flex_for_config(cfg)
         assert _http_client is not None

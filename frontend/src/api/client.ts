@@ -59,6 +59,12 @@ export interface LinePushConfig {
   next_run_at: string | null;
   last_error: string | null;
   fail_count: number;
+  /** FB user id of the channel's owner. Frontend compares against the
+   *  current user to decide whether edit/delete/test buttons are
+   *  enabled — only the OA owner can mutate a config. */
+  channel_owner_fb_user_id?: string | null;
+  /** Display name of the channel pushing this config (informational). */
+  channel_name?: string;
 }
 
 export interface LinePushConfigInput {
@@ -531,9 +537,11 @@ export const api = {
   },
 
   lineChannels: {
-    /** List configured LINE Official Accounts. Server returns secrets/
-     *  tokens MASKED — full values stay server-side. */
-    list: () =>
+    /** List configured LINE Official Accounts visible to `fbUserId`.
+     *  Returns secrets/tokens MASKED. The `editable` flag tells the
+     *  UI whether this channel is owned by the calling user (per-user
+     *  channel) vs shared / belonging to someone else. */
+    list: (fbUserId: string) =>
       request<{
         data: Array<{
           id: string;
@@ -542,19 +550,29 @@ export const api = {
           access_token_masked: string;
           enabled: boolean;
           is_default: boolean;
+          is_shared: boolean;
+          editable: boolean;
           webhook_url: string;
           created_at: string | null;
           updated_at: string | null;
         }>;
-      }>("GET", "/api/line-channels"),
-    create: (body: {
-      name: string;
-      channel_secret: string;
-      access_token: string;
-      enabled: boolean;
-      is_default: boolean;
-    }) => request<{ ok: boolean; id: string }>("POST", "/api/line-channels", { body }),
+      }>("GET", "/api/line-channels", { query: { fb_user_id: fbUserId } }),
+    create: (
+      fbUserId: string,
+      body: {
+        name: string;
+        channel_secret: string;
+        access_token: string;
+        enabled: boolean;
+        is_default: boolean;
+      },
+    ) =>
+      request<{ ok: boolean; id: string }>("POST", "/api/line-channels", {
+        body,
+        query: { fb_user_id: fbUserId },
+      }),
     update: (
+      fbUserId: string,
       id: string,
       body: {
         name: string;
@@ -566,9 +584,12 @@ export const api = {
     ) =>
       request<{ ok: boolean }>("PUT", `/api/line-channels/${encodeURIComponent(id)}`, {
         body,
+        query: { fb_user_id: fbUserId },
       }),
-    delete: (id: string) =>
-      request<{ ok: boolean }>("DELETE", `/api/line-channels/${encodeURIComponent(id)}`),
+    delete: (fbUserId: string, id: string) =>
+      request<{ ok: boolean }>("DELETE", `/api/line-channels/${encodeURIComponent(id)}`, {
+        query: { fb_user_id: fbUserId },
+      }),
   },
 
   linePush: {
@@ -581,6 +602,7 @@ export const api = {
           label: string;
           channel_id: string | null;
           channel_name: string;
+          channel_owner_fb_user_id: string | null;
           joined_at: string | null;
           left_at: string | null;
         }>;
@@ -604,15 +626,20 @@ export const api = {
         "POST",
         "/api/line-groups/refresh-all",
       ),
-    upsertConfig: (payload: LinePushConfigInput) =>
+    upsertConfig: (fbUserId: string, payload: LinePushConfigInput) =>
       request<{ ok: boolean; data: LinePushConfig }>("POST", "/api/line-push/configs", {
         body: payload,
+        query: { fb_user_id: fbUserId },
       }),
-    deleteConfig: (id: string) =>
-      request<{ ok: boolean }>("DELETE", `/api/line-push/configs/${encodeURIComponent(id)}`),
+    deleteConfig: (fbUserId: string, id: string) =>
+      request<{ ok: boolean }>("DELETE", `/api/line-push/configs/${encodeURIComponent(id)}`, {
+        query: { fb_user_id: fbUserId },
+      }),
     /** Fire a push immediately without advancing next_run_at. */
-    test: (id: string) =>
-      request<{ ok: boolean }>("POST", `/api/line-push/configs/${encodeURIComponent(id)}/test`),
+    test: (fbUserId: string, id: string) =>
+      request<{ ok: boolean }>("POST", `/api/line-push/configs/${encodeURIComponent(id)}/test`, {
+        query: { fb_user_id: fbUserId },
+      }),
     listLogs: (configId?: string, limit = 20) =>
       request<{
         data: Array<{

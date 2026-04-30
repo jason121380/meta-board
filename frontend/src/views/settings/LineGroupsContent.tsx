@@ -6,6 +6,7 @@ import {
   useLineGroups,
   useTestLinePush,
 } from "@/api/hooks/useLinePush";
+import { useFbAuth } from "@/auth/FbAuthProvider";
 import { confirm } from "@/components/ConfirmDialog";
 import { toast } from "@/components/Toast";
 import { cn } from "@/lib/cn";
@@ -47,6 +48,7 @@ interface LineGroup {
   label: string;
   channel_id: string | null;
   channel_name: string;
+  channel_owner_fb_user_id: string | null;
   joined_at: string | null;
   left_at: string | null;
 }
@@ -65,6 +67,8 @@ interface LineGroup {
 export function LineGroupsContent() {
   const groupsQuery = useLineGroups();
   const groups = groupsQuery.data ?? [];
+  const { user } = useFbAuth();
+  const currentUserId = user?.id ?? "";
   // Set of account IDs the current FB user has Marketing API access to.
   // `useAccounts()` calls /me/adaccounts which FB itself filters by the
   // user's permissions, so this is the authoritative "what they can see".
@@ -144,6 +148,7 @@ export function LineGroupsContent() {
                     key={g.group_id}
                     group={g}
                     accessibleAccountIds={accessibleAccountIds}
+                    canAddPush={!!g.channel_owner_fb_user_id && g.channel_owner_fb_user_id === currentUserId}
                     onAddPush={() =>
                       setEditTarget({
                         groupId: g.group_id,
@@ -183,11 +188,13 @@ export function LineGroupsContent() {
 function GroupRow({
   group,
   accessibleAccountIds,
+  canAddPush,
   onAddPush,
   onEditPush,
 }: {
   group: LineGroup;
   accessibleAccountIds: Set<string>;
+  canAddPush: boolean;
   onAddPush: () => void;
   onEditPush: (cfg: LinePushConfig) => void;
 }) {
@@ -221,7 +228,7 @@ function GroupRow({
           groupId={group.group_id}
           accessibleAccountIds={accessibleAccountIds}
           onEdit={onEditPush}
-          onAdd={onAddPush}
+          onAdd={canAddPush ? onAddPush : undefined}
         />
       </td>
     </tr>
@@ -287,6 +294,11 @@ function PushConfigRow({
   const rule = formatPushRule(cfg);
   const deleteMutation = useDeleteLinePushConfig();
   const testMutation = useTestLinePush();
+  const { user } = useFbAuth();
+  // Read-only when the channel is owned by someone else (or has no
+  // owner / is shared). Visibility was already gated by FB account
+  // access; ownership controls write access.
+  const editable = !!cfg.channel_owner_fb_user_id && cfg.channel_owner_fb_user_id === user?.id;
 
   const onUnbind = async () => {
     const ok = await confirm(`確定要解除「${name}」的推播綁定？`);
@@ -323,36 +335,46 @@ function PushConfigRow({
               已停用
             </span>
           )}
+          {!editable && (
+            <span
+              className="shrink-0 rounded-full bg-bg px-1.5 py-[1px] text-[10px] font-semibold text-gray-300"
+              title="此推播由其他用戶的官方帳號管理,你只有檢視權限"
+            >
+              唯讀
+            </span>
+          )}
         </div>
         <div className="text-[11px] text-gray-500">
           {rule} · {dateLabel}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
-        <button
-          type="button"
-          onClick={() => onEdit(cfg)}
-          className="rounded border border-border px-1.5 py-0.5 text-[10px] text-gray-500 hover:border-orange hover:text-orange"
-        >
-          編輯
-        </button>
-        <button
-          type="button"
-          onClick={onTest}
-          disabled={testMutation.isPending}
-          className="rounded border border-border px-1.5 py-0.5 text-[10px] text-orange hover:border-orange hover:bg-orange-bg disabled:opacity-50"
-        >
-          {testMutation.isPending ? "發送中" : "測試"}
-        </button>
-        <button
-          type="button"
-          onClick={onUnbind}
-          disabled={deleteMutation.isPending}
-          className="rounded border border-border px-1.5 py-0.5 text-[10px] text-red hover:border-red hover:bg-red-bg disabled:opacity-50"
-        >
-          {deleteMutation.isPending ? "解除中" : "解除綁定"}
-        </button>
-      </div>
+      {editable && (
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onEdit(cfg)}
+            className="rounded border border-border px-1.5 py-0.5 text-[10px] text-gray-500 hover:border-orange hover:text-orange"
+          >
+            編輯
+          </button>
+          <button
+            type="button"
+            onClick={onTest}
+            disabled={testMutation.isPending}
+            className="rounded border border-border px-1.5 py-0.5 text-[10px] text-orange hover:border-orange hover:bg-orange-bg disabled:opacity-50"
+          >
+            {testMutation.isPending ? "發送中" : "測試"}
+          </button>
+          <button
+            type="button"
+            onClick={onUnbind}
+            disabled={deleteMutation.isPending}
+            className="rounded border border-border px-1.5 py-0.5 text-[10px] text-red hover:border-red hover:bg-red-bg disabled:opacity-50"
+          >
+            {deleteMutation.isPending ? "解除中" : "解除綁定"}
+          </button>
+        </div>
+      )}
     </li>
   );
 }
