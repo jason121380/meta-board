@@ -83,16 +83,39 @@ export function LineGroupsContent() {
   );
   const [editTarget, setEditTarget] = useState<EditTarget>(null);
   const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<"channel" | "group" | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const onSort = (key: "channel" | "group") => {
+    if (sortKey === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return groups;
-    return groups.filter(
-      (g) =>
-        (g.group_name ?? "").toLowerCase().includes(q) ||
-        g.group_id.toLowerCase().includes(q),
-    );
-  }, [groups, query]);
+    const base = q
+      ? groups.filter(
+          (g) =>
+            (g.group_name ?? "").toLowerCase().includes(q) ||
+            g.group_id.toLowerCase().includes(q),
+        )
+      : groups;
+    if (sortKey === null) return base;
+    const sorted = [...base];
+    sorted.sort((a, b) => {
+      const av =
+        sortKey === "channel" ? (a.channel_name ?? "") : (a.group_name?.trim() || a.group_id);
+      const bv =
+        sortKey === "channel" ? (b.channel_name ?? "") : (b.group_name?.trim() || b.group_id);
+      const cmp = av.localeCompare(bv, "zh-TW");
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return sorted;
+  }, [groups, query, sortKey, sortDir]);
 
   if (groupsQuery.isLoading) {
     return (
@@ -126,27 +149,39 @@ export function LineGroupsContent() {
         </span>
       </div>
       <div className="overflow-x-auto rounded-xl border border-border bg-white">
-        <table className="w-full min-w-[600px] border-collapse text-[13px]">
+        <table className="w-full min-w-[640px] border-collapse text-[13px]">
           <thead className="border-b border-border bg-bg text-left">
             <tr>
-              <th className="px-3 py-2 font-semibold text-gray-500">推播官方帳號</th>
-              <th className="px-3 py-2 font-semibold text-gray-500">群組</th>
+              <th className="w-12 px-3 py-2 font-semibold text-gray-500">No.</th>
+              <SortableTh
+                label="推播官方帳號"
+                active={sortKey === "channel"}
+                dir={sortDir}
+                onClick={() => onSort("channel")}
+              />
+              <SortableTh
+                label="群組"
+                active={sortKey === "group"}
+                dir={sortDir}
+                onClick={() => onSort("group")}
+              />
               <th className="px-3 py-2 font-semibold text-gray-500">已設定的推播</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td className="px-3 py-4 text-center text-[12px] text-gray-300" colSpan={3}>
+                <td className="px-3 py-4 text-center text-[12px] text-gray-300" colSpan={4}>
                   無符合搜尋條件的群組
                 </td>
               </tr>
             ) : (
-              filtered.map((g) => {
+              filtered.map((g, idx) => {
                 const displayName = g.group_name?.trim() || g.group_id;
                 return (
                   <GroupRow
                     key={g.group_id}
+                    no={idx + 1}
                     group={g}
                     accessibleAccountIds={accessibleAccountIds}
                     canAddPush={!!g.channel_owner_fb_user_id && g.channel_owner_fb_user_id === currentUserId}
@@ -186,13 +221,46 @@ export function LineGroupsContent() {
   );
 }
 
+function SortableTh({
+  label,
+  active,
+  dir,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  dir: "asc" | "desc";
+  onClick: () => void;
+}) {
+  return (
+    <th className="px-3 py-2 font-semibold text-gray-500">
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "flex items-center gap-1 hover:text-orange",
+          active && "text-orange",
+        )}
+        aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
+      >
+        <span>{label}</span>
+        <span className="text-[9px] leading-none">
+          {active ? (dir === "asc" ? "▲" : "▼") : "↕"}
+        </span>
+      </button>
+    </th>
+  );
+}
+
 function GroupRow({
+  no,
   group,
   accessibleAccountIds,
   canAddPush,
   onAddPush,
   onEditPush,
 }: {
+  no: number;
   group: LineGroup;
   accessibleAccountIds: Set<string>;
   canAddPush: boolean;
@@ -204,6 +272,7 @@ function GroupRow({
 
   return (
     <tr className="border-b border-border last:border-b-0 align-top">
+      <td className="px-3 py-2.5 text-center text-[11px] tabular-nums text-gray-300">{no}</td>
       <td className="px-3 py-2.5">
         {group.channel_name ? (
           <span className="inline-block rounded-full bg-orange-bg px-2 py-[1px] text-[11px] font-semibold text-orange">

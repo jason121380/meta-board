@@ -3278,6 +3278,16 @@ async def list_line_channels(request: Request, fb_user_id: Optional[str] = None)
             """,
             uid,
         )
+    def _mask(s: str) -> str:
+        # Compact preview only: 4 dots + last 4 chars. The old
+        # "•"*(len-4) version produced 100+ dot mask strings that
+        # blew out the card layout for access tokens.
+        if not s:
+            return ""
+        if len(s) <= 4:
+            return s
+        return "••••" + s[-4:]
+
     out = []
     for r in rows:
         cid = str(r["id"])
@@ -3289,8 +3299,8 @@ async def list_line_channels(request: Request, fb_user_id: Optional[str] = None)
             {
                 "id": cid,
                 "name": r["name"],
-                "channel_secret_masked": ("•" * max(0, len(sec) - 4)) + sec[-4:] if sec else "",
-                "access_token_masked": ("•" * max(0, len(tok) - 4)) + tok[-4:] if tok else "",
+                "channel_secret_masked": _mask(sec),
+                "access_token_masked": _mask(tok),
                 "enabled": r["enabled"],
                 "is_default": r["is_default"],
                 "is_orphan": is_orphan,
