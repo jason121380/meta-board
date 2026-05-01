@@ -565,6 +565,7 @@ export const api = {
           is_orphan: boolean;
           editable: boolean;
           bound_groups_count: number;
+          last_webhook_at: string | null;
           webhook_url: string;
           created_at: string | null;
           updated_at: string | null;

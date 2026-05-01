@@ -22,7 +22,19 @@ interface ChannelRow {
   is_orphan: boolean;
   editable: boolean;
   bound_groups_count: number;
+  last_webhook_at: string | null;
   webhook_url: string;
+}
+
+function formatRelative(iso: string | null): string {
+  if (!iso) return "從未接收";
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "從未接收";
+  const diff = Date.now() - t;
+  if (diff < 60_000) return "剛剛";
+  if (diff < 3600_000) return `${Math.floor(diff / 60_000)} 分鐘前`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3600_000)} 小時前`;
+  return `${Math.floor(diff / 86_400_000)} 天前`;
 }
 
 /**
@@ -220,6 +232,19 @@ function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => vo
         </span>
         <span className="whitespace-nowrap">
           token: <span className="font-mono">{channel.access_token_masked || "—"}</span>
+        </span>
+        <span
+          className={cn(
+            "whitespace-nowrap",
+            channel.last_webhook_at ? "text-gray-500" : "text-red",
+          )}
+          title={
+            channel.last_webhook_at
+              ? `LINE 上次打到我們:${new Date(channel.last_webhook_at).toLocaleString()}`
+              : "LINE 從未送 webhook 過來;檢查 LINE Console 的 webhook URL / Use webhook 開關 / 允許加入群組設定"
+          }
+        >
+          webhook: {formatRelative(channel.last_webhook_at)}
         </span>
       </div>
     </li>
