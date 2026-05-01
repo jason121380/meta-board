@@ -12,22 +12,27 @@ import { useEffect, useRef, useState } from "react";
  * instantly from cache when the user navigates.
  *
  * Shows a full-screen modal with a REAL progress bar (not the fake
- * time-based curve). Progress increments as each account-batch
- * resolves. The modal blocks interaction until preloading completes.
+ * time-based curve). Progress increments as each account resolves.
  *
- * Accounts are fetched in batches of 5 via the `/api/overview`
- * endpoint. Each batch runs its accounts concurrently on the backend
- * (asyncio.gather), so overall latency ≈ slowest account in each
- * batch × number of batches. With 15 accounts: 3 batches ≈ 15-20s.
+ * Strategy (2026-04-30 rewrite):
+ *   - Each account is its own one-element "batch" (BATCH_SIZE=1).
+ *   - All accounts race in parallel up to MAX_CONCURRENT_REQUESTS.
+ *   - Total wall-clock = max single-account latency (same as before),
+ *     but FAST accounts return early so the progress bar moves
+ *     smoothly instead of jumping after each 10-account batch finishes.
+ *   - Backend's per-account semaphore (40 slots) keeps the FB API
+ *     polite even when MAX_CONCURRENT_REQUESTS > 40 — so we can set
+ *     it generously without thinking about FB rate limits here.
  *
- * After all batches resolve, the preloader seeds:
+ * After all accounts resolve, the preloader seeds:
  *   - Per-account cache: `["overview", "act_X", date, true]`
  *   - Batch cache: `["overview", "act_1,act_2,...", date, true]`
  * so both Dashboard (single-account) and Alerts/Finance (all-accounts)
  * get instant cache hits on first render.
  */
 
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 1;
+const MAX_CONCURRENT_REQUESTS = 20;
 
 /** Module-level flag so the preloader only runs once per page load.
  * React Strict Mode double-mount won't retrigger it.
@@ -84,12 +89,6 @@ export function DataPreloader({ onComplete }: { onComplete: () => void }) {
     > = {};
     let loadedCount = 0;
 
-    // Process batches concurrently. The backend semaphore (40 slots)
-    // limits actual FB API calls, so we can safely run 4 batches of
-    // 10 accounts in parallel. For 80 accounts: 8 batches ÷ 4
-    // concurrent = 2 rounds × ~6s ≈ 12s (down from ~35s at 2×5).
-    const MAX_CONCURRENT_BATCHES = 4;
-
     const processBatch = async (batch: typeof accounts) => {
       const ids = batch.map((a) => a.id);
       try {
@@ -117,11 +116,14 @@ export function DataPreloader({ onComplete }: { onComplete: () => void }) {
       setProgress({ loaded: loadedCount, total });
     };
 
-    // Run batches with limited concurrency
+    // Run batches with limited concurrency. Single-account batches
+    // mean each FB-side fetch resolves independently; the slowest
+    // account no longer blocks visibility of the fast ones, so the
+    // progress bar climbs smoothly to 100%.
     const runAllBatches = async () => {
       const queue = [...batches];
       const workers = Array.from(
-        { length: Math.min(MAX_CONCURRENT_BATCHES, queue.length) },
+        { length: Math.min(MAX_CONCURRENT_REQUESTS, queue.length) },
         async () => {
           while (queue.length > 0) {
             const batch = queue.shift();

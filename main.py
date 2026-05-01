@@ -3330,9 +3330,25 @@ class LineChannelPayload(BaseModel):
 
 
 def _public_channel_url(request: Request, channel_id: str) -> str:
-    """Build the public webhook URL the user pastes into LINE Console."""
-    base = str(request.base_url).rstrip("/")
-    return f"{base}/api/line/webhook/{channel_id}"
+    """Build the public webhook URL the user pastes into LINE Console.
+
+    LINE rejects http:// webhook URLs outright (and won't deliver group
+    events even if Verify somehow passes), so we MUST emit https://
+    in production. Zeabur terminates TLS at the edge and proxies as
+    plain HTTP internally, so request.base_url alone returns http://.
+    Honor X-Forwarded-Proto / -Host (set by Zeabur's reverse proxy) to
+    reconstruct the externally-visible URL.
+    """
+    fwd_proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+    fwd_host = request.headers.get("x-forwarded-host", "").split(",")[0].strip()
+    scheme = fwd_proto or request.url.scheme
+    host = fwd_host or request.url.netloc
+    # Final safety net: anything that's NOT obvious local dev gets
+    # promoted to https. Catches edge cases where the reverse proxy
+    # forgets to forward the scheme header.
+    if scheme == "http" and host and not host.startswith(("localhost", "127.0.0.1", "0.0.0.0")):
+        scheme = "https"
+    return f"{scheme}://{host}/api/line/webhook/{channel_id}"
 
 
 @app.get("/api/line-channels")
