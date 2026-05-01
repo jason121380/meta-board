@@ -27,9 +27,13 @@ interface ChannelRow {
 }
 
 function formatRelative(iso: string | null): string {
-  if (!iso) return "從未接收";
+  // "尚無紀錄" instead of "從未接收" — this column was added 2026-04-30,
+  // so existing rows with bound groups show NULL even though LINE
+  // historically did reach us. Going forward, every webhook hit (200
+  // or 401) stamps it.
+  if (!iso) return "尚無紀錄";
   const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return "從未接收";
+  if (Number.isNaN(t)) return "尚無紀錄";
   const diff = Date.now() - t;
   if (diff < 60_000) return "剛剛";
   if (diff < 3600_000) return `${Math.floor(diff / 60_000)} 分鐘前`;
@@ -234,14 +238,11 @@ function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => vo
           token: <span className="font-mono">{channel.access_token_masked || "—"}</span>
         </span>
         <span
-          className={cn(
-            "whitespace-nowrap",
-            channel.last_webhook_at ? "text-gray-500" : "text-red",
-          )}
+          className="whitespace-nowrap text-gray-500"
           title={
             channel.last_webhook_at
               ? `LINE 上次打到我們:${new Date(channel.last_webhook_at).toLocaleString()}`
-              : "LINE 從未送 webhook 過來;檢查 LINE Console 的 webhook URL / Use webhook 開關 / 允許加入群組設定"
+              : "尚未紀錄到 LINE 的 webhook 請求(此欄位 2026-04-30 才加入,既有 channel 預設無資料,新事件進來才會更新)"
           }
         >
           webhook: {formatRelative(channel.last_webhook_at)}

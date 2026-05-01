@@ -107,27 +107,55 @@ async def get_group_summary(
     or ``None`` if the bot has no permission / group is gone / token
     is empty. Errors are logged but never raised — the caller treats
     a missing summary as "name unknown" and keeps going.
+
+    NOTE: callers that want to react to *which kind* of failure (e.g.
+    refresh-all wanting to distinguish "bot not in group" 404 from
+    "transient" 5xx) should use `get_group_summary_detailed` below.
+    """
+    detailed = await get_group_summary_detailed(client, group_id, access_token=access_token)
+    return detailed.get("body") if isinstance(detailed.get("body"), dict) else None
+
+
+async def get_group_summary_detailed(
+    client: httpx.AsyncClient,
+    group_id: str,
+    *,
+    access_token: str,
+) -> dict:
+    """Same as `get_group_summary` but returns
+    ``{"status": int, "body": dict | None, "error": str | None}``
+    so the caller can tell apart "bot kicked out (404)" from
+    "auth bad / transient (anything else)".
     """
     if _mock_enabled():
-        return {"groupId": group_id, "groupName": f"Mock Group {group_id[:6]}", "pictureUrl": ""}
-
+        return {
+            "status": 200,
+            "body": {"groupId": group_id, "groupName": f"Mock Group {group_id[:6]}", "pictureUrl": ""},
+            "error": None,
+        }
     if not access_token:
-        return None
-
+        return {"status": 0, "body": None, "error": "no access_token"}
     try:
         resp = await client.get(
             LINE_GROUP_SUMMARY_URL.format(group_id=group_id),
             headers={"Authorization": f"Bearer {access_token}"},
             timeout=10,
         )
-        if resp.status_code >= 300:
-            return None
+    except Exception as exc:
+        return {"status": 0, "body": None, "error": str(exc)[:200]}
+    if resp.status_code >= 300:
+        try:
+            err = resp.json().get("message")
+        except Exception:
+            err = resp.text[:200]
+        return {"status": resp.status_code, "body": None, "error": err}
+    try:
         body = resp.json()
-        if not isinstance(body, dict):
-            return None
-        return body
     except Exception:
-        return None
+        return {"status": resp.status_code, "body": None, "error": "non-json body"}
+    if not isinstance(body, dict):
+        return {"status": resp.status_code, "body": None, "error": "non-object body"}
+    return {"status": resp.status_code, "body": body, "error": None}
 
 
 def verify_webhook_signature(body: bytes, signature: Optional[str], *, secret: str) -> bool:

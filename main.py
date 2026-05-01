@@ -3605,6 +3605,55 @@ async def delete_line_channel(channel_id: str, fb_user_id: Optional[str] = None)
     return {"ok": True}
 
 
+@app.post("/api/line-channels/{channel_id}/test-webhook")
+async def test_line_channel_webhook(channel_id: str, fb_user_id: Optional[str] = None):
+    """Ask LINE to send a test event to this channel's configured
+    webhook URL (i.e. the one the operator pasted into LINE Console).
+    Used to confirm the round-trip works without having to physically
+    invite the bot into a group.
+
+    Returns LINE's response body so the UI can surface their diagnosis
+    (e.g. "Webhook URL is not set" / "endpoint is not reachable").
+    """
+    pool = _require_db()
+    if _http_client is None:
+        raise HTTPException(status_code=503, detail="HTTP client not ready")
+    uid = (fb_user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="fb_user_id 必填")
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT access_token, owner_fb_user_id
+            FROM line_channels WHERE id = $1::uuid AND enabled
+            """,
+            channel_id,
+        )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Channel not found or disabled")
+    if row["owner_fb_user_id"] is not None and row["owner_fb_user_id"] != uid:
+        raise HTTPException(status_code=403, detail="無權限測試此官方帳號")
+    token = row["access_token"]
+    try:
+        resp = await _http_client.post(
+            "https://api.line.me/v2/bot/channel/webhook/test",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=15,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"呼叫 LINE 失敗:{exc}")
+    body: Any
+    try:
+        body = resp.json()
+    except Exception:
+        body = {"raw": resp.text[:400]}
+    return {
+        "ok": 200 <= resp.status_code < 300,
+        "status": resp.status_code,
+        "line_response": body,
+    }
+
+
 # ── LINE group management ─────────────────────────────────────
 
 
@@ -3796,15 +3845,14 @@ async def refresh_all_line_groups(fb_user_id: Optional[str] = None):
     sem = asyncio.Semaphore(8)
     refreshed = 0
     marked_left = 0
+    transient_errors = 0
 
-    async def _one(gid: str, token: str) -> tuple[str, Optional[str]]:
+    async def _one(gid: str, token: str) -> tuple[str, dict]:
         async with sem:
-            summary = await line_client.get_group_summary(
+            res = await line_client.get_group_summary_detailed(
                 _http_client, gid, access_token=token
             )
-        if summary is None:
-            return gid, None
-        return gid, (summary.get("groupName") or "").strip()
+        return gid, res
 
     results = await asyncio.gather(
         *(_one(gid, tok) for gid, tok in targets), return_exceptions=True
@@ -3813,21 +3861,45 @@ async def refresh_all_line_groups(fb_user_id: Optional[str] = None):
         for r in results:
             if isinstance(r, Exception):
                 continue
-            gid, name = r
-            if name is None:
+            gid, res = r
+            status = res.get("status") or 0
+            body = res.get("body")
+            if isinstance(body, dict):
+                # Successful summary: refresh the group_name.
+                name = (body.get("groupName") or "").strip()
+                if name:
+                    await conn.execute(
+                        "UPDATE line_groups SET group_name = $1 WHERE group_id = $2",
+                        name,
+                        gid,
+                    )
+                refreshed += 1
+                continue
+            # No body. Only mark `left_at` for status codes that
+            # *unambiguously* mean the bot is no longer in the group:
+            #   - 404: "Not found" / bot kicked
+            # Anything else (401 bad token, 403 missing scope, 5xx
+            # transient, network error) is logged but does NOT touch
+            # `left_at`. Marking-left was too aggressive — a single
+            # token mistake or LINE outage would clear out every group.
+            if status == 404:
                 await conn.execute(
                     "UPDATE line_groups SET left_at = NOW() WHERE group_id = $1 AND left_at IS NULL",
                     gid,
                 )
                 marked_left += 1
             else:
-                await conn.execute(
-                    "UPDATE line_groups SET group_name = $1 WHERE group_id = $2",
-                    name,
-                    gid,
+                transient_errors += 1
+                print(
+                    f"[refresh-all] transient error gid={gid} status={status} err={res.get('error')!r}",
+                    flush=True,
                 )
-                refreshed += 1
-    return {"ok": True, "refreshed": refreshed, "marked_left": marked_left}
+    return {
+        "ok": True,
+        "refreshed": refreshed,
+        "marked_left": marked_left,
+        "transient_errors": transient_errors,
+    }
 
 
 # ── LINE push configs CRUD ────────────────────────────────────
