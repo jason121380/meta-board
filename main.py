@@ -209,11 +209,21 @@ async def lifespan(app: FastAPI):
                     )
                     """
                 )
+                # Migration (2026-04-30): track last webhook activity
+                # for diagnostics. Updated by _handle_line_webhook on
+                # every signature-verified hit, used by the LINE 推播
+                # 設定 UI to show「上次接收: …」 next to each channel.
+                # Helps the user distinguish "LINE never reached us"
+                # vs "LINE reached us but nothing happened" when groups
+                # don't appear after inviting the bot.
+                await conn.execute(
+                    """
+                    ALTER TABLE line_channels
+                    ADD COLUMN IF NOT EXISTS last_webhook_at TIMESTAMPTZ
+                    """
+                )
                 # Multi-user (2026-04-30): each channel "belongs to" the
-                # FB user who created it. NULL means "shared / legacy"
-                # (the env-seeded default — visible to everyone but
-                # only editable by admins). Per-user channels are
-                # invisible to other users.
+                # FB user who created it. NULL means "shared / legacy".
                 await conn.execute(
                     """
                     ALTER TABLE line_channels
@@ -3232,10 +3242,35 @@ async def _handle_line_webhook(request: Request, channel: tuple[str, str, str]) 
     raw = await request.body()
     sig = request.headers.get("X-Line-Signature")
     if not line_client.verify_webhook_signature(raw, sig, secret=channel_secret):
+        # Stamp last_webhook_at even on signature failure — this still
+        # tells the user "LINE reached us, but the secret is wrong",
+        # which is actionable. We use a separate column / flag if we
+        # ever need to distinguish; for now just timestamp.
+        if _db_pool is not None:
+            try:
+                async with _db_pool.acquire() as conn:
+                    await conn.execute(
+                        "UPDATE line_channels SET last_webhook_at = NOW() WHERE id = $1::uuid",
+                        channel_id,
+                    )
+            except Exception:
+                pass
+        print(f"[line_webhook] 401 invalid signature channel={channel_id}", flush=True)
         raise HTTPException(status_code=401, detail="Invalid signature")
 
     if _db_pool is None:
         return {"ok": True, "skipped": "no DB"}
+
+    # Stamp the activity timestamp so the UI can show「上次接收: 5 分鐘前」
+    # — the visibility cue for "is LINE actually reaching us?".
+    try:
+        async with _db_pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE line_channels SET last_webhook_at = NOW() WHERE id = $1::uuid",
+                channel_id,
+            )
+    except Exception:
+        pass
 
     try:
         payload = await request.json()
@@ -3375,7 +3410,7 @@ async def list_line_channels(request: Request, fb_user_id: Optional[str] = None)
         rows = await conn.fetch(
             """
             SELECT c.id, c.name, c.channel_secret, c.access_token, c.enabled, c.is_default,
-                   c.owner_fb_user_id, c.created_at, c.updated_at,
+                   c.owner_fb_user_id, c.created_at, c.updated_at, c.last_webhook_at,
                    COALESCE(g.cnt, 0) AS bound_groups_count
             FROM line_channels c
             LEFT JOIN (
@@ -3417,6 +3452,7 @@ async def list_line_channels(request: Request, fb_user_id: Optional[str] = None)
                 "is_orphan": is_orphan,
                 "editable": owner == uid,
                 "bound_groups_count": int(r["bound_groups_count"] or 0),
+                "last_webhook_at": r["last_webhook_at"].isoformat() if r["last_webhook_at"] else None,
                 "webhook_url": _public_channel_url(request, cid),
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None,
                 "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
