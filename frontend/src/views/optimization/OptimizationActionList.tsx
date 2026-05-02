@@ -2,11 +2,11 @@ import { OptimizationRow } from "./OptimizationRow";
 import type { OptimizationItem, OptimizationSeverity } from "./optimizationData";
 
 /**
- * Three-column layout — one column per severity. Each column has
- * a colored header (count badge) and a vertical stack of compact
- * cards. The single-list flat sort is replaced by per-column priority
- * order, which is what the operator actually wants when scanning:
- * see all the criticals together, all the warnings together, etc.
+ * Two-column action board — only critical (需立即處理) and warning
+ * (建議觀察) columns are rendered. The "good" tier is intentionally
+ * hidden: this view exists to surface what needs the operator's
+ * attention; healthy campaigns are noise here. Counts for all three
+ * tiers still appear on OptimizationSummaryStrip for context.
  */
 
 interface ColumnConfig {
@@ -18,7 +18,6 @@ interface ColumnConfig {
 const COLUMNS: ColumnConfig[] = [
   { key: "critical", title: "需立即處理", dotColor: "bg-orange" },
   { key: "warning", title: "建議觀察", dotColor: "bg-amber-400" },
-  { key: "good", title: "表現良好", dotColor: "bg-emerald-500" },
 ];
 
 export function OptimizationActionList({
@@ -29,7 +28,9 @@ export function OptimizationActionList({
   businessIdForCampaign: (accountId: string | undefined) => string | undefined;
 }) {
   // Bucket once; the items array is already priority-sorted within
-  // each severity from buildOptimizationItems().
+  // each severity from buildOptimizationItems(). We keep all three
+  // tiers in the bucket map for type completeness, but only the
+  // critical/warning slots are rendered.
   const buckets: Record<OptimizationSeverity, OptimizationItem[]> = {
     critical: [],
     warning: [],
@@ -38,7 +39,7 @@ export function OptimizationActionList({
   for (const it of items) buckets[it.severity].push(it);
 
   return (
-    <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-3 md:gap-3.5">
+    <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2 md:gap-3.5">
       {COLUMNS.map((col) => (
         <div key={col.key} className="flex min-w-0 flex-col gap-2">
           {/* Column header — no surrounding box, just a colored dot
