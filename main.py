@@ -2412,6 +2412,76 @@ async def create_portal_session(payload: PortalPayload):
     return {"url": url}
 
 
+# ── Asset proxy ───────────────────────────────────────────────────────
+#
+# FB / IG creative URLs (scontent-*.fbcdn.net, *.cdninstagram.com) are
+# served without permissive CORS, so the browser can't fetch them as
+# blobs to feed into navigator.share() or a same-origin <a download>.
+# Streaming the bytes through our own origin sidesteps that:
+#   - The frontend fetch becomes same-origin → blob() works → File()
+#     works → iOS Safari's Web Share API can offer "儲存影片 / 儲存
+#     到相簿".
+#   - The Content-Disposition: attachment header makes plain-navigation
+#     to the proxy URL trigger a download instead of the iOS native
+#     fullscreen video player (the failure mode users were hitting
+#     when our fetch fallback opened the FB URL in a new tab).
+#
+# Allow-list is hostname-suffix based — any subdomain of the listed
+# CDNs works (FB rotates `scontent-tpe1-1.fbcdn.net`, `video-tpe1-2…`
+# etc. per region). Anything else 400s so the endpoint can't be
+# turned into an open proxy.
+
+_PROXY_ALLOWED_HOST_SUFFIXES = (
+    ".fbcdn.net",
+    ".cdninstagram.com",
+    ".facebook.com",
+    ".fb.com",
+    ".instagram.com",
+)
+
+
+@app.get("/api/proxy-asset")
+async def proxy_asset(
+    url: str = Query(..., description="FB/IG CDN URL to proxy"),
+    filename: Optional[str] = Query(None, description="Suggested download filename"),
+):
+    """Stream a remote FB/IG creative through our origin so the
+    browser can save it as a file. Returns the raw bytes with
+    Content-Disposition: attachment set."""
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid URL")
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="Unsupported scheme")
+    host = (parsed.hostname or "").lower()
+    if not any(host == s.lstrip(".") or host.endswith(s) for s in _PROXY_ALLOWED_HOST_SUFFIXES):
+        raise HTTPException(status_code=400, detail="Host not allowed")
+
+    safe_name = re.sub(r'[\\/:*?"<>|\n\r\t]', "_", (filename or "creative"))[:120].strip() or "creative"
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            upstream = await client.get(url, follow_redirects=True)
+    except Exception as exc:
+        print(f"[proxy] fetch failed for {host}: {exc!r}", flush=True)
+        raise HTTPException(status_code=502, detail="Upstream fetch failed")
+
+    if upstream.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"Upstream {upstream.status_code}")
+
+    return Response(
+        content=upstream.content,
+        media_type=upstream.headers.get("content-type", "application/octet-stream"),
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_name}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 # ── Quick Launch ──────────────────────────────────────────────────────
 
 class CampaignCreate(BaseModel):
