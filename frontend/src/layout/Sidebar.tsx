@@ -214,46 +214,6 @@ const TOOL_ITEMS: NavItem[] = [
       </svg>
     ),
   },
-  {
-    to: "/billing",
-    label: "訂閱方案",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-      </svg>
-    ),
-  },
-  {
-    to: "/payment-accounts",
-    label: "收款帳戶設定",
-    icon: (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <rect x="2" y="6" width="20" height="13" rx="2" />
-        <line x1="2" y1="10" x2="22" y2="10" />
-        <line x1="6" y1="15" x2="10" y2="15" />
-      </svg>
-    ),
-  },
 ];
 
 export interface SidebarProps {
@@ -390,6 +350,18 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                 </div>
                 <div className="mt-0.5 text-[10px] font-normal text-gray-300">Facebook 帳號</div>
               </div>
+              <button
+                type="button"
+                onMouseEnter={() => prefetchView("/billing")}
+                onFocus={() => prefetchView("/billing")}
+                onClick={() => {
+                  setMenuOpen(false);
+                  navigate("/billing");
+                }}
+                className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] text-gray-500 hover:bg-orange-bg hover:text-orange"
+              >
+                我的訂閱
+              </button>
               <button
                 type="button"
                 onMouseEnter={() => prefetchView("/engineering")}
