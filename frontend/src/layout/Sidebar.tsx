@@ -1,4 +1,6 @@
+import { useSubscription } from "@/api/hooks/useSubscription";
 import { useFbAuth } from "@/auth/FbAuthProvider";
+import { TierBadge } from "@/components/TierBadge";
 import { cn } from "@/lib/cn";
 import { prefetchView } from "@/router";
 import { useEffect, useRef, useState } from "react";
@@ -261,6 +263,8 @@ export interface SidebarProps {
 
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const { user, logout } = useFbAuth();
+  const subQuery = useSubscription();
+  const sub = subQuery.data;
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuWrapRef = useRef<HTMLDivElement | null>(null);
@@ -364,9 +368,12 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
                 (user?.name?.[0] ?? "?").toUpperCase()
               )}
             </div>
-            <span className="flex-1 truncate text-left text-[13px] font-semibold text-ink">
-              {user?.name ?? ""}
-            </span>
+            <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
+              <span className="w-full truncate text-[13px] font-semibold text-ink">
+                {user?.name ?? ""}
+              </span>
+              {sub && <TierBadge tier={sub.tier} grandfathered={sub.grandfathered} />}
+            </div>
           </button>
 
           {menuOpen && (
@@ -377,8 +384,11 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               )}
             >
               <div className="mb-1 border-b border-border px-2 pb-1.5 pt-2 text-xs font-bold text-ink">
-                <div className="truncate">{user?.name}</div>
-                <div className="text-[10px] font-normal text-gray-300">Facebook 帳號</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate">{user?.name}</span>
+                  {sub && <TierBadge tier={sub.tier} grandfathered={sub.grandfathered} />}
+                </div>
+                <div className="mt-0.5 text-[10px] font-normal text-gray-300">Facebook 帳號</div>
               </div>
               <button
                 type="button"

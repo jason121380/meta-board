@@ -606,11 +606,9 @@ export const api = {
       }),
     /** Claim a NULL-owner orphan channel for the calling user. */
     claim: (fbUserId: string, id: string) =>
-      request<{ ok: boolean }>(
-        "POST",
-        `/api/line-channels/${encodeURIComponent(id)}/claim`,
-        { query: { fb_user_id: fbUserId } },
-      ),
+      request<{ ok: boolean }>("POST", `/api/line-channels/${encodeURIComponent(id)}/claim`, {
+        query: { fb_user_id: fbUserId },
+      }),
   },
 
   linePush: {
@@ -721,6 +719,17 @@ export const api = {
     /** Generate a Polar customer-portal URL for self-serve management. */
     portal: (fbUserId: string) =>
       request<{ url: string }>("POST", "/api/billing/portal", {
+        body: { fb_user_id: fbUserId },
+      }),
+    /** Engineering-mode admin: drop calling user to free tier (testing).
+     *  Backend rejects if fb_user_id is not in GRANDFATHERED_USERS. */
+    adminResetToFree: (fbUserId: string) =>
+      request<{ ok: boolean; tier: string }>("POST", "/api/billing/_admin/reset-to-free", {
+        body: { fb_user_id: fbUserId },
+      }),
+    /** Engineering-mode admin: re-apply grandfather Max state. */
+    adminRestoreGrandfather: (fbUserId: string) =>
+      request<{ ok: boolean; tier: string }>("POST", "/api/billing/_admin/restore-grandfather", {
         body: { fb_user_id: fbUserId },
       }),
   },
