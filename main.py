@@ -2364,6 +2364,96 @@ async def create_checkout(payload: CheckoutPayload):
     return {"url": url, "checkout_id": resp.get("id")}
 
 
+def _is_grandfathered_admin(fb_user_id: str) -> bool:
+    """Membership check against GRANDFATHERED_USERS env (with the
+    legacy GRANDFATHERED_AGENCY_USERS fallback). Used as the authz
+    gate for the admin reset endpoints below — only LURE-internal
+    fb_user_ids may freely toggle their own subscription state."""
+    raw = (os.getenv("GRANDFATHERED_USERS") or os.getenv("GRANDFATHERED_AGENCY_USERS") or "").strip()
+    if not raw:
+        return False
+    ids = {s.strip() for s in raw.split(",") if s.strip()}
+    return fb_user_id in ids
+
+
+class AdminResetPayload(BaseModel):
+    fb_user_id: str
+
+
+@app.post("/api/billing/_admin/reset-to-free")
+async def admin_reset_to_free(payload: AdminResetPayload):
+    """Engineering-mode helper: drop the calling user back to free
+    tier so they can experience the regular paywall flow. Restricted
+    to fb_user_ids listed in GRANDFATHERED_USERS so a paying customer
+    can't call this to skip payment."""
+    if not _is_grandfathered_admin(payload.fb_user_id):
+        raise HTTPException(status_code=403, detail="Not authorised")
+    if _db_pool is None:
+        raise HTTPException(status_code=503, detail="Database not configured")
+    async with _db_pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO subscriptions
+              (fb_user_id, tier, status, ad_accounts_limit,
+               line_channels_limit, line_groups_limit, monthly_push_limit,
+               grandfathered, polar_customer_id, polar_subscription_id,
+               trial_ends_at, current_period_end, cancel_at_period_end)
+            VALUES ($1, 'free', 'free', 1, 0, 0, 0,
+                    FALSE, NULL, NULL, NULL, NULL, FALSE)
+            ON CONFLICT (fb_user_id) DO UPDATE SET
+              tier = 'free',
+              status = 'free',
+              ad_accounts_limit = 1,
+              line_channels_limit = 0,
+              line_groups_limit = 0,
+              monthly_push_limit = 0,
+              grandfathered = FALSE,
+              polar_customer_id = NULL,
+              polar_subscription_id = NULL,
+              trial_ends_at = NULL,
+              current_period_end = NULL,
+              cancel_at_period_end = FALSE,
+              updated_at = NOW()
+            """,
+            payload.fb_user_id,
+        )
+    print(f"[billing] admin reset → free tier for user {payload.fb_user_id[-4:]}", flush=True)
+    return {"ok": True, "tier": "free"}
+
+
+@app.post("/api/billing/_admin/restore-grandfather")
+async def admin_restore_grandfather(payload: AdminResetPayload):
+    """Engineering-mode helper: re-apply Max grandfather state.
+    Mirrors the lifespan seed so testing can flip back without a
+    full redeploy. Same authz gate as the reset endpoint."""
+    if not _is_grandfathered_admin(payload.fb_user_id):
+        raise HTTPException(status_code=403, detail="Not authorised")
+    if _db_pool is None:
+        raise HTTPException(status_code=503, detail="Database not configured")
+    async with _db_pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO subscriptions
+              (fb_user_id, tier, status, ad_accounts_limit,
+               line_channels_limit, line_groups_limit, monthly_push_limit,
+               grandfathered)
+            VALUES ($1, 'max', 'active', 999999, 999999, 999999, NULL, TRUE)
+            ON CONFLICT (fb_user_id) DO UPDATE SET
+              tier = 'max',
+              status = 'active',
+              ad_accounts_limit = 999999,
+              line_channels_limit = 999999,
+              line_groups_limit = 999999,
+              monthly_push_limit = NULL,
+              grandfathered = TRUE,
+              updated_at = NOW()
+            """,
+            payload.fb_user_id,
+        )
+    print(f"[billing] admin restore → grandfather Max for user {payload.fb_user_id[-4:]}", flush=True)
+    return {"ok": True, "tier": "max"}
+
+
 class PortalPayload(BaseModel):
     fb_user_id: str
 
