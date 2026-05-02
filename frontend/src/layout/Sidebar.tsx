@@ -332,7 +332,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               <span className="w-full truncate text-[13px] font-semibold text-ink">
                 {user?.name ?? ""}
               </span>
-              {sub && <TierBadge tier={sub.tier} grandfathered={sub.grandfathered} />}
+              {sub && <TierBadge tier={sub.tier} />}
             </div>
           </button>
 
@@ -346,7 +346,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               <div className="mb-1 border-b border-border px-2 pb-1.5 pt-2 text-xs font-bold text-ink">
                 <div className="flex items-center gap-1.5">
                   <span className="truncate">{user?.name}</span>
-                  {sub && <TierBadge tier={sub.tier} grandfathered={sub.grandfathered} />}
+                  {sub && <TierBadge tier={sub.tier} />}
                 </div>
                 <div className="mt-0.5 text-[10px] font-normal text-gray-300">Facebook 帳號</div>
               </div>

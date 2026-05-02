@@ -42,15 +42,11 @@ const TIER_STYLES: Record<TierId, TierStyle> = {
 
 export interface TierBadgeProps {
   tier: TierId;
-  /** When true, prefix the label with a small ✦ to mark the user
-   *  as grandfathered (LURE internal). Visually distinct from a
-   *  regular paying Max user. */
-  grandfathered?: boolean;
   size?: "sm" | "xs";
   className?: string;
 }
 
-export function TierBadge({ tier, grandfathered, size = "xs", className }: TierBadgeProps) {
+export function TierBadge({ tier, size = "xs", className }: TierBadgeProps) {
   const style = TIER_STYLES[tier];
   if (!style) return null;
   return (
@@ -62,7 +58,6 @@ export function TierBadge({ tier, grandfathered, size = "xs", className }: TierB
         className,
       )}
     >
-      {grandfathered && tier === "max" && <span aria-hidden="true">✦</span>}
       {style.label}
     </span>
   );

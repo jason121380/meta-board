@@ -41,13 +41,25 @@ export function BillingView() {
 
   const handleManage = async () => {
     if (!user?.id) return;
+    // Pre-open the tab synchronously inside the click handler so
+    // popup blockers don't intercept the post-await window.open.
+    // We point it at about:blank and rewrite location.href once the
+    // signed Polar URL comes back.
+    const popup = window.open("", "_blank", "noopener,noreferrer");
     setOpeningPortal(true);
     try {
       const resp = await api.billing.portal(user.id);
-      window.location.assign(resp.url);
+      if (popup) {
+        popup.location.href = resp.url;
+      } else {
+        // Popup blocked — fall back to in-tab navigation.
+        window.location.assign(resp.url);
+      }
     } catch (err) {
       console.error("[billing] portal failed", err);
+      if (popup) popup.close();
       toast("無法開啟管理頁,請稍後再試", "error");
+    } finally {
       setOpeningPortal(false);
     }
   };
@@ -101,11 +113,6 @@ export function BillingView() {
           </Link>
         </div>
 
-        {sub.grandfathered && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-700">
-            ✨ 您是 LURE 內部使用者,享有 Max 方案永久免費。
-          </div>
-        )}
       </div>
     </>
   );

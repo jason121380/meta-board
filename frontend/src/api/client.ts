@@ -721,17 +721,6 @@ export const api = {
       request<{ url: string }>("POST", "/api/billing/portal", {
         body: { fb_user_id: fbUserId },
       }),
-    /** Engineering-mode admin: drop calling user to free tier (testing).
-     *  Backend rejects if fb_user_id is not in GRANDFATHERED_USERS. */
-    adminResetToFree: (fbUserId: string) =>
-      request<{ ok: boolean; tier: string }>("POST", "/api/billing/_admin/reset-to-free", {
-        body: { fb_user_id: fbUserId },
-      }),
-    /** Engineering-mode admin: re-apply grandfather Max state. */
-    adminRestoreGrandfather: (fbUserId: string) =>
-      request<{ ok: boolean; tier: string }>("POST", "/api/billing/_admin/restore-grandfather", {
-        body: { fb_user_id: fbUserId },
-      }),
   },
 };
 
@@ -778,7 +767,6 @@ export interface SubscriptionState {
   trial_ends_at: string | null;
   current_period_end: string | null;
   cancel_at_period_end: boolean;
-  grandfathered: boolean;
   polar_customer_id: string | null;
   polar_subscription_id: string | null;
 }
