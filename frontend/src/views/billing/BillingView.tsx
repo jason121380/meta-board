@@ -44,20 +44,22 @@ export function BillingView() {
     // Pre-open the tab synchronously inside the click handler so
     // popup blockers don't intercept the post-await window.open.
     // We point it at about:blank and rewrite location.href once the
-    // signed Polar URL comes back.
-    const popup = window.open("", "_blank", "noopener,noreferrer");
+    // signed Polar URL comes back. We cannot pass noopener here —
+    // the new window has to remain reachable by reference so we can
+    // set its location after the await.
+    const popup = window.open("about:blank", "_blank");
     setOpeningPortal(true);
     try {
       const resp = await api.billing.portal(user.id);
-      if (popup) {
-        popup.location.href = resp.url;
+      if (popup && !popup.closed) {
+        popup.location.replace(resp.url);
       } else {
         // Popup blocked — fall back to in-tab navigation.
         window.location.assign(resp.url);
       }
     } catch (err) {
       console.error("[billing] portal failed", err);
-      if (popup) popup.close();
+      if (popup && !popup.closed) popup.close();
       toast("無法開啟管理頁,請稍後再試", "error");
     } finally {
       setOpeningPortal(false);
