@@ -55,7 +55,7 @@ export function BillingView() {
   if (subQuery.isLoading || cfgQuery.isLoading) {
     return (
       <>
-        <Topbar title="訂閱方案" />
+        <Topbar title="我的訂閱" />
         <div className="p-3 md:p-5">
           <LoadingState title="載入訂閱資料中..." />
         </div>
@@ -66,7 +66,7 @@ export function BillingView() {
   if (!sub) {
     return (
       <>
-        <Topbar title="訂閱方案" />
+        <Topbar title="我的訂閱" />
         <div className="p-3 md:p-5">
           <p className="text-sm text-gray-500">無法取得訂閱資料</p>
         </div>
@@ -78,7 +78,7 @@ export function BillingView() {
 
   return (
     <>
-      <Topbar title="訂閱方案" />
+      <Topbar title="我的訂閱" />
       <div className="mx-auto flex w-full max-w-[800px] flex-col gap-4 p-3 md:p-5">
         <CurrentPlanCard sub={sub} tierName={tierName} />
         <UsageCard sub={sub} />

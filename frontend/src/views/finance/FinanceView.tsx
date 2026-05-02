@@ -14,6 +14,7 @@ import { useFiltersStore } from "@/stores/filtersStore";
 import { useFinanceStore } from "@/stores/financeStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { FinanceAccountPanel } from "./FinanceAccountPanel";
 import { FinanceTable } from "./FinanceTable";
 import {
@@ -57,6 +58,7 @@ export function FinanceView() {
 
   const [search, setSearch] = useState("");
   const [hideZero, setHideZero] = useState(true);
+  const navigate = useNavigate();
 
   // Single batch request replaces useMultiAccountCampaigns +
   // useMultiAccountInsights. include_archived: true because the
@@ -143,6 +145,31 @@ export function FinanceView() {
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            title="收款帳戶設定"
+            aria-label="收款帳戶設定"
+            onClick={() => navigate("/payment-accounts")}
+            className="h-10 w-10 justify-center px-0 md:h-[30px] md:w-[30px]"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              className="block"
+            >
+              <rect x="2" y="6" width="20" height="13" rx="2" />
+              <line x1="2" y1="10" x2="22" y2="10" />
+              <line x1="6" y1="15" x2="10" y2="15" />
             </svg>
           </Button>
         </div>

@@ -250,7 +250,7 @@ function FaqSection({ trialDays }: { trialDays: number }) {
   const items = [
     {
       q: "可以隨時升降級或取消嗎?",
-      a: "可以。在「訂閱方案」頁可進入 Polar 自助管理頁,隨時切換方案、更新付款方式或取消訂閱。",
+      a: "可以。在「我的訂閱」頁可進入 Polar 自助管理頁,隨時切換方案、更新付款方式或取消訂閱。",
     },
     {
       q: "「廣告帳戶數」怎麼計算?",
