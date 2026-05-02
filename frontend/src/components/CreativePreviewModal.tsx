@@ -82,17 +82,67 @@ function buildDownloadName(creativeName: string, url: string, isVideo: boolean):
   return `${safe || "creative"}.${ext}`;
 }
 
-/** Download a remote URL by fetching the bytes and clicking a blob
- *  anchor. Cross-origin `<a download>` is unreliable on FB CDN URLs
- *  (Chrome navigates instead of saving), so we fetch and re-anchor.
- *  When the fetch fails (e.g. CORS denial on a particular CDN edge)
- *  we fall back to opening the URL in a new tab so the user can
- *  right-click → save manually. */
+/** Map a filename extension to a MIME type. The blob from `fetch()`
+ *  usually carries the right Content-Type, but FB's CDN occasionally
+ *  returns an empty string and `navigator.share()` rejects File
+ *  objects with no type — so we infer one from the extension as a
+ *  belt-and-braces fallback. */
+function mimeForExt(ext: string): string {
+  const map: Record<string, string> = {
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    m4v: "video/x-m4v",
+    webm: "video/webm",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    webp: "image/webp",
+  };
+  return map[ext.toLowerCase()] ?? "application/octet-stream";
+}
+
+/** Download a remote URL. On mobile (where the Web Share API
+ *  reports `canShare({ files })`) we open the native share sheet so
+ *  the user can pick "儲存到相簿 / 儲存到檔案" — iOS Safari ignores
+ *  `<a download>` cross-origin and Android share sheets are the
+ *  most reliable way to land the file in the user's gallery. On
+ *  desktop we fall back to fetching the bytes and clicking a blob
+ *  anchor (regular browser download). When everything fails we open
+ *  the URL in a new tab so the user can right-click → save. */
 async function downloadAsset(url: string, filename: string): Promise<void> {
   try {
     const resp = await fetch(url, { credentials: "omit" });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const blob = await resp.blob();
+    const ext = filename.split(".").pop() ?? "";
+    const type = blob.type || mimeForExt(ext);
+    const file = new File([blob], filename, { type });
+
+    // Web Share API path — covers iOS Safari and modern Android
+    // browsers. We probe with canShare(files) because share() may
+    // exist on desktop Chrome without file support, in which case
+    // we want the blob-anchor download instead.
+    const nav = navigator as Navigator & {
+      canShare?: (data: { files?: File[] }) => boolean;
+      share?: (data: { files?: File[]; title?: string }) => Promise<void>;
+    };
+    if (nav.canShare?.({ files: [file] }) && typeof nav.share === "function") {
+      try {
+        await nav.share({ files: [file], title: filename });
+        return;
+      } catch (err) {
+        // AbortError = the user dismissed the share sheet. Don't
+        // fall through to the blob download, otherwise we'd queue
+        // up a second save dialog they already declined.
+        if (err instanceof Error && err.name === "AbortError") return;
+        // Any other share error → fall through to blob anchor.
+      }
+    }
+
+    // Desktop (and any platform without file share support): blob
+    // anchor click. Defer the URL.revokeObjectURL so Safari has time
+    // to spool the download before we tear the blob down.
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = blobUrl;
@@ -100,7 +150,6 @@ async function downloadAsset(url: string, filename: string): Promise<void> {
     document.body.appendChild(a);
     a.click();
     a.remove();
-    // Defer revoke so Safari has time to start the download.
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   } catch (err) {
     console.error("[creative] download failed, opening in new tab", err);
