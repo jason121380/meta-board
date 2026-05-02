@@ -263,7 +263,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       // in on mobile. Desktop env() resolves to 0, so no change.
       style={{ paddingTop: "env(safe-area-inset-top)" }}
       className={cn(
-        "shell-sidebar fixed inset-y-0 left-0 z-[100] flex w-sidebar flex-col overflow-y-auto border-r border-border bg-white",
+        "shell-sidebar fixed inset-y-0 left-0 z-[100] flex w-sidebar flex-col overflow-hidden border-r border-border bg-white",
       )}
       onClick={() => {
         // Tapping a link inside the sidebar triggers a route change
@@ -279,8 +279,11 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         </div>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 p-2.5">
+      {/* Nav — owns the scroll so the user dropdown below stays
+          glued to the sidebar bottom on iOS PWA. Putting overflow-y
+          on the parent <aside> instead causes flex-1 + mt-auto to
+          mis-measure and leave a dead-air gap below the avatar. */}
+      <nav className="min-h-0 flex-1 overflow-y-auto p-2.5">
         <div className="px-2.5 pt-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.8px] text-gray-300">
           主選單
         </div>
@@ -297,7 +300,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       </nav>
 
       {/* User dropdown — opens upward from the bottom */}
-      <div className="mt-auto border-t border-border px-2 py-3">
+      <div className="shrink-0 border-t border-border px-2 py-3">
         <div
           className="relative"
           ref={menuWrapRef}
