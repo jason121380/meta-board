@@ -1,8 +1,6 @@
 import { api } from "@/api/client";
-import { useSubscription } from "@/api/hooks/useSubscription";
 import { useFbAuth } from "@/auth/FbAuthProvider";
 import { Button } from "@/components/Button";
-import { TierBadge } from "@/components/TierBadge";
 import { toast } from "@/components/Toast";
 import { Topbar } from "@/layout/Topbar";
 import { cn } from "@/lib/cn";
@@ -25,7 +23,6 @@ export function EngineeringView() {
       <Topbar title="工程模式" />
       <div className="flex flex-col gap-4 p-4 md:p-6">
         <IdentityPanel />
-        <SubscriptionAdminPanel />
         <FbUsagePanel />
         <div className="grid gap-4 md:grid-cols-2">
           <ReactQueryPanel />
@@ -40,95 +37,12 @@ export function EngineeringView() {
   );
 }
 
-// ── Subscription admin (grandfathered users only) ────────────
-//
-// Lets a LURE-internal admin temporarily drop themselves into the
-// free tier — useful for testing the paywall / checkout flow as a
-// regular user without spinning up a second FB account, and for
-// snapping back to the Max grandfather state once the test is done.
-// The backend gates these endpoints on GRANDFATHERED_USERS env, so
-// a paying customer hitting them gets 403.
-
-function SubscriptionAdminPanel() {
-  const { user } = useFbAuth();
-  const subQuery = useSubscription();
-  const [busy, setBusy] = useState<"reset" | "restore" | null>(null);
-  const sub = subQuery.data;
-  const fbUserId = user?.id ?? "";
-
-  const handleReset = async () => {
-    if (!fbUserId) return;
-    setBusy("reset");
-    try {
-      await api.billing.adminResetToFree(fbUserId);
-      await queryClient.invalidateQueries({ queryKey: ["billing", "me"] });
-      toast("已重置成 Free 用戶", "success");
-    } catch (err) {
-      console.error("[engineering] reset failed", err);
-      toast("重置失敗(僅限 grandfathered 使用者)", "error");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const handleRestore = async () => {
-    if (!fbUserId) return;
-    setBusy("restore");
-    try {
-      await api.billing.adminRestoreGrandfather(fbUserId);
-      await queryClient.invalidateQueries({ queryKey: ["billing", "me"] });
-      toast("已恢復成 Max(grandfather)", "success");
-    } catch (err) {
-      console.error("[engineering] restore failed", err);
-      toast("恢復失敗(僅限 grandfathered 使用者)", "error");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  return (
-    <Card
-      title="訂閱狀態切換"
-      subtitle="(僅 LURE 內部使用者) 在 Free 與 Max grandfather 之間切換,用來測試付費流程"
-    >
-      <div className="mb-3 flex items-center gap-2 text-[12px]">
-        <span className="text-gray-400">目前狀態</span>
-        {sub ? (
-          <TierBadge tier={sub.tier} grandfathered={sub.grandfathered} size="sm" />
-        ) : (
-          <span className="text-gray-300">載入中...</span>
-        )}
-        {sub?.grandfathered && <span className="text-[11px] text-emerald-600">內部使用者</span>}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={busy !== null || sub?.tier === "free"}
-          onClick={() => void handleReset()}
-        >
-          {busy === "reset" ? "重置中..." : "重置成 Free 用戶(測試)"}
-        </Button>
-        <Button
-          size="sm"
-          variant="primary"
-          disabled={busy !== null || (sub?.tier === "max" && sub?.grandfathered)}
-          onClick={() => void handleRestore()}
-        >
-          {busy === "restore" ? "恢復中..." : "恢復成 Max grandfather"}
-        </Button>
-      </div>
-    </Card>
-  );
-}
-
 // ── Identity (fb_user_id copy) ───────────────────────────────
 //
 // Surfaces the logged-in user's fb_user_id with a 1-tap copy
-// button. Used to hand admins the id they need for billing
-// grandfather seeds, support tickets, and DB lookups — saves
-// digging through DevTools / network tabs to extract it from
-// /api/auth/me responses.
+// button. Used to hand admins the id they need for support
+// tickets and DB lookups — saves digging through DevTools /
+// network tabs to extract it from /api/auth/me responses.
 
 function IdentityPanel() {
   const { user } = useFbAuth();
