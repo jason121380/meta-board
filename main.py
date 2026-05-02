@@ -423,6 +423,58 @@ async def lifespan(app: FastAPI):
                 await conn.execute(
                     "CREATE INDEX IF NOT EXISTS idx_lpl_config_run ON line_push_logs (config_id, run_at DESC)"
                 )
+                # ── Billing / Subscription (Polar.sh) ─────────────
+                # `subscriptions`: one row per fb_user_id. Tracks Polar
+                # state + denormalized quota limits so per-request
+                # auth checks don't have to JOIN a separate plans
+                # table. `tier`/`status` are the source of truth;
+                # the *_limit columns are reapplied whenever a webhook
+                # mutates the row.
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS subscriptions (
+                        fb_user_id TEXT PRIMARY KEY,
+                        polar_customer_id TEXT UNIQUE,
+                        polar_subscription_id TEXT UNIQUE,
+                        tier TEXT NOT NULL DEFAULT 'free',
+                        status TEXT NOT NULL DEFAULT 'free',
+                        trial_ends_at TIMESTAMPTZ,
+                        current_period_end TIMESTAMPTZ,
+                        cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE,
+                        ad_accounts_limit INT NOT NULL DEFAULT 1,
+                        line_channels_limit INT NOT NULL DEFAULT 0,
+                        line_groups_limit INT NOT NULL DEFAULT 0,
+                        monthly_push_limit INT,
+                        grandfathered BOOLEAN NOT NULL DEFAULT FALSE,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_subscriptions_polar_customer ON subscriptions (polar_customer_id)"
+                )
+                # `billing_events`: webhook idempotency log + audit
+                # trail. Polar can re-deliver events; the unique
+                # constraint on polar_event_id makes ingest a no-op
+                # for duplicates.
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS billing_events (
+                        id BIGSERIAL PRIMARY KEY,
+                        polar_event_id TEXT UNIQUE NOT NULL,
+                        event_type TEXT NOT NULL,
+                        fb_user_id TEXT,
+                        payload JSONB NOT NULL,
+                        processed_at TIMESTAMPTZ,
+                        error TEXT,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_billing_events_user ON billing_events (fb_user_id, created_at DESC)"
+                )
                 # user_settings is keyed (fb_user_id, key) — the PK
                 # already covers fb_user_id-leading queries, but bare
                 # WHERE fb_user_id=$1 fan-outs benefit from being able
@@ -463,10 +515,12 @@ async def lifespan(app: FastAPI):
                     "line_groups",
                     "campaign_line_push_configs",
                     "line_push_logs",
+                    "subscriptions",
+                    "billing_events",
                 ):
                     n = await conn.fetchval(f"SELECT COUNT(*) FROM {tbl}")
                     print(f"[startup] DB exact: {tbl} = {n} rows", flush=True)
-            print("[startup] DB: OK (nicknames + settings + LINE push tables ready)", flush=True)
+            print("[startup] DB: OK (nicknames + settings + LINE push + subscriptions tables ready)", flush=True)
         except Exception as exc:
             _db_pool = None
             print(f"[startup] DB: FAILED ({exc})", flush=True)
@@ -527,6 +581,45 @@ async def lifespan(app: FastAPI):
                         )
             except Exception as exc:
                 print(f"[startup] LINE channels admin claim failed: {exc}", flush=True)
+
+    # Grandfather LURE internal users into Agency tier so they don't
+    # hit a paywall on their own platform. List comes from
+    # GRANDFATHERED_AGENCY_USERS env var (comma-separated fb_user_ids).
+    # Idempotent — re-applies the upgrade on every boot so a manual
+    # DB tweak can't accidentally downgrade a teammate.
+    if _db_pool is not None:
+        raw = (os.getenv("GRANDFATHERED_AGENCY_USERS") or "").strip()
+        if raw:
+            ids = [s.strip() for s in raw.split(",") if s.strip()]
+            if ids:
+                try:
+                    async with _db_pool.acquire() as conn:
+                        for uid in ids:
+                            await conn.execute(
+                                """
+                                INSERT INTO subscriptions
+                                  (fb_user_id, tier, status, ad_accounts_limit,
+                                   line_channels_limit, line_groups_limit,
+                                   monthly_push_limit, grandfathered)
+                                VALUES ($1, 'agency', 'active', 999999, 999999, 999999, NULL, TRUE)
+                                ON CONFLICT (fb_user_id) DO UPDATE SET
+                                  tier = 'agency',
+                                  status = 'active',
+                                  ad_accounts_limit = 999999,
+                                  line_channels_limit = 999999,
+                                  line_groups_limit = 999999,
+                                  monthly_push_limit = NULL,
+                                  grandfathered = TRUE,
+                                  updated_at = NOW()
+                                """,
+                                uid,
+                            )
+                    print(
+                        f"[startup] subscriptions: grandfathered {len(ids)} agency user(s)",
+                        flush=True,
+                    )
+                except Exception as exc:
+                    print(f"[startup] subscriptions grandfather seed failed: {exc}", flush=True)
 
     # Start the LINE push scheduler loop only when the DB is available.
     # Without DB there's nothing to schedule off, so skip silently.
@@ -1716,6 +1809,201 @@ async def delete_shared_setting(key: str):
     async with pool.acquire() as conn:
         await conn.execute("DELETE FROM shared_settings WHERE key = $1", key)
     return {"ok": True}
+
+
+# ── Billing / Pricing (Polar.sh) ──────────────────────────────────────
+#
+# Three monthly tiers + a free tier. Polar handles checkout, trial
+# logic, payment retries, and the customer self-service portal. This
+# server's responsibilities are narrower:
+#
+#   1. Serve TIER_CONFIGS to the public /pricing page.
+#   2. Read `subscriptions` to answer "what tier is this user?".
+#   3. Ingest Polar webhooks → upsert `subscriptions` (Phase 3 will
+#      add signature verification + per-event handling; Phase 1 is
+#      a stub that just persists raw payloads).
+#
+# Quota gates on the existing write endpoints land in Phase 5.
+
+POLAR_API_KEY = os.getenv("POLAR_API_KEY", "")
+POLAR_WEBHOOK_SECRET = os.getenv("POLAR_WEBHOOK_SECRET", "")
+POLAR_PRODUCT_ID_STARTER = os.getenv("POLAR_PRODUCT_ID_STARTER", "")
+POLAR_PRODUCT_ID_GROWTH = os.getenv("POLAR_PRODUCT_ID_GROWTH", "")
+POLAR_PRODUCT_ID_AGENCY = os.getenv("POLAR_PRODUCT_ID_AGENCY", "")
+
+# Single source of truth for both the /pricing page display AND the
+# quota limits applied per tier. Keep the *_limit values in sync with
+# the limits shown on the pricing page — frontend reads them via
+# /api/pricing/config so they only need updating here.
+#
+# `-1` for any *_limit means "unlimited" (the Agency tier).
+TIER_CONFIGS: dict = {
+    "free": {
+        "tier": "free",
+        "name": "Free",
+        "price_monthly": 0,
+        "price_monthly_full": 0,
+        "ad_accounts_limit": 1,
+        "line_channels_limit": 0,
+        "line_groups_limit": 0,
+        "monthly_push_limit": 0,
+        "polar_product_id": "",
+    },
+    "starter": {
+        "tier": "starter",
+        "name": "Starter",
+        "price_monthly": 990,
+        "price_monthly_full": 1980,
+        "ad_accounts_limit": 5,
+        "line_channels_limit": 1,
+        "line_groups_limit": 3,
+        "monthly_push_limit": 30,
+        "polar_product_id": POLAR_PRODUCT_ID_STARTER,
+    },
+    "growth": {
+        "tier": "growth",
+        "name": "Growth",
+        "price_monthly": 2490,
+        "price_monthly_full": 4980,
+        "ad_accounts_limit": 20,
+        "line_channels_limit": 3,
+        "line_groups_limit": 15,
+        "monthly_push_limit": 100,
+        "polar_product_id": POLAR_PRODUCT_ID_GROWTH,
+    },
+    "agency": {
+        "tier": "agency",
+        "name": "Agency",
+        "price_monthly": 6490,
+        "price_monthly_full": 12980,
+        "ad_accounts_limit": -1,
+        "line_channels_limit": -1,
+        "line_groups_limit": -1,
+        "monthly_push_limit": -1,
+        "polar_product_id": POLAR_PRODUCT_ID_AGENCY,
+    },
+}
+
+
+def _free_tier_state() -> dict:
+    """Default subscription state for users with no `subscriptions` row."""
+    cfg = TIER_CONFIGS["free"]
+    return {
+        "tier": "free",
+        "status": "free",
+        "ad_accounts_limit": cfg["ad_accounts_limit"],
+        "line_channels_limit": cfg["line_channels_limit"],
+        "line_groups_limit": cfg["line_groups_limit"],
+        "monthly_push_limit": cfg["monthly_push_limit"],
+        "trial_ends_at": None,
+        "current_period_end": None,
+        "cancel_at_period_end": False,
+        "grandfathered": False,
+        "polar_customer_id": None,
+        "polar_subscription_id": None,
+    }
+
+
+@app.get("/api/pricing/config")
+async def get_pricing_config():
+    """Public — used by the /pricing page (no auth required)."""
+    # Strip Polar product ids from the public response — they're
+    # only used server-side when building checkout URLs.
+    public_tiers = []
+    for cfg in TIER_CONFIGS.values():
+        public = {k: v for k, v in cfg.items() if k != "polar_product_id"}
+        public_tiers.append(public)
+    return {
+        "currency": "TWD",
+        "trial_days": 30,
+        "tiers": public_tiers,
+    }
+
+
+@app.get("/api/billing/me")
+async def get_billing_me(fb_user_id: str = Query(...)):
+    """Return the calling user's subscription state + tier limits.
+
+    Falls back to free-tier defaults when no row exists, so the
+    frontend never has to special-case "user has never subscribed".
+    """
+    if _db_pool is None:
+        return {"data": _free_tier_state()}
+    async with _db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM subscriptions WHERE fb_user_id = $1",
+            fb_user_id,
+        )
+    if not row:
+        return {"data": _free_tier_state()}
+    out = dict(row)
+    # asyncpg returns datetime objects; the JSON encoder needs
+    # ISO strings.
+    for k in ("trial_ends_at", "current_period_end", "created_at", "updated_at"):
+        if out.get(k) is not None:
+            out[k] = out[k].isoformat()
+    return {"data": out}
+
+
+@app.post("/api/billing/webhook")
+async def polar_webhook(request: Request):
+    """Phase 1 stub: ack + persist Polar webhook events.
+
+    Stores the raw payload to `billing_events` and ACKs immediately
+    so Polar's retry loop is satisfied. Phase 3 adds signature
+    verification (using POLAR_WEBHOOK_SECRET) and per-event
+    `subscriptions` upserts.
+
+    The raw-payload archive means that once Phase 3 lands we can
+    replay any unprocessed events from `billing_events` to backfill
+    state — no risk of dropped events during the stub period.
+    """
+    raw = await request.body()
+    try:
+        payload = _json.loads(raw or b"{}")
+    except Exception:
+        payload = {
+            "_parse_error": True,
+            "_raw_preview": raw.decode("utf-8", errors="replace")[:2000],
+        }
+
+    event_id = ""
+    event_type = "unknown"
+    if isinstance(payload, dict):
+        event_id = str(payload.get("id") or "")
+        event_type = str(payload.get("type") or "unknown")
+
+    print(f"[billing] webhook: {event_type} {event_id[:16]}", flush=True)
+
+    if _db_pool is None:
+        # Without DB we still ACK so Polar doesn't retry forever;
+        # the print above gives ops a breadcrumb.
+        return {"ok": True, "stored": False}
+
+    # Synthesize a unique id for unsigned/parse-failed events so the
+    # UNIQUE constraint on polar_event_id doesn't reject them. Use
+    # microsecond precision to avoid collisions during a webhook burst.
+    if not event_id:
+        event_id = f"unsigned-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f')}"
+
+    try:
+        async with _db_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO billing_events (polar_event_id, event_type, payload)
+                VALUES ($1, $2, $3::jsonb)
+                ON CONFLICT (polar_event_id) DO NOTHING
+                """,
+                event_id,
+                event_type,
+                _json.dumps(payload),
+            )
+        return {"ok": True, "stored": True}
+    except Exception as exc:
+        print(f"[billing] webhook persist failed: {exc}", flush=True)
+        # Still ACK — re-delivery would land the same payload on the
+        # same broken DB. Operators see the failure in stdout.
+        return {"ok": True, "stored": False, "error": str(exc)}
 
 
 # ── Quick Launch ──────────────────────────────────────────────────────
