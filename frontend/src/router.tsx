@@ -33,6 +33,8 @@ const importSettings = () => import("@/views/settings/SettingsView");
 const importLinePush = () => import("@/views/settings/LinePushSettingsView");
 const importPaymentAccounts = () => import("@/views/settings/PaymentAccountsView");
 const importEngineering = () => import("@/views/engineering/EngineeringView");
+const importPricing = () => import("@/views/pricing/PricingView");
+const importBilling = () => import("@/views/billing/BillingView");
 
 /**
  * Wrap a dynamic import so a failed chunk fetch (typically because
@@ -111,6 +113,12 @@ const PaymentAccountsView = lazy(() =>
 const EngineeringView = lazy(() =>
   withReloadOnChunkError(importEngineering)().then((m) => ({ default: m.EngineeringView })),
 );
+const PricingView = lazy(() =>
+  withReloadOnChunkError(importPricing)().then((m) => ({ default: m.PricingView })),
+);
+const BillingView = lazy(() =>
+  withReloadOnChunkError(importBilling)().then((m) => ({ default: m.BillingView })),
+);
 
 /** Trigger an early download of a view's JS chunk before navigation. */
 export const prefetchView = (path: string): void => {
@@ -148,6 +156,12 @@ export const prefetchView = (path: string): void => {
     case "/engineering":
       void importEngineering();
       return;
+    case "/pricing":
+      void importPricing();
+      return;
+    case "/billing":
+      void importBilling();
+      return;
   }
 };
 
@@ -172,6 +186,8 @@ export const router = createBrowserRouter([
       { path: "line-push", element: lazyView(<LinePushSettingsView />) },
       { path: "payment-accounts", element: lazyView(<PaymentAccountsView />) },
       { path: "engineering", element: lazyView(<EngineeringView />) },
+      { path: "pricing", element: lazyView(<PricingView />) },
+      { path: "billing", element: lazyView(<BillingView />) },
       { path: "*", element: <Navigate to="/dashboard" replace /> },
     ],
   },

@@ -701,6 +701,77 @@ export const api = {
         body: { value },
       }),
   },
+
+  pricing: {
+    /** Public — returns tier configs for the /pricing comparison page. */
+    config: () => request<PricingConfigResponse>("GET", "/api/pricing/config"),
+  },
+
+  billing: {
+    /** Get the calling user's subscription state + tier limits. */
+    me: (fbUserId: string) =>
+      request<{ data: SubscriptionState }>("GET", "/api/billing/me", {
+        query: { fb_user_id: fbUserId },
+      }),
+    /** Create a Polar checkout session and return its hosted URL. */
+    checkout: (input: { tier: TierId; fbUserId: string; email?: string }) =>
+      request<{ url: string; checkout_id?: string }>("POST", "/api/billing/checkout", {
+        body: { tier: input.tier, fb_user_id: input.fbUserId, email: input.email },
+      }),
+    /** Generate a Polar customer-portal URL for self-serve management. */
+    portal: (fbUserId: string) =>
+      request<{ url: string }>("POST", "/api/billing/portal", {
+        body: { fb_user_id: fbUserId },
+      }),
+  },
 };
+
+// ── Pricing / Billing types ───────────────────────────────────
+
+export type TierId = "free" | "basic" | "plus" | "max";
+
+/** One tier row from /api/pricing/config. -1 on a *_limit means
+ * "unlimited" (the Max tier). */
+export interface PricingTier {
+  tier: TierId;
+  name: string;
+  price_monthly: number;
+  price_monthly_full: number;
+  ad_accounts_limit: number;
+  line_channels_limit: number;
+  line_groups_limit: number;
+  monthly_push_limit: number;
+}
+
+export interface PricingConfigResponse {
+  currency: string;
+  trial_days: number;
+  tiers: PricingTier[];
+}
+
+export type SubscriptionStatus =
+  | "free"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "inactive";
+
+/** Shape returned by /api/billing/me — flattened row from the
+ * `subscriptions` table plus tier defaults when no row exists. */
+export interface SubscriptionState {
+  tier: TierId;
+  status: SubscriptionStatus;
+  ad_accounts_limit: number;
+  line_channels_limit: number;
+  line_groups_limit: number;
+  monthly_push_limit: number | null;
+  trial_ends_at: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  grandfathered: boolean;
+  polar_customer_id: string | null;
+  polar_subscription_id: string | null;
+}
 
 export type Api = typeof api;
