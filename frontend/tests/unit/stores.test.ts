@@ -40,6 +40,7 @@ const resetStores = () => {
       dashboard: { preset: "this_month", from: null, to: null },
       analytics: { preset: "this_month", from: null, to: null },
       alerts: { preset: "this_month", from: null, to: null },
+      optimization: { preset: "this_month", from: null, to: null },
       finance: { preset: "this_month", from: null, to: null },
       storeExpenses: { preset: "this_month", from: null, to: null },
     },
