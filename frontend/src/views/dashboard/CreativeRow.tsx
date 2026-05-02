@@ -34,9 +34,13 @@ const CreativePreviewModal = lazy(() =>
 export interface CreativeRowProps {
   creative: FbCreativeEntity;
   multiAcct: boolean;
+  /** Forwarded to <CreativePreviewModal/> as the download filename
+   *  root — undefined for flat views (素材比較) where there is no
+   *  single parent campaign. */
+  campaignName?: string;
 }
 
-function CreativeRowInner({ creative, multiAcct }: CreativeRowProps) {
+function CreativeRowInner({ creative, multiAcct, campaignName }: CreativeRowProps) {
   const ins = getIns(creative);
   const msgs = getMsgCount(creative);
   const spend = Number(ins.spend) || 0;
@@ -136,7 +140,11 @@ function CreativeRowInner({ creative, multiAcct }: CreativeRowProps) {
       </tr>
       {previewOpen && (
         <Suspense fallback={null}>
-          <CreativePreviewModal creative={creative} onClose={() => setPreviewOpen(false)} />
+          <CreativePreviewModal
+            creative={creative}
+            campaignName={campaignName}
+            onClose={() => setPreviewOpen(false)}
+          />
         </Suspense>
       )}
     </>

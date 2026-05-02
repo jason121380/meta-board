@@ -53,6 +53,11 @@ import { useEffect, useState } from "react";
 export interface CreativePreviewModalProps {
   /** When non-null, the modal is open and shows this creative. */
   creative: FbCreativeEntity | null;
+  /** Optional. When provided, the download button uses this as the
+   *  filename root — typically the parent campaign's name so the
+   *  saved file is identifiable when several ads share an account.
+   *  Falls back to the creative's own name when omitted. */
+  campaignName?: string;
   onClose: () => void;
 }
 
@@ -172,7 +177,7 @@ async function downloadAsset(url: string, filename: string): Promise<void> {
   }
 }
 
-export function CreativePreviewModal({ creative, onClose }: CreativePreviewModalProps) {
+export function CreativePreviewModal({ creative, campaignName, onClose }: CreativePreviewModalProps) {
   const isOpen = creative !== null;
   const videoId = creative?.creative?.object_story_spec?.video_data?.video_id ?? null;
   const videoQuery = useVideoSource(videoId, isOpen);
@@ -402,7 +407,7 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
           />
 
           <DownloadAssetButton
-            creativeName={creative.name}
+            creativeName={campaignName?.trim() || creative.name}
             videoSource={videoQuery.data?.source ?? null}
             postVideoSource={postVideoSource}
             previewImage={previewImage ?? null}

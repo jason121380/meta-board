@@ -209,6 +209,7 @@ export function ReportContent({
                 spendMoney={spendMoney}
                 spendLabel={spendLabel}
                 trafficMode={trafficMode}
+                campaignName={campaign.name}
               />
             ));
           })()
@@ -226,6 +227,7 @@ function AdsetCard({
   spendMoney,
   spendLabel,
   trafficMode,
+  campaignName,
 }: {
   adset: FbAdset;
   date: DateConfig;
@@ -234,6 +236,7 @@ function AdsetCard({
   spendMoney: (v: number | string | null | undefined) => string;
   spendLabel: string;
   trafficMode: boolean;
+  campaignName: string;
 }) {
   const ai = getIns(adset);
   const am = getMsgCount(adset);
@@ -289,6 +292,7 @@ function AdsetCard({
         spendMoney={spendMoney}
         spendLabel={spendLabel}
         trafficMode={trafficMode}
+        campaignName={campaignName}
       />
     </section>
   );
@@ -309,6 +313,7 @@ function AdCards({
   spendMoney,
   spendLabel,
   trafficMode,
+  campaignName,
 }: {
   adsetId: string;
   date: DateConfig;
@@ -316,6 +321,7 @@ function AdCards({
   spendMoney: (v: number | string | null | undefined) => string;
   spendLabel: string;
   trafficMode: boolean;
+  campaignName: string;
 }) {
   const adsQuery = useReportAds(adsetId, date, true);
   const ads = adsQuery.data ?? [];
@@ -380,6 +386,7 @@ function AdCards({
               spendMoney={spendMoney}
               spendLabel={spendLabel}
               trafficMode={trafficMode}
+              campaignName={campaignName}
             />
           ))}
         </div>
@@ -395,6 +402,7 @@ function AdCard({
   spendMoney,
   spendLabel,
   trafficMode,
+  campaignName,
 }: {
   ad: FbCreativeEntity;
   isBest: boolean;
@@ -402,6 +410,7 @@ function AdCard({
   spendMoney: (v: number | string | null | undefined) => string;
   spendLabel: string;
   trafficMode: boolean;
+  campaignName: string;
 }) {
   const ai = getIns(ad);
   const m = getMsgCount(ad);
@@ -466,7 +475,13 @@ function AdCard({
           </div>
         </div>
       </div>
-      {previewOpen && <CreativePreviewModal creative={ad} onClose={() => setPreviewOpen(false)} />}
+      {previewOpen && (
+        <CreativePreviewModal
+          creative={ad}
+          campaignName={campaignName}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
     </div>
   );
 }
