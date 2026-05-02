@@ -208,6 +208,7 @@ function CampaignRowInner({
           multiAcct={multiAcct}
           date={date}
           onOpenBudget={onOpenBudget}
+          campaignName={campaign.name}
         />
       )}
     </>
@@ -222,12 +223,14 @@ function CampaignAdsets({
   multiAcct,
   date,
   onOpenBudget,
+  campaignName,
 }: {
   query: ReturnType<typeof useAdsets>;
   colCount: number;
   multiAcct: boolean;
   date: DateConfig;
   onOpenBudget: (target: BudgetModalTarget) => void;
+  campaignName: string;
 }) {
   if (query.isLoading || query.isPending) {
     return (
@@ -271,6 +274,7 @@ function CampaignAdsets({
           colCount={colCount}
           date={date}
           onOpenBudget={onOpenBudget}
+          campaignName={campaignName}
         />
       ))}
     </>

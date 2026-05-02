@@ -20,6 +20,9 @@ export interface AdsetRowProps {
   colCount: number;
   date: DateConfig;
   onOpenBudget: (target: BudgetModalTarget) => void;
+  /** Forwarded down to each CreativeRow → CreativePreviewModal so
+   *  downloaded files inherit the parent campaign's name. */
+  campaignName?: string;
 }
 
 /**
@@ -35,7 +38,14 @@ export interface AdsetRowProps {
  * `useCallback` in `DashboardView`, and the `adset` object stays
  * identity-stable across renders from the React Query cache.
  */
-function AdsetRowInner({ adset, multiAcct, colCount, date, onOpenBudget }: AdsetRowProps) {
+function AdsetRowInner({
+  adset,
+  multiAcct,
+  colCount,
+  date,
+  onOpenBudget,
+  campaignName,
+}: AdsetRowProps) {
   const expanded = useUiStore((s) => s.expandedAdsets.includes(adset.id));
   const toggleAdset = useUiStore((s) => s.toggleAdset);
   const creativesQuery = useCreatives(adset.id, date, expanded);
@@ -143,7 +153,12 @@ function AdsetRowInner({ adset, multiAcct, colCount, date, onOpenBudget }: Adset
         </td>
       </tr>
       {expanded && (
-        <AdsetCreatives query={creativesQuery} colCount={colCount} multiAcct={multiAcct} />
+        <AdsetCreatives
+          query={creativesQuery}
+          colCount={colCount}
+          multiAcct={multiAcct}
+          campaignName={campaignName}
+        />
       )}
     </>
   );
@@ -155,10 +170,12 @@ function AdsetCreatives({
   query,
   colCount,
   multiAcct,
+  campaignName,
 }: {
   query: ReturnType<typeof useCreatives>;
   colCount: number;
   multiAcct: boolean;
+  campaignName?: string;
 }) {
   if (query.isLoading || query.isPending) {
     return (
@@ -197,7 +214,12 @@ function AdsetCreatives({
   return (
     <>
       {data.map((creative) => (
-        <CreativeRow key={creative.id} creative={creative} multiAcct={multiAcct} />
+        <CreativeRow
+          key={creative.id}
+          creative={creative}
+          multiAcct={multiAcct}
+          campaignName={campaignName}
+        />
       ))}
     </>
   );
