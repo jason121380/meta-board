@@ -2,7 +2,7 @@ import { Badge } from "@/components/Badge";
 import { fbCampaignLink } from "@/lib/fbLinks";
 import { fF, fM, fN, fP } from "@/lib/format";
 import { memo } from "react";
-import type { OptimizationItem, OptimizationSeverity } from "./optimizationData";
+import type { OptimizationItem } from "./optimizationData";
 
 /**
  * Compact campaign row for the 3-column 成效優化中心 layout.
@@ -11,12 +11,6 @@ import type { OptimizationItem, OptimizationSeverity } from "./optimizationData"
  * card is dense: tight padding, single-row header, two-row KPI grid,
  * recommendations rendered as inline-wrapped tight bullets.
  */
-
-const BORDER_BY_SEVERITY: Record<OptimizationSeverity, string> = {
-  critical: "border-orange",
-  warning: "border-amber-300",
-  good: "border-border",
-};
 
 export interface OptimizationRowProps {
   item: OptimizationItem;
@@ -27,7 +21,7 @@ export const OptimizationRow = memo(function OptimizationRow({
   item,
   businessIdForCampaign,
 }: OptimizationRowProps) {
-  const { campaign, severity, metrics, recommendations } = item;
+  const { campaign, metrics, recommendations } = item;
   const link = fbCampaignLink(
     campaign.id,
     campaign._accountId,
@@ -35,9 +29,7 @@ export const OptimizationRow = memo(function OptimizationRow({
   );
 
   return (
-    <div
-      className={`flex flex-col gap-1.5 rounded-lg border bg-white px-3 py-2.5 ${BORDER_BY_SEVERITY[severity]}`}
-    >
+    <div className="flex flex-col gap-1.5 rounded-lg border border-border bg-white px-3 py-2.5">
       {/* Header row: status badge + account name */}
       <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
         <Badge status={campaign.status} />
