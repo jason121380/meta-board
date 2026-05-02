@@ -1,5 +1,6 @@
 import { FbAuthProvider, ShareModeAuthProvider, useFbAuth } from "@/auth/FbAuthProvider";
 import { ConfirmDialogHost } from "@/components/ConfirmDialog";
+import { LoadingState } from "@/components/LoadingState";
 import { PwaInstallHint } from "@/components/PwaInstallHint";
 import { ToastHost } from "@/components/Toast";
 import { SettingsProvider } from "@/providers/SettingsProvider";
@@ -7,8 +8,14 @@ import { router } from "@/router";
 import { hydrateAllStores, installStorageSync } from "@/stores";
 import { LoginView } from "@/views/login/LoginView";
 import { ShareReportPage } from "@/views/report/ShareReportPage";
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { RouterProvider } from "react-router-dom";
+
+// Public /pricing — accessible without login. Lazy-loaded so the
+// LoginView bundle doesn't grow when 99% of visitors never see it.
+const PublicPricingView = lazy(() =>
+  import("@/views/pricing/PricingView").then((m) => ({ default: m.PricingView })),
+);
 
 /**
  * Root application component.
@@ -62,12 +69,26 @@ export function App() {
 
 function AuthGate() {
   const { status } = useFbAuth();
+  // /pricing is a public marketing page — anonymous visitors see it
+  // without bouncing through the LoginView. Logged-in users still
+  // get the page via the in-Shell route (with sidebar). Match either
+  // /pricing or /pricing/ so trailing slashes don't break it.
+  const path = typeof window !== "undefined" ? window.location.pathname : "";
+  const isPricingPath = path === "/pricing" || path === "/pricing/";
+
   if (status === "auth") {
     return (
       <SettingsProvider>
         <RouterProvider router={router} />
         <PwaInstallHint />
       </SettingsProvider>
+    );
+  }
+  if (isPricingPath) {
+    return (
+      <Suspense fallback={<LoadingState title="載入方案中..." />}>
+        <PublicPricingView />
+      </Suspense>
     );
   }
   // While the FB SDK is still resolving the cached token (status:

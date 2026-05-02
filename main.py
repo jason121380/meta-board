@@ -8,6 +8,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, List
 from zoneinfo import ZoneInfo
 import asyncio
+import base64
+import hashlib
+import hmac
 import math
 import httpx
 import os
@@ -1948,20 +1951,315 @@ async def get_billing_me(fb_user_id: str = Query(...)):
     return {"data": out}
 
 
+POLAR_API_BASE = os.getenv("POLAR_API_BASE", "https://api.polar.sh/v1")
+
+
+async def _polar_request(method: str, path: str, json_body: Optional[dict] = None) -> dict:
+    """Thin wrapper around Polar's REST API. Raises HTTPException on
+    non-2xx responses with the upstream error body so callers (and
+    operators reading logs) can debug quickly."""
+    if not POLAR_API_KEY:
+        raise HTTPException(status_code=503, detail="POLAR_API_KEY not configured")
+    if _http_client is None:
+        raise HTTPException(status_code=503, detail="HTTP client not ready")
+    url = f"{POLAR_API_BASE.rstrip('/')}{path}"
+    try:
+        resp = await _http_client.request(
+            method,
+            url,
+            json=json_body,
+            headers={
+                "Authorization": f"Bearer {POLAR_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            timeout=15.0,
+        )
+    except httpx.HTTPError as exc:
+        print(f"[billing] polar request failed: {exc!r}", flush=True)
+        raise HTTPException(status_code=502, detail=f"Polar API error: {exc}") from exc
+    if resp.status_code >= 400:
+        body = resp.text[:500]
+        print(f"[billing] polar {method} {path} → {resp.status_code}: {body}", flush=True)
+        raise HTTPException(status_code=resp.status_code, detail=f"Polar: {body}")
+    if resp.status_code == 204 or not resp.content:
+        return {}
+    try:
+        return resp.json()
+    except Exception:
+        return {"_raw": resp.text}
+
+
+def _decode_polar_secret(secret: str) -> bytes:
+    """Polar webhook secrets ship as `polar_whs_<base64>`; the bytes
+    after the prefix are the HMAC key. If the prefix is absent we
+    fall back to using the literal value as the key, so a hand-set
+    `POLAR_WEBHOOK_SECRET` (without the prefix) still works."""
+    if not secret:
+        return b""
+    if secret.startswith("polar_whs_"):
+        b64 = secret[len("polar_whs_"):]
+        # Standard Webhooks spec uses urlsafe-or-standard base64; pad
+        # if missing so b64decode doesn't reject odd-length strings.
+        pad = "=" * (-len(b64) % 4)
+        try:
+            return base64.b64decode(b64 + pad)
+        except Exception:
+            # Some Polar plans return the literal raw secret without
+            # base64 encoding — fall back to UTF-8 bytes.
+            return secret.encode("utf-8")
+    return secret.encode("utf-8")
+
+
+def _verify_polar_signature(headers, body: bytes) -> bool:
+    """Verify the Standard Webhooks signature on the request.
+
+    Returns True iff the signature matches. When POLAR_WEBHOOK_SECRET
+    is unset we accept all requests (development / self-hosted mode).
+
+    Polar follows https://www.standardwebhooks.com/ — signature header
+    contains one or more space-separated `v1,<base64-sha256>` entries
+    over `<webhook-id>.<webhook-timestamp>.<body>`.
+    """
+    if not POLAR_WEBHOOK_SECRET:
+        return True
+    wh_id = headers.get("webhook-id") or headers.get("x-polar-webhook-id") or ""
+    wh_ts = headers.get("webhook-timestamp") or headers.get("x-polar-webhook-timestamp") or ""
+    wh_sig = headers.get("webhook-signature") or headers.get("x-polar-webhook-signature") or ""
+    if not (wh_id and wh_ts and wh_sig):
+        return False
+    key = _decode_polar_secret(POLAR_WEBHOOK_SECRET)
+    signed = f"{wh_id}.{wh_ts}.".encode("utf-8") + body
+    expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
+    # Header may contain multiple sigs separated by spaces. Compare each.
+    for part in wh_sig.split(" "):
+        if "," in part:
+            _ver, sig = part.split(",", 1)
+        else:
+            sig = part
+        if hmac.compare_digest(sig.strip(), expected):
+            return True
+    return False
+
+
+def _tier_from_polar_product_id(product_id: str) -> Optional[str]:
+    """Reverse-lookup: given a Polar product id from a subscription
+    payload, return our internal tier key (basic / plus / max) or
+    None when it doesn't match any configured tier."""
+    if not product_id:
+        return None
+    for tier_key, cfg in TIER_CONFIGS.items():
+        if cfg.get("polar_product_id") == product_id:
+            return tier_key
+    return None
+
+
+async def _apply_subscription_event(payload: dict) -> Optional[str]:
+    """Upsert `subscriptions` from a subscription.{created,updated,
+    canceled,revoked} event. Returns the resolved fb_user_id (for
+    logging), or None when the event couldn't be matched to a user."""
+    if _db_pool is None:
+        return None
+    data = payload.get("data") or {}
+    if not isinstance(data, dict):
+        return None
+
+    polar_sub_id = str(data.get("id") or "")
+    polar_customer_id = str(data.get("customer_id") or data.get("customer", {}).get("id") or "")
+    customer_obj = data.get("customer") if isinstance(data.get("customer"), dict) else {}
+    # We pass `customer_external_id = fb_user_id` when creating the
+    # checkout, so it round-trips here on every subscription event.
+    fb_user_id = str(
+        customer_obj.get("external_id")
+        or data.get("customer_external_id")
+        or data.get("metadata", {}).get("fb_user_id")
+        or ""
+    ).strip()
+
+    # Fall back to the polar_customer_id ↔ fb_user_id mapping captured
+    # by the prior customer.created event (or a previous subscription
+    # event). Without this fallback, a subscription.updated that
+    # arrives after we've already learned the mapping would be dropped.
+    if not fb_user_id and polar_customer_id:
+        async with _db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT fb_user_id FROM subscriptions WHERE polar_customer_id = $1",
+                polar_customer_id,
+            )
+        if row:
+            fb_user_id = row["fb_user_id"]
+
+    if not fb_user_id:
+        print(
+            f"[billing] subscription event for sub={polar_sub_id[:12]} "
+            f"could not map to fb_user_id (customer={polar_customer_id[:12]})",
+            flush=True,
+        )
+        return None
+
+    # Determine tier from product_id. Subscriptions can have a top-
+    # level product_id, or a nested `product` object with .id.
+    product_id = str(
+        data.get("product_id")
+        or (data.get("product") or {}).get("id")
+        or ""
+    )
+    tier = _tier_from_polar_product_id(product_id)
+    if not tier:
+        print(
+            f"[billing] unknown polar product_id {product_id} on sub {polar_sub_id[:12]} — "
+            f"keeping any existing tier",
+            flush=True,
+        )
+
+    # Map Polar's status to our internal status. Polar uses 'trialing'
+    # while a trial is active; 'active' once charging begins;
+    # 'past_due' on payment failures; 'canceled' / 'revoked' when the
+    # subscription is no longer billable.
+    polar_status = str(data.get("status") or "").lower()
+    status_map = {
+        "trialing": "trialing",
+        "active": "active",
+        "past_due": "past_due",
+        "incomplete": "past_due",
+        "canceled": "canceled",
+        "cancelled": "canceled",
+        "revoked": "canceled",
+        "ended": "canceled",
+    }
+    status = status_map.get(polar_status, polar_status or "inactive")
+
+    # Period boundaries for the trial / next-renewal display on /billing.
+    def _parse_dt(v) -> Optional[datetime]:
+        if not v:
+            return None
+        if isinstance(v, datetime):
+            return v
+        try:
+            # Polar uses RFC3339 — datetime.fromisoformat handles the Z
+            # suffix on Python 3.11+; replace defensively for older PG.
+            return datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    trial_ends_at = _parse_dt(data.get("trial_ends_at") or data.get("trial_end"))
+    current_period_end = _parse_dt(data.get("current_period_end"))
+    cancel_at_period_end = bool(data.get("cancel_at_period_end") or False)
+
+    cfg = TIER_CONFIGS.get(tier or "free", TIER_CONFIGS["free"])
+    # `-1` (unlimited) becomes a sentinel int for the SQL column;
+    # the JSON-facing /api/billing/me normalises this to a "is unlimited"
+    # signal for the frontend.
+    def _limit(v: int) -> int:
+        return 999999 if v == -1 else int(v)
+
+    async with _db_pool.acquire() as conn:
+        # Don't downgrade grandfathered users — their row is locked
+        # to tier=max regardless of any incoming Polar event.
+        existing = await conn.fetchrow(
+            "SELECT grandfathered FROM subscriptions WHERE fb_user_id = $1",
+            fb_user_id,
+        )
+        if existing and existing["grandfathered"]:
+            print(
+                f"[billing] skipping subscription event for grandfathered user {fb_user_id[-4:]}",
+                flush=True,
+            )
+            return fb_user_id
+
+        await conn.execute(
+            """
+            INSERT INTO subscriptions
+              (fb_user_id, polar_customer_id, polar_subscription_id,
+               tier, status, trial_ends_at, current_period_end,
+               cancel_at_period_end,
+               ad_accounts_limit, line_channels_limit,
+               line_groups_limit, monthly_push_limit,
+               updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+            ON CONFLICT (fb_user_id) DO UPDATE SET
+              polar_customer_id = COALESCE(EXCLUDED.polar_customer_id, subscriptions.polar_customer_id),
+              polar_subscription_id = COALESCE(EXCLUDED.polar_subscription_id, subscriptions.polar_subscription_id),
+              tier = EXCLUDED.tier,
+              status = EXCLUDED.status,
+              trial_ends_at = EXCLUDED.trial_ends_at,
+              current_period_end = EXCLUDED.current_period_end,
+              cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+              ad_accounts_limit = EXCLUDED.ad_accounts_limit,
+              line_channels_limit = EXCLUDED.line_channels_limit,
+              line_groups_limit = EXCLUDED.line_groups_limit,
+              monthly_push_limit = EXCLUDED.monthly_push_limit,
+              updated_at = NOW()
+            """,
+            fb_user_id,
+            polar_customer_id or None,
+            polar_sub_id or None,
+            tier or "free",
+            status,
+            trial_ends_at,
+            current_period_end,
+            cancel_at_period_end,
+            _limit(cfg["ad_accounts_limit"]),
+            _limit(cfg["line_channels_limit"]),
+            _limit(cfg["line_groups_limit"]),
+            None if cfg["monthly_push_limit"] == -1 else int(cfg["monthly_push_limit"]),
+        )
+    return fb_user_id
+
+
+async def _apply_customer_event(payload: dict) -> Optional[str]:
+    """Capture polar_customer_id ↔ fb_user_id mapping on customer.created."""
+    if _db_pool is None:
+        return None
+    data = payload.get("data") or {}
+    if not isinstance(data, dict):
+        return None
+    polar_customer_id = str(data.get("id") or "")
+    fb_user_id = str(data.get("external_id") or data.get("metadata", {}).get("fb_user_id") or "").strip()
+    if not (polar_customer_id and fb_user_id):
+        return None
+    # Seed a free-tier row with the polar_customer_id captured. When
+    # the subsequent subscription.created event arrives we'll upgrade
+    # the tier in-place.
+    async with _db_pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO subscriptions
+              (fb_user_id, polar_customer_id, tier, status,
+               ad_accounts_limit, line_channels_limit,
+               line_groups_limit, monthly_push_limit)
+            VALUES ($1, $2, 'free', 'free', 1, 0, 0, 0)
+            ON CONFLICT (fb_user_id) DO UPDATE SET
+              polar_customer_id = COALESCE(subscriptions.polar_customer_id, EXCLUDED.polar_customer_id),
+              updated_at = NOW()
+            """,
+            fb_user_id,
+            polar_customer_id,
+        )
+    return fb_user_id
+
+
 @app.post("/api/billing/webhook")
 async def polar_webhook(request: Request):
-    """Phase 1 stub: ack + persist Polar webhook events.
+    """Receive a Polar webhook event.
 
-    Stores the raw payload to `billing_events` and ACKs immediately
-    so Polar's retry loop is satisfied. Phase 3 adds signature
-    verification (using POLAR_WEBHOOK_SECRET) and per-event
-    `subscriptions` upserts.
+    Flow:
+      1. Verify the Standard Webhooks HMAC signature (skipped when
+         POLAR_WEBHOOK_SECRET is unset, to keep dev simple).
+      2. Persist the raw payload to `billing_events` (idempotent on
+         polar_event_id) so we always have replayable history.
+      3. Dispatch on `type` to upsert `subscriptions`.
 
-    The raw-payload archive means that once Phase 3 lands we can
-    replay any unprocessed events from `billing_events` to backfill
-    state — no risk of dropped events during the stub period.
+    We always ACK 200 unless signature verification fails — Polar's
+    retry loop should not be triggered by transient DB hiccups
+    (operators see them in stdout instead).
     """
     raw = await request.body()
+    headers = {k.lower(): v for k, v in request.headers.items()}
+
+    if not _verify_polar_signature(headers, raw):
+        print("[billing] webhook signature verify FAILED", flush=True)
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
     try:
         payload = _json.loads(raw or b"{}")
     except Exception:
@@ -1973,19 +2271,31 @@ async def polar_webhook(request: Request):
     event_id = ""
     event_type = "unknown"
     if isinstance(payload, dict):
-        event_id = str(payload.get("id") or "")
+        event_id = str(payload.get("id") or headers.get("webhook-id") or "")
         event_type = str(payload.get("type") or "unknown")
 
     print(f"[billing] webhook: {event_type} {event_id[:16]}", flush=True)
 
+    resolved_user: Optional[str] = None
+    handler_error: Optional[str] = None
+    try:
+        if event_type == "customer.created":
+            resolved_user = await _apply_customer_event(payload)
+        elif event_type in (
+            "subscription.created",
+            "subscription.updated",
+            "subscription.active",
+            "subscription.canceled",
+            "subscription.revoked",
+        ):
+            resolved_user = await _apply_subscription_event(payload)
+    except Exception as exc:
+        handler_error = str(exc)
+        print(f"[billing] event handler error: {exc!r}", flush=True)
+
     if _db_pool is None:
-        # Without DB we still ACK so Polar doesn't retry forever;
-        # the print above gives ops a breadcrumb.
         return {"ok": True, "stored": False}
 
-    # Synthesize a unique id for unsigned/parse-failed events so the
-    # UNIQUE constraint on polar_event_id doesn't reject them. Use
-    # microsecond precision to avoid collisions during a webhook burst.
     if not event_id:
         event_id = f"unsigned-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f')}"
 
@@ -1993,20 +2303,96 @@ async def polar_webhook(request: Request):
         async with _db_pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO billing_events (polar_event_id, event_type, payload)
-                VALUES ($1, $2, $3::jsonb)
+                INSERT INTO billing_events
+                  (polar_event_id, event_type, fb_user_id, payload, processed_at, error)
+                VALUES ($1, $2, $3, $4::jsonb, NOW(), $5)
                 ON CONFLICT (polar_event_id) DO NOTHING
                 """,
                 event_id,
                 event_type,
+                resolved_user,
                 _json.dumps(payload),
+                handler_error,
             )
-        return {"ok": True, "stored": True}
+        return {"ok": True, "stored": True, "matched_user": bool(resolved_user)}
     except Exception as exc:
         print(f"[billing] webhook persist failed: {exc}", flush=True)
-        # Still ACK — re-delivery would land the same payload on the
-        # same broken DB. Operators see the failure in stdout.
         return {"ok": True, "stored": False, "error": str(exc)}
+
+
+# ── Checkout / Portal ─────────────────────────────────────────────
+
+class CheckoutPayload(BaseModel):
+    tier: str  # 'basic' | 'plus' | 'max'
+    fb_user_id: str
+    email: Optional[str] = None
+
+
+@app.post("/api/billing/checkout")
+async def create_checkout(payload: CheckoutPayload):
+    """Create a Polar checkout session and return its hosted URL.
+
+    The frontend redirects the user to this URL; after they finish
+    paying Polar redirects them back to our `success_url`. The
+    fb_user_id is threaded through `customer_external_id` so the
+    subsequent webhook events can map back to our user record.
+    """
+    cfg = TIER_CONFIGS.get(payload.tier)
+    if not cfg or not cfg.get("polar_product_id"):
+        raise HTTPException(status_code=400, detail=f"Unknown or unconfigured tier: {payload.tier}")
+
+    site = (os.getenv("PUBLIC_SITE_URL") or "").rstrip("/")
+    if not site:
+        # Use the request scheme/host as a last resort. Manual setting
+        # is preferred (PUBLIC_SITE_URL=https://metadash.zeabur.app).
+        site = "https://metadash.zeabur.app"
+
+    body = {
+        "products": [cfg["polar_product_id"]],
+        "success_url": f"{site}/billing?success=true&checkout_id={{CHECKOUT_ID}}",
+        "customer_external_id": payload.fb_user_id,
+        "metadata": {"fb_user_id": payload.fb_user_id, "tier": payload.tier},
+    }
+    if payload.email:
+        body["customer_email"] = payload.email
+
+    resp = await _polar_request("POST", "/checkouts/", json_body=body)
+    url = resp.get("url") or resp.get("checkout_url") or ""
+    if not url:
+        print(f"[billing] checkout response missing URL: {resp}", flush=True)
+        raise HTTPException(status_code=502, detail="Polar did not return a checkout URL")
+    return {"url": url, "checkout_id": resp.get("id")}
+
+
+class PortalPayload(BaseModel):
+    fb_user_id: str
+
+
+@app.post("/api/billing/portal")
+async def create_portal_session(payload: PortalPayload):
+    """Generate a one-time Polar customer-portal URL the user can
+    visit to change their plan, update card, or cancel."""
+    if _db_pool is None:
+        raise HTTPException(status_code=503, detail="Database not configured")
+    async with _db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT polar_customer_id FROM subscriptions WHERE fb_user_id = $1",
+            payload.fb_user_id,
+        )
+    polar_customer_id = (row or {}).get("polar_customer_id") if row else None
+    if not polar_customer_id:
+        raise HTTPException(status_code=404, detail="No subscription found for user")
+
+    resp = await _polar_request(
+        "POST",
+        "/customer-portal/sessions/",
+        json_body={"customer_id": polar_customer_id},
+    )
+    url = resp.get("url") or resp.get("customer_portal_url") or ""
+    if not url:
+        print(f"[billing] portal response missing URL: {resp}", flush=True)
+        raise HTTPException(status_code=502, detail="Polar did not return a portal URL")
+    return {"url": url}
 
 
 # ── Quick Launch ──────────────────────────────────────────────────────
