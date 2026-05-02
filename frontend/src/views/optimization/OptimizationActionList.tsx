@@ -13,28 +13,12 @@ interface ColumnConfig {
   key: OptimizationSeverity;
   title: string;
   dotColor: string;
-  borderColor: string;
 }
 
 const COLUMNS: ColumnConfig[] = [
-  {
-    key: "critical",
-    title: "需立即處理",
-    dotColor: "bg-orange",
-    borderColor: "border-orange/30",
-  },
-  {
-    key: "warning",
-    title: "建議觀察",
-    dotColor: "bg-amber-400",
-    borderColor: "border-amber-200",
-  },
-  {
-    key: "good",
-    title: "表現良好",
-    dotColor: "bg-emerald-500",
-    borderColor: "border-emerald-200",
-  },
+  { key: "critical", title: "需立即處理", dotColor: "bg-orange" },
+  { key: "warning", title: "建議觀察", dotColor: "bg-amber-400" },
+  { key: "good", title: "表現良好", dotColor: "bg-emerald-500" },
 ];
 
 export function OptimizationActionList({
@@ -56,12 +40,11 @@ export function OptimizationActionList({
   return (
     <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-3 md:gap-3.5">
       {COLUMNS.map((col) => (
-        <div
-          key={col.key}
-          className={`flex min-w-0 flex-col gap-2 rounded-xl border bg-bg/40 p-2.5 ${col.borderColor}`}
-        >
-          {/* Column header */}
-          <div className="flex items-center gap-1.5 px-1 pb-1 text-[12px] font-semibold text-ink">
+        <div key={col.key} className="flex min-w-0 flex-col gap-2">
+          {/* Column header — no surrounding box, just a colored dot
+              + title + count to delimit the column without adding
+              another border layer around the campaign cards. */}
+          <div className="flex items-center gap-1.5 px-0.5 pb-0.5 text-[12px] font-semibold text-ink">
             <span aria-hidden="true" className={`h-2 w-2 rounded-full ${col.dotColor}`} />
             <span>{col.title}</span>
             <span className="ml-auto text-[11px] font-medium text-gray-300 tabular-nums">

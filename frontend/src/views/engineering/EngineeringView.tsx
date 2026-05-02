@@ -1,5 +1,7 @@
 import { api } from "@/api/client";
+import { useFbAuth } from "@/auth/FbAuthProvider";
 import { Button } from "@/components/Button";
+import { toast } from "@/components/Toast";
 import { Topbar } from "@/layout/Topbar";
 import { cn } from "@/lib/cn";
 import { queryClient } from "@/lib/queryClient";
@@ -20,6 +22,7 @@ export function EngineeringView() {
     <>
       <Topbar title="工程模式" />
       <div className="flex flex-col gap-4 p-4 md:p-6">
+        <IdentityPanel />
         <FbUsagePanel />
         <div className="grid gap-4 md:grid-cols-2">
           <ReactQueryPanel />
@@ -31,6 +34,43 @@ export function EngineeringView() {
         </div>
       </div>
     </>
+  );
+}
+
+// ── Identity (fb_user_id copy) ───────────────────────────────
+//
+// Surfaces the logged-in user's fb_user_id with a 1-tap copy
+// button. Used to hand admins the id they need for billing
+// grandfather seeds, support tickets, and DB lookups — saves
+// digging through DevTools / network tabs to extract it from
+// /api/auth/me responses.
+
+function IdentityPanel() {
+  const { user } = useFbAuth();
+  const id = user?.id ?? "";
+
+  const onCopy = async () => {
+    if (!id) return;
+    try {
+      await navigator.clipboard.writeText(id);
+      toast("已複製 fb_user_id");
+    } catch {
+      toast("複製失敗,請手動選取", "error");
+    }
+  };
+
+  return (
+    <Card title="登入身分" subtitle="目前登入的 Facebook 使用者 id">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[12px]">
+        <Row label="名稱" value={user?.name ?? "(未登入)"} />
+        <Row label="fb_user_id" value={id || "(未登入)"} mono />
+      </dl>
+      <div className="mt-3 flex gap-2">
+        <Button size="sm" onClick={onCopy} disabled={!id}>
+          複製 fb_user_id
+        </Button>
+      </div>
+    </Card>
   );
 }
 
