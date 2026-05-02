@@ -4,7 +4,6 @@ import { usePostMedia } from "@/api/hooks/usePostMedia";
 import { useVideoSource } from "@/api/hooks/useVideoSource";
 import { Modal } from "@/components/Modal";
 import { Spinner } from "@/components/Spinner";
-import { toast } from "@/components/Toast";
 import { fbPostLinkFromStoryId, isFrontPostCreative } from "@/lib/fbLinks";
 import type { FbCreativeEntity } from "@/types/fb";
 import { useEffect, useState } from "react";
@@ -102,6 +101,18 @@ function mimeForExt(ext: string): string {
   return map[ext.toLowerCase()] ?? "application/octet-stream";
 }
 
+/** Build the same-origin proxy URL for a remote FB/IG asset. Going
+ *  through `/api/proxy-asset` on our own origin means:
+ *    - the browser fetch is same-origin → blob() works
+ *    - Content-Disposition: attachment forces save instead of
+ *      iOS Safari's fullscreen video player (which has no save UI)
+ *    - the resulting File can be fed into navigator.share() so the
+ *      iOS share sheet shows "儲存影片 / 儲存到相簿". */
+function proxyUrl(remoteUrl: string, filename: string): string {
+  const u = new URLSearchParams({ url: remoteUrl, filename });
+  return `/api/proxy-asset?${u.toString()}`;
+}
+
 /** Download a remote URL. On mobile (where the Web Share API
  *  reports `canShare({ files })`) we open the native share sheet so
  *  the user can pick "儲存到相簿 / 儲存到檔案" — iOS Safari ignores
@@ -111,12 +122,13 @@ function mimeForExt(ext: string): string {
  *  anchor (regular browser download). When everything fails we open
  *  the URL in a new tab so the user can right-click → save. */
 async function downloadAsset(url: string, filename: string): Promise<void> {
+  const proxied = proxyUrl(url, filename);
   try {
-    const resp = await fetch(url, { credentials: "omit" });
+    const resp = await fetch(proxied, { credentials: "omit" });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const blob = await resp.blob();
     const ext = filename.split(".").pop() ?? "";
-    const type = blob.type || mimeForExt(ext);
+    const type = blob.type && blob.type !== "application/octet-stream" ? blob.type : mimeForExt(ext);
     const file = new File([blob], filename, { type });
 
     // Web Share API path — covers iOS Safari and modern Android
@@ -152,9 +164,11 @@ async function downloadAsset(url: string, filename: string): Promise<void> {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   } catch (err) {
-    console.error("[creative] download failed, opening in new tab", err);
-    window.open(url, "_blank", "noopener,noreferrer");
-    toast("下載失敗,已改開新分頁,請手動儲存", "error");
+    console.error("[creative] download failed, opening proxy URL", err);
+    // Last-resort: navigate the user to the proxy URL directly. The
+    // backend sets Content-Disposition: attachment so even iOS
+    // Safari treats it as a download instead of inline playback.
+    window.location.assign(proxied);
   }
 }
 
