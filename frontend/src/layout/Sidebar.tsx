@@ -86,6 +86,27 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    to: "/optimization",
+    label: "成效優化中心",
+    icon: (
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="12" r="9" />
+        <circle cx="12" cy="12" r="5" />
+        <circle cx="12" cy="12" r="1.5" />
+      </svg>
+    ),
+  },
+  {
     to: "/finance",
     label: "費用中心",
     icon: (
@@ -294,7 +315,15 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
       {/* User dropdown — opens upward from the bottom */}
       <div className="mt-auto border-t border-border px-2 py-3">
-        <div className="relative" ref={menuWrapRef}>
+        <div
+          className="relative"
+          ref={menuWrapRef}
+          // Mobile drawer: the parent <aside> has a belt-and-suspenders
+          // onClick that closes the drawer for any non-link tap. Without
+          // stopping propagation here the user-name tap would close the
+          // drawer before the dropdown could render → menu never appears.
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}

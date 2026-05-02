@@ -24,6 +24,7 @@ import { Navigate, createBrowserRouter } from "react-router-dom";
 // Memoised import promises so prefetch + lazy resolve to the same chunk.
 const importAnalytics = () => import("@/views/analytics/AnalyticsView");
 const importAlerts = () => import("@/views/alerts/AlertsView");
+const importOptimization = () => import("@/views/optimization/OptimizationView");
 const importFinance = () => import("@/views/finance/FinanceView");
 const importHistory = () => import("@/views/history/HistoryView");
 const importStoreExpenses = () => import("@/views/storeExpenses/StoreExpensesView");
@@ -79,6 +80,9 @@ const AnalyticsView = lazy(() =>
 const AlertsView = lazy(() =>
   withReloadOnChunkError(importAlerts)().then((m) => ({ default: m.AlertsView })),
 );
+const OptimizationView = lazy(() =>
+  withReloadOnChunkError(importOptimization)().then((m) => ({ default: m.OptimizationView })),
+);
 const FinanceView = lazy(() =>
   withReloadOnChunkError(importFinance)().then((m) => ({ default: m.FinanceView })),
 );
@@ -116,6 +120,9 @@ export const prefetchView = (path: string): void => {
       return;
     case "/alerts":
       void importAlerts();
+      return;
+    case "/optimization":
+      void importOptimization();
       return;
     case "/finance":
       void importFinance();
@@ -156,6 +163,7 @@ export const router = createBrowserRouter([
       { path: "dashboard", element: <DashboardView /> },
       { path: "analytics", element: lazyView(<AnalyticsView />) },
       { path: "alerts", element: lazyView(<AlertsView />) },
+      { path: "optimization", element: lazyView(<OptimizationView />) },
       { path: "finance", element: lazyView(<FinanceView />) },
       { path: "history", element: lazyView(<HistoryView />) },
       { path: "store-expenses", element: lazyView(<StoreExpensesView />) },
