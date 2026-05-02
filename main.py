@@ -1989,25 +1989,51 @@ async def _polar_request(method: str, path: str, json_body: Optional[dict] = Non
         return {"_raw": resp.text}
 
 
-def _decode_polar_secret(secret: str) -> bytes:
-    """Polar webhook secrets ship as `polar_whs_<base64>`; the bytes
-    after the prefix are the HMAC key. If the prefix is absent we
-    fall back to using the literal value as the key, so a hand-set
-    `POLAR_WEBHOOK_SECRET` (without the prefix) still works."""
+def _polar_secret_keys(secret: str) -> List[bytes]:
+    """Return every plausible HMAC key for a Polar webhook secret.
+
+    Standard Webhooks publishes secrets in the form `whsec_<base64>`
+    where the bytes after base64-decoding are the HMAC key. Polar's
+    dashboard has shipped multiple prefix variants over time:
+    `whsec_`, `polar_whsec_`, `polar_whs_`, and occasionally a raw
+    string with no prefix. Rather than guessing which one the
+    operator pasted, we generate all candidates and let the caller
+    try each — the extra HMACs are a few microseconds each and we
+    only run this when verifying a webhook.
+    """
     if not secret:
-        return b""
-    if secret.startswith("polar_whs_"):
-        b64 = secret[len("polar_whs_"):]
-        # Standard Webhooks spec uses urlsafe-or-standard base64; pad
-        # if missing so b64decode doesn't reject odd-length strings.
-        pad = "=" * (-len(b64) % 4)
+        return []
+    keys: List[bytes] = []
+    seen: set = set()
+
+    def add(b: bytes) -> None:
+        if b and b not in seen:
+            seen.add(b)
+            keys.append(b)
+
+    def try_b64(s: str) -> None:
+        pad = "=" * (-len(s) % 4)
         try:
-            return base64.b64decode(b64 + pad)
+            add(base64.b64decode(s + pad))
         except Exception:
-            # Some Polar plans return the literal raw secret without
-            # base64 encoding — fall back to UTF-8 bytes.
-            return secret.encode("utf-8")
-    return secret.encode("utf-8")
+            pass
+
+    # The literal secret as UTF-8 — covers raw / unprefixed secrets
+    # and acts as a final fallback for any prefixed variant.
+    add(secret.encode("utf-8"))
+
+    for prefix in ("whsec_", "polar_whsec_", "polar_whs_"):
+        if secret.startswith(prefix):
+            stripped = secret[len(prefix):]
+            try_b64(stripped)
+            add(stripped.encode("utf-8"))
+            break
+
+    # No-prefix path: also attempt a base64-decode of the whole secret
+    # in case the operator stripped the prefix manually.
+    try_b64(secret)
+
+    return keys
 
 
 def _verify_polar_signature(headers, body: bytes) -> bool:
@@ -2026,18 +2052,43 @@ def _verify_polar_signature(headers, body: bytes) -> bool:
     wh_ts = headers.get("webhook-timestamp") or headers.get("x-polar-webhook-timestamp") or ""
     wh_sig = headers.get("webhook-signature") or headers.get("x-polar-webhook-signature") or ""
     if not (wh_id and wh_ts and wh_sig):
+        print(
+            f"[billing] webhook missing headers: id={bool(wh_id)} ts={bool(wh_ts)} sig={bool(wh_sig)}",
+            flush=True,
+        )
         return False
-    key = _decode_polar_secret(POLAR_WEBHOOK_SECRET)
+
     signed = f"{wh_id}.{wh_ts}.".encode("utf-8") + body
-    expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
-    # Header may contain multiple sigs separated by spaces. Compare each.
+
+    provided: List[str] = []
     for part in wh_sig.split(" "):
         if "," in part:
             _ver, sig = part.split(",", 1)
         else:
             sig = part
-        if hmac.compare_digest(sig.strip(), expected):
-            return True
+        sig = sig.strip()
+        if sig:
+            provided.append(sig)
+
+    candidates = _polar_secret_keys(POLAR_WEBHOOK_SECRET)
+    for key in candidates:
+        expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
+        for sig in provided:
+            if hmac.compare_digest(sig, expected):
+                return True
+
+    # Diagnostic — emit a non-secret fingerprint so operators can see
+    # which secret form was tried without leaking the signature.
+    expected_preview = ""
+    if candidates:
+        first = base64.b64encode(hmac.new(candidates[0], signed, hashlib.sha256).digest()).decode()
+        expected_preview = first[:8]
+    provided_preview = provided[0][:8] if provided else ""
+    print(
+        f"[billing] signature mismatch: provided={provided_preview}… expected={expected_preview}… "
+        f"key_variants={len(candidates)} body_len={len(body)}",
+        flush=True,
+    )
     return False
 
 
