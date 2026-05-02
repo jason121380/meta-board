@@ -2526,10 +2526,10 @@ async def create_portal_session(payload: PortalPayload):
 
     resp = await _polar_request(
         "POST",
-        "/customer-portal/sessions/",
+        "/customer-sessions/",
         json_body={"customer_id": polar_customer_id},
     )
-    url = resp.get("url") or resp.get("customer_portal_url") or ""
+    url = resp.get("customer_portal_url") or resp.get("url") or ""
     if not url:
         print(f"[billing] portal response missing URL: {resp}", flush=True)
         raise HTTPException(status_code=502, detail="Polar did not return a portal URL")
