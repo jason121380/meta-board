@@ -582,13 +582,13 @@ async def lifespan(app: FastAPI):
             except Exception as exc:
                 print(f"[startup] LINE channels admin claim failed: {exc}", flush=True)
 
-    # Grandfather LURE internal users into Agency tier so they don't
-    # hit a paywall on their own platform. List comes from
-    # GRANDFATHERED_AGENCY_USERS env var (comma-separated fb_user_ids).
+    # Grandfather LURE internal users into the Max (unlimited) tier
+    # so they don't hit a paywall on their own platform. List comes
+    # from GRANDFATHERED_USERS env var (comma-separated fb_user_ids).
     # Idempotent — re-applies the upgrade on every boot so a manual
     # DB tweak can't accidentally downgrade a teammate.
     if _db_pool is not None:
-        raw = (os.getenv("GRANDFATHERED_AGENCY_USERS") or "").strip()
+        raw = (os.getenv("GRANDFATHERED_USERS") or os.getenv("GRANDFATHERED_AGENCY_USERS") or "").strip()
         if raw:
             ids = [s.strip() for s in raw.split(",") if s.strip()]
             if ids:
@@ -601,9 +601,9 @@ async def lifespan(app: FastAPI):
                                   (fb_user_id, tier, status, ad_accounts_limit,
                                    line_channels_limit, line_groups_limit,
                                    monthly_push_limit, grandfathered)
-                                VALUES ($1, 'agency', 'active', 999999, 999999, 999999, NULL, TRUE)
+                                VALUES ($1, 'max', 'active', 999999, 999999, 999999, NULL, TRUE)
                                 ON CONFLICT (fb_user_id) DO UPDATE SET
-                                  tier = 'agency',
+                                  tier = 'max',
                                   status = 'active',
                                   ad_accounts_limit = 999999,
                                   line_channels_limit = 999999,
@@ -615,7 +615,7 @@ async def lifespan(app: FastAPI):
                                 uid,
                             )
                     print(
-                        f"[startup] subscriptions: grandfathered {len(ids)} agency user(s)",
+                        f"[startup] subscriptions: grandfathered {len(ids)} max-tier user(s)",
                         flush=True,
                     )
                 except Exception as exc:
@@ -1827,9 +1827,12 @@ async def delete_shared_setting(key: str):
 
 POLAR_API_KEY = os.getenv("POLAR_API_KEY", "")
 POLAR_WEBHOOK_SECRET = os.getenv("POLAR_WEBHOOK_SECRET", "")
-POLAR_PRODUCT_ID_STARTER = os.getenv("POLAR_PRODUCT_ID_STARTER", "")
-POLAR_PRODUCT_ID_GROWTH = os.getenv("POLAR_PRODUCT_ID_GROWTH", "")
-POLAR_PRODUCT_ID_AGENCY = os.getenv("POLAR_PRODUCT_ID_AGENCY", "")
+# Polar product ids per tier. The fall-back to the legacy
+# `_STARTER/_GROWTH/_AGENCY` names lets ops rename Zeabur env keys
+# at their own pace — both old and new lookups work.
+POLAR_PRODUCT_ID_BASIC = os.getenv("POLAR_PRODUCT_ID_BASIC") or os.getenv("POLAR_PRODUCT_ID_STARTER", "")
+POLAR_PRODUCT_ID_PLUS = os.getenv("POLAR_PRODUCT_ID_PLUS") or os.getenv("POLAR_PRODUCT_ID_GROWTH", "")
+POLAR_PRODUCT_ID_MAX = os.getenv("POLAR_PRODUCT_ID_MAX") or os.getenv("POLAR_PRODUCT_ID_AGENCY", "")
 
 # Single source of truth for both the /pricing page display AND the
 # quota limits applied per tier. Keep the *_limit values in sync with
@@ -1849,38 +1852,38 @@ TIER_CONFIGS: dict = {
         "monthly_push_limit": 0,
         "polar_product_id": "",
     },
-    "starter": {
-        "tier": "starter",
-        "name": "Starter",
+    "basic": {
+        "tier": "basic",
+        "name": "Basic",
         "price_monthly": 990,
         "price_monthly_full": 1980,
         "ad_accounts_limit": 5,
         "line_channels_limit": 1,
         "line_groups_limit": 3,
         "monthly_push_limit": 30,
-        "polar_product_id": POLAR_PRODUCT_ID_STARTER,
+        "polar_product_id": POLAR_PRODUCT_ID_BASIC,
     },
-    "growth": {
-        "tier": "growth",
-        "name": "Growth",
+    "plus": {
+        "tier": "plus",
+        "name": "Plus",
         "price_monthly": 2490,
         "price_monthly_full": 4980,
         "ad_accounts_limit": 20,
         "line_channels_limit": 3,
         "line_groups_limit": 15,
         "monthly_push_limit": 100,
-        "polar_product_id": POLAR_PRODUCT_ID_GROWTH,
+        "polar_product_id": POLAR_PRODUCT_ID_PLUS,
     },
-    "agency": {
-        "tier": "agency",
-        "name": "Agency",
+    "max": {
+        "tier": "max",
+        "name": "Max",
         "price_monthly": 6490,
         "price_monthly_full": 12980,
         "ad_accounts_limit": -1,
         "line_channels_limit": -1,
         "line_groups_limit": -1,
         "monthly_push_limit": -1,
-        "polar_product_id": POLAR_PRODUCT_ID_AGENCY,
+        "polar_product_id": POLAR_PRODUCT_ID_MAX,
     },
 }
 
