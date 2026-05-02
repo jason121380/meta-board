@@ -2448,7 +2448,7 @@ async def proxy_asset(
     """Stream a remote FB/IG creative through our origin so the
     browser can save it as a file. Returns the raw bytes with
     Content-Disposition: attachment set."""
-    from urllib.parse import urlparse
+    from urllib.parse import quote, urlparse
 
     try:
         parsed = urlparse(url)
@@ -2472,11 +2472,21 @@ async def proxy_asset(
     if upstream.status_code != 200:
         raise HTTPException(status_code=502, detail=f"Upstream {upstream.status_code}")
 
+    # HTTP headers are latin-1 only — non-ASCII chars (e.g. Chinese
+    # creative names) would 500 the response with UnicodeEncodeError
+    # when ASGI tries to encode the header. Use RFC 6266's split
+    # form: a stripped-down ASCII filename for legacy clients plus
+    # filename*=UTF-8''<percent-encoded> for modern browsers (which
+    # is what iOS Safari and Chrome both honour).
+    ascii_name = re.sub(r"[^\x20-\x7e]", "_", safe_name).strip("._ ") or "creative"
+    encoded_name = quote(safe_name, safe="")
+    disposition = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded_name}"
+
     return Response(
         content=upstream.content,
         media_type=upstream.headers.get("content-type", "application/octet-stream"),
         headers={
-            "Content-Disposition": f'attachment; filename="{safe_name}"',
+            "Content-Disposition": disposition,
             "Cache-Control": "no-store",
         },
     )
