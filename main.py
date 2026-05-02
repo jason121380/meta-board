@@ -1914,6 +1914,7 @@ async def get_billing_me(fb_user_id: str = Query(...)):
     if str(out.get("status") or "").lower() == "canceled":
         free = _free_tier_state()
         out["tier"] = free["tier"]
+        out["status"] = free["status"]
         out["ad_accounts_limit"] = free["ad_accounts_limit"]
         out["line_channels_limit"] = free["line_channels_limit"]
         out["line_groups_limit"] = free["line_groups_limit"]
