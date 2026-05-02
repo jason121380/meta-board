@@ -96,7 +96,7 @@ export function BillingView() {
         <UsageCard sub={sub} />
 
         <div className="flex flex-col gap-2 md:flex-row">
-          {sub.polar_customer_id ? (
+          {sub.polar_customer_id && sub.tier !== "free" ? (
             <Button
               variant="primary"
               disabled={openingPortal}

@@ -1905,6 +1905,22 @@ async def get_billing_me(fb_user_id: str = Query(...)):
     if not row:
         return {"data": _free_tier_state()}
     out = dict(row)
+    # Once Polar marks the subscription as canceled the user no
+    # longer has a paid relationship — surface the free-tier limits
+    # so dashboards and feature gates fall back to free immediately.
+    # We keep polar_customer_id (so the manage / re-subscribe button
+    # still works) and clear the dangling trial / period markers
+    # that would otherwise render as "下次扣款" UI.
+    if str(out.get("status") or "").lower() == "canceled":
+        free = _free_tier_state()
+        out["tier"] = free["tier"]
+        out["ad_accounts_limit"] = free["ad_accounts_limit"]
+        out["line_channels_limit"] = free["line_channels_limit"]
+        out["line_groups_limit"] = free["line_groups_limit"]
+        out["monthly_push_limit"] = free["monthly_push_limit"]
+        out["trial_ends_at"] = None
+        out["current_period_end"] = None
+        out["cancel_at_period_end"] = False
     # asyncpg returns datetime objects; the JSON encoder needs
     # ISO strings.
     for k in ("trial_ends_at", "current_period_end", "created_at", "updated_at"):
