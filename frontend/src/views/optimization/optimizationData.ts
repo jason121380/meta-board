@@ -1,5 +1,5 @@
 import { getIns, getMsgCount } from "@/lib/insights";
-import { buildCampaignRecommendations } from "@/lib/recommendations";
+import { buildCampaignRecommendations, isTrafficObjective } from "@/lib/recommendations";
 import type { FbCampaign } from "@/types/fb";
 
 /**
@@ -55,24 +55,34 @@ function readMetrics(c: FbCampaign): OptimizationMetrics {
 }
 
 /**
- * Score a campaign's urgency. The thresholds here mirror the rules
- * used by `buildCampaignRecommendations`, but collapsed into a
- * single numeric priority so we can sort the flat list.
+ * Score a campaign's urgency. Mirrors `buildCampaignRecommendations`
+ * exactly (including its traffic-objective bypass) so the severity
+ * label and the recommendation text always agree — without this the
+ * "需立即處理" tier could fire on a traffic-objective campaign whose
+ * advice text says "整體表現穩定" because msgCost is meaningless for
+ * traffic objectives.
  *
  *   critical (>= 1000) — needs action now
  *   warning  (500-999) — watch closely
  *   good     (< 500)   — performing as expected
  */
-function scorePriority(m: OptimizationMetrics): {
+function scorePriority(
+  m: OptimizationMetrics,
+  objective: string | null,
+): {
   severity: OptimizationSeverity;
   priority: number;
 } {
-  // CRITICAL — message cost blowing out
-  if (m.msgs > 0 && m.msgCost > 300) {
+  const trafficMode = isTrafficObjective(objective);
+  const hasMsg = !trafficMode && m.msgs > 0;
+
+  // CRITICAL — message cost blowing out (only when msg metrics
+  // are meaningful; traffic objectives skip this branch)
+  if (hasMsg && m.msgCost > 300) {
     return { severity: "critical", priority: 1000 + m.msgCost };
   }
-  // CRITICAL — no messages and CPC very high
-  if (m.msgs === 0 && m.cpc > 6) {
+  // CRITICAL — CPC very high (only when msg metrics aren't relevant)
+  if (!hasMsg && m.cpc > 6) {
     return { severity: "critical", priority: 1000 + m.cpc * 100 };
   }
   // CRITICAL — frequency burning through audience
@@ -81,11 +91,11 @@ function scorePriority(m: OptimizationMetrics): {
   }
 
   // WARNING — message cost trending up
-  if (m.msgs > 0 && m.msgCost > 200 && m.msgCost <= 300) {
+  if (hasMsg && m.msgCost > 200 && m.msgCost <= 300) {
     return { severity: "warning", priority: 500 + m.msgCost };
   }
   // WARNING — CPC in the watch band
-  if (m.msgs === 0 && m.cpc > 4 && m.cpc <= 6) {
+  if (!hasMsg && m.cpc > 4 && m.cpc <= 6) {
     return { severity: "warning", priority: 500 + m.cpc * 50 };
   }
   // WARNING — frequency creeping up
@@ -110,7 +120,8 @@ export function buildOptimizationItems(campaigns: FbCampaign[]): OptimizationIte
     const isPausedWithSpend = c.status === "PAUSED" && m.spend > 0;
     if (!isActive && !isPausedWithSpend) continue;
 
-    const { severity, priority } = scorePriority(m);
+    const objective = c.objective ?? null;
+    const { severity, priority } = scorePriority(m, objective);
     items.push({
       campaign: c,
       severity,
@@ -121,7 +132,7 @@ export function buildOptimizationItems(campaigns: FbCampaign[]): OptimizationIte
         msgCost: m.msgCost,
         cpc: m.cpc,
         frequency: m.frequency,
-        objective: c.objective ?? null,
+        objective,
       }),
       metrics: m,
     });
