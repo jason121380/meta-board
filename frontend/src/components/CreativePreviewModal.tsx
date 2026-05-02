@@ -4,6 +4,7 @@ import { usePostMedia } from "@/api/hooks/usePostMedia";
 import { useVideoSource } from "@/api/hooks/useVideoSource";
 import { Modal } from "@/components/Modal";
 import { Spinner } from "@/components/Spinner";
+import { toast } from "@/components/Toast";
 import { fbPostLinkFromStoryId, isFrontPostCreative } from "@/lib/fbLinks";
 import type { FbCreativeEntity } from "@/types/fb";
 import { useEffect, useState } from "react";
@@ -62,6 +63,50 @@ function extractPageId(storyId: string | undefined): string | null {
   const i = storyId.indexOf("_");
   if (i <= 0) return null;
   return storyId.slice(0, i);
+}
+
+/** Build a filesystem-safe filename for the downloaded asset. The
+ *  creative name often contains `/`, `?`, etc. that the OS would
+ *  reject, so we strip them and clamp the length. */
+function buildDownloadName(creativeName: string, url: string, isVideo: boolean): string {
+  const safe = (creativeName || "creative").replace(/[\\/:*?"<>|\n\r\t]/g, "_").slice(0, 80).trim();
+  const fallback = isVideo ? "mp4" : "jpg";
+  let ext = fallback;
+  try {
+    const path = new URL(url).pathname;
+    const m = path.match(/\.(mp4|mov|webm|m4v|jpg|jpeg|png|gif|webp)(?:$|\?)/i);
+    if (m?.[1]) ext = m[1].toLowerCase();
+  } catch {
+    /* keep fallback */
+  }
+  return `${safe || "creative"}.${ext}`;
+}
+
+/** Download a remote URL by fetching the bytes and clicking a blob
+ *  anchor. Cross-origin `<a download>` is unreliable on FB CDN URLs
+ *  (Chrome navigates instead of saving), so we fetch and re-anchor.
+ *  When the fetch fails (e.g. CORS denial on a particular CDN edge)
+ *  we fall back to opening the URL in a new tab so the user can
+ *  right-click → save manually. */
+async function downloadAsset(url: string, filename: string): Promise<void> {
+  try {
+    const resp = await fetch(url, { credentials: "omit" });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const blob = await resp.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Defer revoke so Safari has time to start the download.
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  } catch (err) {
+    console.error("[creative] download failed, opening in new tab", err);
+    window.open(url, "_blank", "noopener,noreferrer");
+    toast("下載失敗,已改開新分頁,請手動儲存", "error");
+  }
 }
 
 export function CreativePreviewModal({ creative, onClose }: CreativePreviewModalProps) {
@@ -291,6 +336,13 @@ export function CreativePreviewModal({ creative, onClose }: CreativePreviewModal
             imgError={imgError}
             onImgError={() => setImgError(true)}
             postUrl={postUrl}
+          />
+
+          <DownloadAssetButton
+            creativeName={creative.name}
+            videoSource={videoQuery.data?.source ?? null}
+            postVideoSource={postVideoSource}
+            previewImage={previewImage ?? null}
           />
 
           {creativeBody && (
@@ -557,6 +609,70 @@ function MediaBlock(props: MediaBlockProps) {
   return (
     <div className="flex min-h-[200px] w-full items-center justify-center rounded-lg border border-border bg-bg text-xs text-gray-300">
       無預覽素材
+    </div>
+  );
+}
+
+/** Pill button under the media block that downloads the underlying
+ *  asset (video preferred, image fallback). Hidden when neither has
+ *  resolved yet. The fetched bytes are saved via blob anchor so FB
+ *  CDN URLs save instead of navigating. */
+function DownloadAssetButton({
+  creativeName,
+  videoSource,
+  postVideoSource,
+  previewImage,
+}: {
+  creativeName: string;
+  videoSource: string | null;
+  postVideoSource: string | null;
+  previewImage: string | null;
+}) {
+  const [busy, setBusy] = useState(false);
+  const downloadUrl = videoSource ?? postVideoSource ?? previewImage;
+  const isVideo = !!(videoSource || postVideoSource);
+
+  if (!downloadUrl) return null;
+
+  const onClick = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await downloadAsset(downloadUrl, buildDownloadName(creativeName, downloadUrl, isVideo));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex">
+      <button
+        type="button"
+        onClick={() => void onClick()}
+        disabled={busy}
+        className="inline-flex items-center gap-1.5 rounded-pill border-[1.5px] border-orange bg-white px-3 py-1.5 text-[12px] font-semibold text-orange transition hover:bg-orange-bg active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {busy ? (
+          <Spinner size={14} />
+        ) : (
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        )}
+        {busy ? "下載中..." : isVideo ? "下載影片" : "下載圖片"}
+      </button>
     </div>
   );
 }
