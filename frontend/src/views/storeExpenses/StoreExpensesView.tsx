@@ -53,7 +53,7 @@ export function StoreExpensesView() {
   const allAccounts = accountsQuery.data ?? [];
   const visible = useAccountsStore((s) => s.visibleAccounts)(allAccounts);
 
-  const date = useFiltersStore((s) => s.date.storeExpenses);
+  const date = useFiltersStore((s) => s.date.shared);
   const setDate = useFiltersStore((s) => s.setDate);
   const settingsReady = useUiStore((s) => s.settingsReady);
 
@@ -149,7 +149,7 @@ export function StoreExpensesView() {
             selectedIds={storeSelectedAcctIds}
             onChange={setStoreSelectedAcctIds}
           />
-          <DatePicker value={date} onChange={(cfg) => setDate("storeExpenses", cfg)} />
+          <DatePicker value={date} onChange={(cfg) => setDate("shared", cfg)} />
           <Button
             variant="ghost"
             size="sm"

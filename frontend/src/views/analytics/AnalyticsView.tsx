@@ -62,7 +62,7 @@ export function AnalyticsView() {
   const allAccounts = accountsQuery.data ?? [];
   const visible = useAccountsStore((s) => s.visibleAccounts)(allAccounts);
 
-  const date = useFiltersStore((s) => s.date.analytics);
+  const date = useFiltersStore((s) => s.date.shared);
   const setDate = useFiltersStore((s) => s.setDate);
   const settingsReady = useUiStore((s) => s.settingsReady);
 
@@ -82,7 +82,7 @@ export function AnalyticsView() {
     <>
       <Topbar title="數據分析">
         <div className="flex items-center gap-3">
-          <DatePicker value={date} onChange={(cfg) => setDate("analytics", cfg)} />
+          <DatePicker value={date} onChange={(cfg) => setDate("shared", cfg)} />
         </div>
       </Topbar>
 

@@ -726,6 +726,28 @@ export const api = {
      *  Cached indefinitely — only changes on a deploy. */
     agents: () =>
       request<{ data: AgentMeta[] }>("GET", "/api/optimization/agents"),
+    /** Cross-device hydration — returns the most recent persisted
+     *  AI 幕僚 run for this user, or null if none. Frontend calls
+     *  this on mount so opening the page on a new device shows
+     *  the same advice the user generated elsewhere. Quota-only
+     *  legacy rows (no payload) are filtered out server-side. */
+    lastRun: (fbUserId: string) =>
+      request<{
+        data: {
+          created_at: string;
+          payload: {
+            version: number;
+            date_label: string;
+            account_names: string[];
+            campaigns_count: number;
+            advice: Array<{
+              agent_id: string;
+              advice_md: string | null;
+              error: string | null;
+            }>;
+          } | null;
+        } | null;
+      }>("GET", "/api/optimization/last-run", { query: { fb_user_id: fbUserId } }),
     /** Streaming variant — emits NDJSON, one event per agent as it
      *  completes (instead of blocking on the slowest of 5). Same
      *  quota semantics as runAgents. The caller hands in two

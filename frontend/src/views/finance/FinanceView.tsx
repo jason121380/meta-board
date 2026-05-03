@@ -39,7 +39,7 @@ export function FinanceView() {
   const allAccounts = accountsQuery.data ?? [];
   const visible = useAccountsStore((s) => s.visibleAccounts)(allAccounts);
 
-  const date = useFiltersStore((s) => s.date.finance);
+  const date = useFiltersStore((s) => s.date.shared);
   const setDate = useFiltersStore((s) => s.setDate);
 
   const finSelectedAcctIds = useUiStore((s) => s.finSelectedAcctIds);
@@ -121,7 +121,7 @@ export function FinanceView() {
             className="bg-transparent px-0 py-0"
           />
           <TopbarSeparator />
-          <DatePicker value={date} onChange={(cfg) => setDate("finance", cfg)} />
+          <DatePicker value={date} onChange={(cfg) => setDate("shared", cfg)} />
           <Button
             variant="ghost"
             size="sm"

@@ -481,6 +481,12 @@ async def lifespan(app: FastAPI):
                 await conn.execute(
                     "CREATE INDEX IF NOT EXISTS idx_agent_advice_runs_user_month ON agent_advice_runs (fb_user_id, created_at)"
                 )
+                # The payload column was added later — older rows
+                # have it NULL (they're only useful as quota markers).
+                # Frontend's "restore last run" path filters those out.
+                await conn.execute(
+                    "ALTER TABLE agent_advice_runs ADD COLUMN IF NOT EXISTS payload JSONB"
+                )
                 # `billing_events`: webhook idempotency log + audit
                 # trail. Polar can re-deliver events; the unique
                 # constraint on polar_event_id makes ingest a no-op
@@ -6064,10 +6070,12 @@ async def _run_optimization_agents_inner(req: RunAgentsRequest):
     new_used = used
     if success_count > 0 and _db_pool is not None:
         try:
+            payload = _build_run_payload(req, advice)
             async with _db_pool.acquire() as conn:
                 await conn.execute(
-                    "INSERT INTO agent_advice_runs (fb_user_id) VALUES ($1)",
+                    "INSERT INTO agent_advice_runs (fb_user_id, payload) VALUES ($1, $2)",
                     req.fb_user_id,
+                    payload,
                 )
             new_used = used + 1
         except Exception as exc:
@@ -6107,6 +6115,70 @@ async def _run_optimization_agents_inner(req: RunAgentsRequest):
 # raised BEFORE the StreamingResponse is constructed so the client
 # can catch them on the response object instead of having to parse
 # the stream just to find an error.
+
+def _build_run_payload(req: "RunAgentsRequest", advice: list) -> str:
+    """Shape the JSONB blob persisted to agent_advice_runs.payload.
+    Same structure on both the streaming and non-streaming paths
+    so the GET /last-run reader can be agnostic. Returns a JSON
+    string — asyncpg's JSONB codec accepts either dict-or-string,
+    but a string sidesteps any "default JSON encoder" surprises
+    with non-stdlib types."""
+    accounts = sorted({c.account_name for c in req.campaigns if c.account_name})
+    return json.dumps(
+        {
+            "version": 1,
+            "date_label": req.date_label,
+            "account_names": accounts,
+            "campaigns_count": len(req.campaigns),
+            "advice": advice,
+        },
+        ensure_ascii=False,
+    )
+
+
+@app.get("/api/optimization/last-run")
+async def get_last_run(fb_user_id: str = Query(...)):
+    """Return the most recent persisted AI 幕僚 run for this user
+    (across devices), or `{ data: null }` if none. Used by the
+    frontend to hydrate the cards on mount so a refresh / new
+    device sees the same report. Filters out legacy quota-only
+    rows where payload IS NULL."""
+    if _db_pool is None or not fb_user_id:
+        return {"data": None}
+    try:
+        async with _db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT created_at, payload FROM agent_advice_runs
+                WHERE fb_user_id = $1 AND payload IS NOT NULL
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                fb_user_id,
+            )
+    except Exception as exc:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=502,
+            detail=f"讀取上次分析失敗:{exc.__class__.__name__}: {exc}",
+        )
+    if not row:
+        return {"data": None}
+    payload = row["payload"]
+    # asyncpg returns JSONB as already-parsed dict; older drivers
+    # may return raw text — handle both defensively.
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except Exception:
+            payload = None
+    return {
+        "data": {
+            "created_at": row["created_at"].isoformat(),
+            "payload": payload,
+        }
+    }
+
 
 async def _call_one_agent_with_id(
     agent_id: str,
@@ -6177,6 +6249,12 @@ async def run_optimization_agents_stream(req: RunAgentsRequest):
 
     async def stream():
         success_count = 0
+        # Mirror every emitted event into a local list so we can
+        # write the persisted run row at the end. We can't read it
+        # back from the wire (streaming response is one-way), so
+        # the alternative would be re-doing the JSON parse on the
+        # backend — much uglier.
+        advice_collected: list = []
         tasks = [
             _call_one_agent_with_id(
                 meta["id"], prompts.get(meta["id"], ""),
@@ -6194,6 +6272,7 @@ async def run_optimization_agents_stream(req: RunAgentsRequest):
                 agent_id, text, err = "?", None, f"{exc.__class__.__name__}: {exc}"
             if text:
                 success_count += 1
+            advice_collected.append({"agent_id": agent_id, "advice_md": text, "error": err})
             yield (
                 json.dumps(
                     {
@@ -6210,10 +6289,20 @@ async def run_optimization_agents_stream(req: RunAgentsRequest):
         new_used = used
         if success_count > 0 and _db_pool is not None:
             try:
+                # Reconstruct the same payload shape the non-stream
+                # endpoint persists, so /api/optimization/last-run
+                # returns the same structure regardless of which
+                # endpoint produced the row.
+                stream_advice = [
+                    {"agent_id": a["agent_id"], "advice_md": a["advice_md"], "error": a["error"]}
+                    for a in advice_collected
+                ]
+                payload = _build_run_payload(req, stream_advice)
                 async with _db_pool.acquire() as conn:
                     await conn.execute(
-                        "INSERT INTO agent_advice_runs (fb_user_id) VALUES ($1)",
+                        "INSERT INTO agent_advice_runs (fb_user_id, payload) VALUES ($1, $2)",
                         req.fb_user_id,
+                        payload,
                     )
                 new_used = used + 1
             except Exception:

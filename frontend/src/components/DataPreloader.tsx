@@ -49,7 +49,7 @@ export function DataPreloader({ onComplete }: { onComplete: () => void }) {
   const accountsQuery = useAccounts();
   const allAccounts = accountsQuery.data ?? [];
   const visibleAccounts = useAccountsStore((s) => s.visibleAccounts)(allAccounts);
-  const date = useFiltersStore((s) => s.date.dashboard);
+  const date = useFiltersStore((s) => s.date.shared);
 
   const [progress, setProgress] = useState<Progress>({ loaded: 0, total: 0 });
   const [done, setDone] = useState(didPreload);

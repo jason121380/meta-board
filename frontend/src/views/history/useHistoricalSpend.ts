@@ -10,29 +10,45 @@ import type { MonthCol } from "./historyData";
  * accountId + monthKey) so revisiting the view is instant and
  * switching between accounts only triggers the not-yet-seen months.
  *
- * Historical months never change (the only "moving" column is the
- * current month), so stale time is generous — 1 hour. The current
- * month uses the same key but the backend's own 60s cache keeps it
- * fresh enough for a manual refresh to notice new spend.
+ * Stale-time strategy: completed past months are immutable (FB
+ * doesn't retroactively edit historical insights), so they get
+ * `Infinity` — once fetched in the session they never refetch
+ * automatically. The current month is still in flight, so it gets
+ * the standard 5 minutes. A manual refresh always invalidates
+ * via the global queryClient.
+ *
+ * `gcTime` is bumped for past months too (24h) so the cache
+ * survives long-tab-idle sessions instead of being garbage-
+ * collected after the default 30 minutes.
  */
 export function useHistoricalSpend(accountId: string | null, months: MonthCol[]) {
   const { status } = useFbAuth();
   const enabled = status === "auth" && !!accountId;
 
+  // "Current month" = the month containing today. We compare on
+  // the column's `key` (YYYY-MM string) so the comparison is
+  // independent of timezone-shift edge cases inside DateConfig.
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
   const results = useQueries({
-    queries: months.map((col) => ({
-      queryKey: ["history-month", accountId, col.key],
-      queryFn: async () => {
-        if (!accountId) return { campaigns: [] as FbCampaign[] };
-        const resp = await api.overview.batch([accountId], col.date, {
-          includeArchived: true,
-        });
-        const bundle = resp.data[accountId];
-        return { campaigns: bundle?.campaigns ?? [] };
-      },
-      enabled,
-      staleTime: 60 * 60_000,
-    })),
+    queries: months.map((col) => {
+      const isCurrentMonth = col.key === currentMonthKey;
+      return {
+        queryKey: ["history-month", accountId, col.key],
+        queryFn: async () => {
+          if (!accountId) return { campaigns: [] as FbCampaign[] };
+          const resp = await api.overview.batch([accountId], col.date, {
+            includeArchived: true,
+          });
+          const bundle = resp.data[accountId];
+          return { campaigns: bundle?.campaigns ?? [] };
+        },
+        enabled,
+        staleTime: isCurrentMonth ? 5 * 60_000 : Number.POSITIVE_INFINITY,
+        gcTime: isCurrentMonth ? 30 * 60_000 : 24 * 60 * 60_000,
+      };
+    }),
   });
 
   const monthlyCampaigns = results.map((r) => r.data?.campaigns);
