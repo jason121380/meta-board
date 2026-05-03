@@ -23,6 +23,7 @@ const RESOURCE_LABEL: Record<LimitResource, string> = {
   line_channels: "LINE 官方帳號",
   line_groups: "LINE 群組推播",
   monthly_push: "本月推播次數",
+  agent_advice: "AI 幕僚分析",
 };
 
 export interface UpgradeModalState {

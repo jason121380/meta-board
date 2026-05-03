@@ -89,7 +89,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     to: "/optimization",
-    label: "成效優化中心",
+    label: "AI 幕僚",
     icon: (
       <svg
         width="16"

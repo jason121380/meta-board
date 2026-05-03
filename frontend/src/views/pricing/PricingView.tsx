@@ -140,6 +140,16 @@ function PlanCard({
 }) {
   const isCurrent = currentTier === tier.tier && currentStatus !== "canceled";
   const savings = tier.price_monthly_full - tier.price_monthly;
+  // AI 幕僚 quota — 0 means the tier doesn't include the feature at
+  // all (we render a blocked label instead of "0 次").
+  const adviceLimit = tier.agent_advice_limit;
+  const adviceLine =
+    adviceLimit === -1
+      ? "AI 幕僚:無限分析次數"
+      : adviceLimit === 0
+        ? "AI 幕僚:✗ 不包含"
+        : `AI 幕僚:每月 ${adviceLimit} 次分析`;
+
   const features = [
     `${tier.ad_accounts_limit === -1 ? "無限" : tier.ad_accounts_limit} 個廣告帳戶`,
     `${tier.line_channels_limit === -1 ? "無限" : tier.line_channels_limit} 個 LINE 官方帳號`,
@@ -148,9 +158,9 @@ function PlanCard({
       ? "無限自動推播次數"
       : `每月 ${fN(tier.monthly_push_limit)} 次自動推播`,
     "即時警示列表",
-    "成效優化中心",
-    "AI 優化建議",
-    "公開分享報告 (/r/...)",
+    adviceLine,
+    "AI 即時對話顧問",
+    "公開分享報告",
   ];
 
   return (
