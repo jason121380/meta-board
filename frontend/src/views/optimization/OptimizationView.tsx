@@ -119,12 +119,20 @@ export function OptimizationView() {
   const [upgradeState, setUpgradeState] = useState<UpgradeModalState | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Restore the last successful run from localStorage so a refresh
-  // doesn't wipe what the user just paid for. Stored payload keeps
-  // the dateLabel + filter context too — when the current filters
-  // disagree with the stored ones, we still show the cards but the
-  // relative-time pill makes it obvious they're stale (the user's
-  // own discretion whether to re-generate or not).
+  // Two-phase hydration so the user always sees something instant
+  // AND the result is cross-device consistent:
+  //
+  //   Phase 1 (sync, ~0ms): pull cached payload from localStorage.
+  //     Same-browser refresh / tab reopen shows cards immediately.
+  //   Phase 2 (async, ~200ms): fetch the most-recent persisted run
+  //     from the backend. If newer than the local cache (or local
+  //     is empty), replace the cards. This is what makes "logged
+  //     in on phone, see the same report on laptop" work.
+  //
+  // We don't reconcile during a live stream — once the user clicks
+  // 產生分析, that becomes the source of truth and any backend
+  // hydration is suppressed.
+  const hydrationDoneRef = useRef(false);
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LAST_RUN_STORAGE_KEY);
@@ -134,14 +142,54 @@ export function OptimizationView() {
       setCards(parsed.cards);
       setGeneratedAt(new Date(parsed.generatedAt));
     } catch {
-      // Corrupt entry — clear so subsequent loads don't keep failing.
       localStorage.removeItem(LAST_RUN_STORAGE_KEY);
     }
-    // Intentionally run once on mount — we don't want subsequent
-    // re-renders to clobber freshly-streamed results with the saved
-    // copy.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const uid = user?.id;
+    if (!uid || hydrationDoneRef.current) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await api.optimization.lastRun(uid);
+        if (cancelled) return;
+        const row = resp.data;
+        if (!row?.payload) return;
+        const serverAt = new Date(row.created_at);
+        // If we already have a local copy that's newer (e.g. user
+        // is mid-flow on this same browser), don't overwrite.
+        if (generatedAt && generatedAt.getTime() >= serverAt.getTime()) return;
+        const nextCards: Record<string, CardState> = {};
+        for (const a of row.payload.advice) {
+          nextCards[a.agent_id] = { advice_md: a.advice_md, error: a.error };
+        }
+        setCards(nextCards);
+        setGeneratedAt(serverAt);
+        // Sync the local cache so the next sync-phase load matches.
+        try {
+          const payload: StoredLastRun = {
+            version: LAST_RUN_VERSION,
+            generatedAt: serverAt.toISOString(),
+            dateLabel: row.payload.date_label,
+            cards: nextCards,
+          };
+          localStorage.setItem(LAST_RUN_STORAGE_KEY, JSON.stringify(payload));
+        } catch {
+          /* ignore quota-exceeded etc */
+        }
+      } catch {
+        // Network / 5xx — fall back silently to whatever
+        // localStorage gave us in phase 1.
+      } finally {
+        hydrationDoneRef.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, generatedAt]);
 
   // Tick the relative-time label every 30s. Cheap because the
   // formatter is just date math; cleared when no timestamp.
