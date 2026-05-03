@@ -99,10 +99,15 @@ export interface LinePushConfigInput {
 export class ApiError extends Error {
   status: number;
   detail: string;
-  constructor(status: number, detail: string) {
+  /** Raw `detail` field as parsed JSON. Tier-limit endpoints return
+   *  an object (TierLimitError) here, while regular errors return a
+   *  string. Callers can do `if (err.body?.code === "tier_limit_exceeded")`. */
+  body?: unknown;
+  constructor(status: number, detail: string, body?: unknown) {
     super(`API ${status}: ${detail}`);
     this.status = status;
     this.detail = detail;
+    this.body = body;
   }
 }
 
@@ -289,7 +294,13 @@ async function request<T>(
       }
     }
     const detail = extractDetail(body) || `HTTP ${response.status}`;
-    throw new ApiError(response.status, detail);
+    // Forward the parsed `detail` field (which may be an object for
+    // tier-limit errors) so callers can branch on err.body.code.
+    const rawDetail =
+      body && typeof body === "object"
+        ? (body as Record<string, unknown>).detail
+        : undefined;
+    throw new ApiError(response.status, detail, rawDetail);
   }
 
   return body as T;
@@ -299,6 +310,11 @@ function extractDetail(body: unknown): string | null {
   if (body && typeof body === "object") {
     const obj = body as Record<string, unknown>;
     if (typeof obj.detail === "string") return obj.detail;
+    // Tier-limit errors put the user-facing message inside detail.message.
+    if (obj.detail && typeof obj.detail === "object") {
+      const d = obj.detail as Record<string, unknown>;
+      if (typeof d.message === "string") return d.message;
+    }
     if (typeof obj.error === "string") return obj.error;
     if (obj.error && typeof obj.error === "object") {
       const err = obj.error as Record<string, unknown>;
@@ -721,8 +737,32 @@ export const api = {
       request<{ url: string }>("POST", "/api/billing/portal", {
         body: { fb_user_id: fbUserId },
       }),
+    /** Current tier limits + live usage for each capped resource —
+     *  feeds the "X / Y 已使用" indicators and the at-limit
+     *  upgrade modal interception. */
+    usage: (fbUserId: string) =>
+      request<{ data: BillingUsage }>("GET", "/api/billing/usage", {
+        query: { fb_user_id: fbUserId },
+      }),
   },
 };
+
+export type LimitResource = "ad_accounts" | "line_channels" | "line_groups" | "monthly_push";
+
+export interface BillingUsage {
+  tier: TierId;
+  limits: Record<LimitResource, number>;
+  usage: Record<LimitResource, number>;
+}
+
+/** 403 detail body returned by tier-gated endpoints. */
+export interface TierLimitError {
+  code: "tier_limit_exceeded";
+  resource: LimitResource;
+  limit: number;
+  tier: TierId;
+  message: string;
+}
 
 // ── Pricing / Billing types ───────────────────────────────────
 

@@ -33,3 +33,21 @@ export function usePricingConfig() {
     staleTime: Number.POSITIVE_INFINITY,
   });
 }
+
+/**
+ * Live tier-limit usage — fed into "X / Y 已使用" indicators on
+ * the affected settings pages and into the at-limit interception
+ * before save / add actions. Re-fetches on window focus so usage
+ * stays fresh after a save in another tab.
+ */
+export function useBillingUsage() {
+  const { status, user } = useFbAuth();
+  const fbUserId = user?.id ?? "";
+  return useQuery({
+    queryKey: ["billing", "usage", fbUserId],
+    queryFn: () => api.billing.usage(fbUserId),
+    enabled: status === "auth" && fbUserId.length > 0,
+    staleTime: 30_000,
+    select: (resp) => resp.data,
+  });
+}

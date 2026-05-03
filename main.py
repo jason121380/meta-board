@@ -1649,6 +1649,20 @@ async def get_user_settings(fb_user_id: str):
 @app.post("/api/settings/user/{fb_user_id}/{key}")
 async def upsert_user_setting(fb_user_id: str, key: str, payload: SettingsValuePayload):
     pool = _require_db()
+    # Tier-limit gate on selected_accounts: cap the number of
+    # enabled ad accounts at the user's plan limit. The limit is
+    # the user's source of truth — frontend shows an upgrade prompt
+    # before sending, but a stale tab could still over-submit.
+    if key == "selected_accounts" and isinstance(payload.value, list):
+        limits = await _get_user_limits(fb_user_id)
+        cap = limits["ad_accounts"]
+        if not _is_unlimited(cap) and len(payload.value) > cap:
+            raise _tier_limit_error(
+                "ad_accounts",
+                cap,
+                limits["tier"],
+                f"目前方案最多可啟用 {cap} 個廣告帳戶,請升級方案",
+            )
     async with pool.acquire() as conn:
         await conn.execute(
             """
@@ -1928,6 +1942,203 @@ async def get_billing_me(fb_user_id: str = Query(...)):
         if out.get(k) is not None:
             out[k] = out[k].isoformat()
     return {"data": out}
+
+
+# ── Tier limit enforcement ────────────────────────────────────────────
+#
+# Each subscription tier caps four resources:
+#   - ad_accounts  : how many FB ad accounts the user can have enabled
+#                    in their Settings selection (selected_accounts)
+#   - line_channels: how many LINE OA channels the user owns
+#   - line_groups  : how many active push configs the user has
+#                    (one config = one campaign × group × frequency)
+#   - monthly_push : total successful pushes this calendar month
+#
+# Limits live on the `subscriptions` row (denormalised from the tier
+# config). -1 in TIER_CONFIGS / 999_999 in the row means "unlimited".
+# We use a slightly lower sentinel (_UNLIMITED_SENTINEL) so the helper
+# treats anything in that range as no-limit at check time.
+
+_UNLIMITED_SENTINEL = 999_000
+
+
+def _is_unlimited(limit: int) -> bool:
+    return limit < 0 or limit >= _UNLIMITED_SENTINEL
+
+
+async def _get_user_limits(fb_user_id: str) -> dict:
+    """Return the user's current tier + cap on each capped resource.
+    Falls back to free-tier values when the user has no subscription
+    row, or when their row is `status = canceled` (mirrors the same
+    UI fallback applied by /api/billing/me)."""
+    free = TIER_CONFIGS["free"]
+    free_limits = {
+        "tier": "free",
+        "ad_accounts": free["ad_accounts_limit"],
+        "line_channels": free["line_channels_limit"],
+        "line_groups": free["line_groups_limit"],
+        "monthly_push": free["monthly_push_limit"],
+    }
+    if _db_pool is None or not fb_user_id:
+        return free_limits
+    async with _db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT tier, status,
+                   ad_accounts_limit, line_channels_limit,
+                   line_groups_limit, monthly_push_limit
+            FROM subscriptions
+            WHERE fb_user_id = $1
+            """,
+            fb_user_id,
+        )
+    if not row or str(row["status"] or "").lower() == "canceled":
+        return free_limits
+    return {
+        "tier": row["tier"] or "free",
+        "ad_accounts": int(row["ad_accounts_limit"] or 0),
+        "line_channels": int(row["line_channels_limit"] or 0),
+        "line_groups": int(row["line_groups_limit"] or 0),
+        "monthly_push": (
+            _UNLIMITED_SENTINEL
+            if row["monthly_push_limit"] is None
+            else int(row["monthly_push_limit"])
+        ),
+    }
+
+
+async def _count_selected_accounts(fb_user_id: str) -> int:
+    if _db_pool is None or not fb_user_id:
+        return 0
+    async with _db_pool.acquire() as conn:
+        val = await conn.fetchval(
+            "SELECT value FROM user_settings WHERE fb_user_id = $1 AND key = 'selected_accounts'",
+            fb_user_id,
+        )
+    if val is None:
+        return 0
+    try:
+        if isinstance(val, str):
+            val = json.loads(val)
+        if isinstance(val, list):
+            return len(val)
+    except Exception:
+        pass
+    return 0
+
+
+async def _count_line_channels(fb_user_id: str) -> int:
+    if _db_pool is None or not fb_user_id:
+        return 0
+    async with _db_pool.acquire() as conn:
+        n = await conn.fetchval(
+            "SELECT COUNT(*) FROM line_channels WHERE owner_fb_user_id = $1",
+            fb_user_id,
+        )
+    return int(n or 0)
+
+
+async def _count_user_push_configs(fb_user_id: str) -> int:
+    """Count push configs that target a group bound to a channel
+    owned by this user."""
+    if _db_pool is None or not fb_user_id:
+        return 0
+    async with _db_pool.acquire() as conn:
+        n = await conn.fetchval(
+            """
+            SELECT COUNT(*) FROM campaign_line_push_configs c
+            JOIN line_groups g ON g.group_id = c.group_id
+            JOIN line_channels ch ON ch.id = g.channel_id
+            WHERE ch.owner_fb_user_id = $1
+            """,
+            fb_user_id,
+        )
+    return int(n or 0)
+
+
+async def _count_monthly_pushes(fb_user_id: str) -> int:
+    """Successful pushes this calendar month (UTC) for configs
+    owned by this user."""
+    if _db_pool is None or not fb_user_id:
+        return 0
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    async with _db_pool.acquire() as conn:
+        n = await conn.fetchval(
+            """
+            SELECT COUNT(*) FROM line_push_logs l
+            JOIN campaign_line_push_configs c ON c.id = l.config_id
+            JOIN line_groups g ON g.group_id = c.group_id
+            JOIN line_channels ch ON ch.id = g.channel_id
+            WHERE ch.owner_fb_user_id = $1
+              AND l.run_at >= $2
+              AND l.success = TRUE
+            """,
+            fb_user_id,
+            month_start,
+        )
+    return int(n or 0)
+
+
+async def _get_group_owner(group_id: str) -> Optional[str]:
+    """Return the owner fb_user_id for a given LINE group via its
+    channel ownership. Used by the scheduler to look up the user
+    whose monthly_push limit a queued push counts against."""
+    if _db_pool is None or not group_id:
+        return None
+    async with _db_pool.acquire() as conn:
+        uid = await conn.fetchval(
+            """
+            SELECT ch.owner_fb_user_id
+            FROM line_groups g
+            JOIN line_channels ch ON ch.id = g.channel_id
+            WHERE g.group_id = $1
+            LIMIT 1
+            """,
+            group_id,
+        )
+    return uid
+
+
+def _tier_limit_error(resource: str, limit: int, tier: str, message: str) -> HTTPException:
+    """Build the 403 we raise on every tier-limit miss. Frontend reads
+    `code` to switch into the upgrade modal flow rather than a plain
+    error toast."""
+    return HTTPException(
+        status_code=403,
+        detail={
+            "code": "tier_limit_exceeded",
+            "resource": resource,
+            "limit": limit,
+            "tier": tier,
+            "message": message,
+        },
+    )
+
+
+@app.get("/api/billing/usage")
+async def get_billing_usage(fb_user_id: str = Query(...)):
+    """Return the user's tier limits + current usage for each capped
+    resource. Frontend uses this to render "X / Y 已使用" indicators
+    and decide whether to disable / intercept Add buttons."""
+    limits = await _get_user_limits(fb_user_id)
+    return {
+        "data": {
+            "tier": limits["tier"],
+            "limits": {
+                "ad_accounts": limits["ad_accounts"],
+                "line_channels": limits["line_channels"],
+                "line_groups": limits["line_groups"],
+                "monthly_push": limits["monthly_push"],
+            },
+            "usage": {
+                "ad_accounts": await _count_selected_accounts(fb_user_id),
+                "line_channels": await _count_line_channels(fb_user_id),
+                "line_groups": await _count_user_push_configs(fb_user_id),
+                "monthly_push": await _count_monthly_pushes(fb_user_id),
+            },
+        }
+    }
 
 
 POLAR_API_BASE = os.getenv("POLAR_API_BASE", "https://api.polar.sh/v1")
@@ -4246,6 +4457,18 @@ async def claim_line_channel(channel_id: str, fb_user_id: Optional[str] = None):
     uid = (fb_user_id or "").strip()
     if not uid:
         raise HTTPException(status_code=401, detail="fb_user_id 必填")
+    # Tier limit gate — claiming an orphan counts toward the cap.
+    limits = await _get_user_limits(uid)
+    cap = limits["line_channels"]
+    if not _is_unlimited(cap):
+        current = await _count_line_channels(uid)
+        if current >= cap:
+            raise _tier_limit_error(
+                "line_channels",
+                cap,
+                limits["tier"],
+                f"目前方案最多可連結 {cap} 個 LINE 官方帳號,請升級方案",
+            )
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT owner_fb_user_id FROM line_channels WHERE id = $1::uuid",
@@ -4274,6 +4497,18 @@ async def create_line_channel(payload: LineChannelPayload, fb_user_id: Optional[
     token = (payload.access_token or "").strip()
     if not name or not secret or not token:
         raise HTTPException(status_code=400, detail="name / channel_secret / access_token 都必填")
+    # Tier limit gate
+    limits = await _get_user_limits(uid)
+    cap = limits["line_channels"]
+    if not _is_unlimited(cap):
+        current = await _count_line_channels(uid)
+        if current >= cap:
+            raise _tier_limit_error(
+                "line_channels",
+                cap,
+                limits["tier"],
+                f"目前方案最多可連結 {cap} 個 LINE 官方帳號,請升級方案",
+            )
     async with pool.acquire() as conn:
         if payload.is_default:
             await conn.execute("UPDATE line_channels SET is_default = FALSE WHERE is_default")
@@ -4714,6 +4949,20 @@ async def upsert_push_config(payload: LinePushConfigPayload, fb_user_id: Optiona
     pool = _require_db()
     await _assert_can_modify_config_for_group(payload.group_id, fb_user_id)
     _validate_push_payload(payload)
+    # Tier limit gate — only on create (payload.id == None). Edits
+    # to an existing config don't grow the count, so they're free.
+    if not payload.id and fb_user_id:
+        limits = await _get_user_limits(fb_user_id)
+        cap = limits["line_groups"]
+        if not _is_unlimited(cap):
+            current = await _count_user_push_configs(fb_user_id)
+            if current >= cap:
+                raise _tier_limit_error(
+                    "line_groups",
+                    cap,
+                    limits["tier"],
+                    f"目前方案最多可設定 {cap} 個 LINE 群組推播,請升級方案",
+                )
     next_run = _compute_next_run(
         payload.frequency,
         payload.weekdays,
@@ -4991,6 +5240,50 @@ async def _scheduler_tick() -> None:
 
     for row in due:
         cfg = _config_row_to_dict(row)
+        # Tier limit gate: skip the push when the owning user has
+        # already used up this calendar month's quota. We log the
+        # skip + bump next_run_at so the row doesn't get re-grabbed
+        # on the next tick (which would just hit the same cap).
+        owner_uid = await _get_group_owner(cfg["group_id"])
+        if owner_uid:
+            owner_limits = await _get_user_limits(owner_uid)
+            push_cap = owner_limits["monthly_push"]
+            if not _is_unlimited(push_cap):
+                used = await _count_monthly_pushes(owner_uid)
+                if used >= push_cap:
+                    next_run_skip = _compute_next_run(
+                        cfg["frequency"],
+                        cfg["weekdays"],
+                        cfg["month_day"],
+                        cfg["hour"],
+                        cfg["minute"],
+                    )
+                    err_msg = (
+                        f"已達 {owner_limits['tier']} 方案每月 {push_cap} 次推播上限,本次跳過"
+                    )
+                    async with _db_pool.acquire() as conn:
+                        await conn.execute(
+                            """
+                            UPDATE campaign_line_push_configs
+                            SET last_run_at = $1, next_run_at = $2,
+                                last_error = $3, updated_at = NOW()
+                            WHERE id = $4::uuid
+                            """,
+                            now,
+                            next_run_skip,
+                            err_msg,
+                            cfg["id"],
+                        )
+                        await conn.execute(
+                            """
+                            INSERT INTO line_push_logs (config_id, success, error)
+                            VALUES ($1::uuid, FALSE, $2)
+                            """,
+                            cfg["id"],
+                            err_msg,
+                        )
+                    print(f"[scheduler] tier-limit skip: {cfg['id']} ({err_msg})", flush=True)
+                    continue
         try:
             flex = await _build_flex_for_config(cfg)
             assert _http_client is not None
