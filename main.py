@@ -1852,11 +1852,11 @@ TIER_CONFIGS: dict = {
         "line_channels_limit": 0,
         "line_groups_limit": 0,
         "monthly_push_limit": 0,
-        # Free tier gets 3 LIFETIME trial runs (not per-month). The
+        # Free tier gets 40 LIFETIME trial runs (not per-month). The
         # period is enforced by the tier check in
         # _count_advice_runs_for_quota — paid tiers count this
         # month, free counts forever.
-        "agent_advice_limit": 3,
+        "agent_advice_limit": 40,
         "polar_product_id": "",
     },
     "basic": {
@@ -2688,7 +2688,7 @@ async def _apply_customer_event(payload: dict) -> Optional[str]:
                ad_accounts_limit, line_channels_limit,
                line_groups_limit, monthly_push_limit,
                agent_advice_limit)
-            VALUES ($1, $2, 'free', 'free', 1, 0, 0, 0, 3)
+            VALUES ($1, $2, 'free', 'free', 1, 0, 0, 0, 40)
             ON CONFLICT (fb_user_id) DO UPDATE SET
               polar_customer_id = COALESCE(subscriptions.polar_customer_id, EXCLUDED.polar_customer_id),
               updated_at = NOW()
@@ -5713,6 +5713,17 @@ AGENT_META = [
         "role_zh": "KPI / 統計顯著性 / 預測模型 / 數據說故事",
         "emoji": "📊",
         "color": "#0891b2",
+    },
+    {
+        "id": "agency_ceo",
+        "name_zh": "代理商 CEO",
+        "name_en": "Agency CEO",
+        # role_zh kept for backwards-compat / Pricing page; the
+        # 6-card grid intentionally hides the third row to make
+        # the layout feel less crowded (per design feedback).
+        "role_zh": "P&L / 客戶組合配置 / 風險與成長",
+        "emoji": "👔",
+        "color": "#475569",
     },
 ]
 

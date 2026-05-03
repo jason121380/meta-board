@@ -1,4 +1,4 @@
-import { type AgentCampaignDigest, type AgentMeta, api } from "@/api/client";
+import { ApiError, type AgentCampaignDigest, type AgentMeta, api } from "@/api/client";
 import { useAccounts } from "@/api/hooks/useAccounts";
 import { useBillingUsage } from "@/api/hooks/useSubscription";
 import { useMultiAccountOverview } from "@/api/hooks/useMultiAccountOverview";
@@ -7,6 +7,7 @@ import { Button } from "@/components/Button";
 import { DatePicker } from "@/components/DatePicker";
 import { EmptyState } from "@/components/EmptyState";
 import { LoadingState } from "@/components/LoadingState";
+import { Modal } from "@/components/Modal";
 import { Spinner } from "@/components/Spinner";
 import { toast } from "@/components/Toast";
 import {
@@ -20,28 +21,29 @@ import { getIns, getMsgCount } from "@/lib/insights";
 import { useAccountsStore } from "@/stores/accountsStore";
 import { useFiltersStore } from "@/stores/filtersStore";
 import { useUiStore } from "@/stores/uiStore";
-import type { FbCampaign } from "@/types/fb";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import type { FbAccount, FbCampaign } from "@/types/fb";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
 
 /**
- * AI 幕僚 — 5-agent advisor board (formerly 成效優化中心).
+ * AI 幕僚 — multi-agent advisor board with NDJSON streaming.
  *
- * Five AI personas, each analysing the same set of currently
- * running campaigns from their own angle. Click 「產生分析」 to
- * fan out one Gemini call per agent in parallel; this counts as
- * ONE quota use against the tier-gated `agent_advice_limit`:
+ * Each click of 「產生分析」 fires `runAgentsStream`, which posts
+ * the campaign digest once and progressively fills each card as
+ * its agent completes (instead of blocking on the slowest of N).
+ * One click = one quota use, regardless of how many agents
+ * succeed; if all fail the backend doesn't record the run.
  *
- *   free  → 0   (always blocked, opens upgrade modal on click)
- *   basic → 1 / month
- *   plus  → 4 / month
- *   max   → unlimited
- *
- * Results live in component state for the lifetime of the view —
- * navigating away discards them. This is intentional: re-clicking
- * is the only path to new advice, and persisting cross-session
- * would obscure the link between "click → quota use".
+ * Polish stack on top of the basic board:
+ *   - generated-at relative timestamp on the action bar (ticks
+ *     every 30s)
+ *   - per-page account filter modal so the user can narrow the
+ *     analysis to a subset of their globally-selected accounts
+ *     without changing the dashboard's selection
+ *   - browser print export (window.print + a print stylesheet
+ *     that hides the navigation chrome and lays cards out
+ *     full-width for an easy "save as PDF")
  */
 export function OptimizationView() {
   const accountsQuery = useAccounts();
@@ -63,46 +65,62 @@ export function OptimizationView() {
   });
   const agents = agentsQuery.data?.data ?? [];
 
-  const digests = useMemo(
-    () => buildDigests(overview.campaigns, allAccounts),
-    [overview.campaigns, allAccounts],
+  // Per-page account filter — defaults to "all visible". Stored as
+  // a Set of account ids; null = no filter (use everything).
+  const [accountFilter, setAccountFilter] = useState<Set<string> | null>(null);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+
+  // Reset the filter if the global visibleAll list changes (e.g.
+  // user toggled accounts in Settings) so we don't carry stale ids.
+  const visibleIds = useMemo(() => visibleAll.map((a) => a.id).join("|"), [visibleAll]);
+  useEffect(() => {
+    setAccountFilter(null);
+  }, [visibleIds]);
+
+  const filteredAccounts = useMemo(() => {
+    if (!accountFilter) return visibleAll;
+    return visibleAll.filter((a) => accountFilter.has(a.id));
+  }, [visibleAll, accountFilter]);
+  const filteredAccountIds = useMemo(
+    () => new Set(filteredAccounts.map((a) => a.id)),
+    [filteredAccounts],
   );
+
+  const digests = useMemo(() => {
+    const all = buildDigests(overview.campaigns, allAccounts);
+    if (!accountFilter) return all;
+    // Filter campaigns by their account_id (digest carries the
+    // account_name only, so re-look up the id from the campaign list).
+    const allowedNames = new Set(filteredAccounts.map((a) => a.name));
+    return all.filter((d) => allowedNames.has(d.account_name ?? ""));
+  }, [overview.campaigns, allAccounts, accountFilter, filteredAccounts]);
   const dateLabel = toLabel(date);
 
-  // Local card-state map: agent_id → { advice_md | error | null }.
-  // null means "not generated yet" (initial CTA state). The mutation
-  // result fills this in atomically when the run-agents response
-  // returns, so all 5 cards transition together.
+  // Per-card state, plus a top-level "isStreaming" flag separate
+  // from per-card spinners so the action bar can show "X 位專家
+  // 完成 / 6" while results trickle in.
   type CardState = { advice_md: string | null; error: string | null } | null;
   const [cards, setCards] = useState<Record<string, CardState>>({});
+  const [streamingIds, setStreamingIds] = useState<Set<string>>(new Set());
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
   const [upgradeState, setUpgradeState] = useState<UpgradeModalState | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const runMutation = useMutation({
-    mutationFn: () =>
-      api.optimization.runAgents({
-        fbUserId: user?.id ?? "",
-        dateLabel,
-        campaigns: digests,
-      }),
-    onSuccess: (resp) => {
-      const next: Record<string, CardState> = {};
-      for (const a of resp.data.advice) {
-        next[a.agent_id] = { advice_md: a.advice_md, error: a.error };
-      }
-      setCards(next);
-      // Refetch billing usage so the "本月剩 X 次" counter
-      // reflects the run we just consumed.
-      usageQuery.refetch();
-    },
-    onError: (err) => {
-      const tierLimit = tierLimitFromError(err);
-      if (tierLimit) {
-        setUpgradeState(tierLimit);
-        return;
-      }
-      toast(`分析失敗:${(err as Error).message}`, "error");
-    },
-  });
+  // Tick the relative-time label every 30s. Cheap because the
+  // formatter is just date math; cleared when no timestamp.
+  const [, setNowTick] = useState(0);
+  useEffect(() => {
+    if (!generatedAt) return;
+    const t = setInterval(() => setNowTick((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, [generatedAt]);
+
+  // Cancel any in-flight stream when the view unmounts (or the
+  // user re-clicks Generate before the first run finishes).
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
 
   const usage = usageQuery.data;
   const adviceLimit = usage?.limits.agent_advice ?? 0;
@@ -111,9 +129,64 @@ export function OptimizationView() {
   const remaining = isUnlimited ? Number.POSITIVE_INFINITY : Math.max(0, adviceLimit - adviceUsed);
   const blockedByTier = adviceLimit === 0;
   const quotaExhausted = !isUnlimited && remaining <= 0;
-  const canGenerate = digests.length > 0 && !runMutation.isPending && !quotaExhausted;
-  const isFirstRun = Object.keys(cards).length === 0;
+  const canGenerate = digests.length > 0 && !isStreaming && !quotaExhausted;
+  const isFirstRun = Object.keys(cards).length === 0 && !isStreaming;
   const isLifetime = usage?.agent_advice_period === "lifetime";
+  const completedCount = agents.length - streamingIds.size;
+
+  async function runStream() {
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    // Reset card state and seed the streaming set with all known
+    // agent ids so each card shows its own spinner immediately.
+    setCards({});
+    setStreamingIds(new Set(agents.map((a) => a.id)));
+    setIsStreaming(true);
+    setGeneratedAt(null);
+
+    try {
+      await api.optimization.runAgentsStream(
+        {
+          fbUserId: user?.id ?? "",
+          dateLabel,
+          campaigns: digests,
+        },
+        {
+          signal: ctrl.signal,
+          onAgent: (msg) => {
+            setCards((prev) => ({
+              ...prev,
+              [msg.agent_id]: { advice_md: msg.advice_md, error: msg.error },
+            }));
+            setStreamingIds((prev) => {
+              const next = new Set(prev);
+              next.delete(msg.agent_id);
+              return next;
+            });
+          },
+          onDone: () => {
+            setGeneratedAt(new Date());
+            usageQuery.refetch();
+          },
+        },
+      );
+    } catch (err) {
+      if (ctrl.signal.aborted) return;
+      const tierLimit = err instanceof ApiError ? tierLimitFromError(err) : null;
+      if (tierLimit) {
+        setUpgradeState(tierLimit);
+      } else {
+        toast(`分析失敗:${(err as Error).message}`, "error");
+      }
+    } finally {
+      if (!ctrl.signal.aborted) {
+        setIsStreaming(false);
+        setStreamingIds(new Set());
+      }
+    }
+  }
 
   return (
     <>
@@ -121,8 +194,19 @@ export function OptimizationView() {
         <DatePicker value={date} onChange={(cfg) => setDate("optimization", cfg)} />
       </Topbar>
       <UpgradeModal state={upgradeState} onClose={() => setUpgradeState(null)} />
+      <AccountFilterModal
+        open={filterModalOpen}
+        accounts={visibleAll}
+        selectedIds={filteredAccountIds}
+        onApply={(ids) => {
+          // null = "match the visibleAll" (no actual filter).
+          setAccountFilter(ids.size === visibleAll.length ? null : ids);
+          setFilterModalOpen(false);
+        }}
+        onClose={() => setFilterModalOpen(false)}
+      />
 
-      <div className="min-w-0 flex-1 p-3 md:p-5">
+      <div className="min-w-0 flex-1 p-3 print:p-0 md:p-5">
         {!settingsReady ? (
           <LoadingState
             title="載入優化資料中..."
@@ -143,7 +227,9 @@ export function OptimizationView() {
           <div className="flex flex-col gap-3 md:gap-4">
             <ActionBar
               isFirstRun={isFirstRun}
-              isPending={runMutation.isPending}
+              isStreaming={isStreaming}
+              completedCount={completedCount}
+              totalAgents={agents.length}
               canGenerate={canGenerate}
               blockedByTier={blockedByTier}
               quotaExhausted={quotaExhausted}
@@ -152,16 +238,21 @@ export function OptimizationView() {
               isUnlimited={isUnlimited}
               isLifetime={isLifetime}
               campaignsCount={digests.length}
-              onGenerate={() => runMutation.mutate()}
+              accountsCount={filteredAccounts.length}
+              filterActive={accountFilter !== null}
+              generatedAt={generatedAt}
+              onGenerate={runStream}
+              onOpenFilter={() => setFilterModalOpen(true)}
+              onPrint={() => window.print()}
             />
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 lg:grid-cols-3 print:grid-cols-1">
               {agents.map((agent) => (
                 <AgentAdviceCard
                   key={agent.id}
                   agent={agent}
                   state={cards[agent.id] ?? null}
-                  isLoading={runMutation.isPending}
+                  isLoading={streamingIds.has(agent.id)}
                 />
               ))}
             </div>
@@ -176,23 +267,30 @@ export function OptimizationView() {
 
 interface ActionBarProps {
   isFirstRun: boolean;
-  isPending: boolean;
+  isStreaming: boolean;
+  completedCount: number;
+  totalAgents: number;
   canGenerate: boolean;
   blockedByTier: boolean;
   quotaExhausted: boolean;
   adviceLimit: number;
   adviceUsed: number;
   isUnlimited: boolean;
-  /** True for Free tier (lifetime trial). Drives "免費試用" label
-   *  instead of "本月". */
   isLifetime: boolean;
   campaignsCount: number;
+  accountsCount: number;
+  filterActive: boolean;
+  generatedAt: Date | null;
   onGenerate: () => void;
+  onOpenFilter: () => void;
+  onPrint: () => void;
 }
 
 function ActionBar({
   isFirstRun,
-  isPending,
+  isStreaming,
+  completedCount,
+  totalAgents,
   canGenerate,
   blockedByTier,
   quotaExhausted,
@@ -201,26 +299,46 @@ function ActionBar({
   isUnlimited,
   isLifetime,
   campaignsCount,
+  accountsCount,
+  filterActive,
+  generatedAt,
   onGenerate,
+  onOpenFilter,
+  onPrint,
 }: ActionBarProps) {
   const quotaLabel = isUnlimited
     ? "無限次"
     : isLifetime
       ? `免費試用已用 ${adviceUsed} / ${adviceLimit} 次`
       : `本月已用 ${adviceUsed} / ${adviceLimit} 次`;
-
-  // The wording when the user runs out shifts depending on whether
-  // the quota refills next month or never (free trial).
   const exhaustedLabel = isLifetime ? "試用次數已用完" : "本月已用完";
+  const hasResults = generatedAt !== null;
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-border bg-white p-4 md:flex-row md:items-center md:justify-between md:p-5">
+    <div className="flex flex-col gap-3 rounded-2xl border border-border bg-white p-4 print:hidden md:flex-row md:items-center md:justify-between md:p-5">
       <div className="flex flex-col gap-1">
-        <div className="text-[14px] font-bold text-ink">
-          {isFirstRun ? "5 位 AI 幕僚為你診斷" : "已產生分析"}
+        <div className="flex items-center gap-2 text-[14px] font-bold text-ink">
+          {isStreaming
+            ? `${totalAgents} 位 AI 幕僚分析中(${completedCount} / ${totalAgents} 完成)`
+            : isFirstRun
+              ? `${totalAgents} 位 AI 幕僚為你診斷`
+              : "已產生分析"}
+          {hasResults && !isStreaming && (
+            <span className="rounded-pill bg-bg px-2 py-0.5 text-[11px] font-normal text-gray-500">
+              {formatRelative(generatedAt)}
+            </span>
+          )}
         </div>
         <div className="text-[12px] text-gray-500">
-          5 位專家會同時分析目前 {campaignsCount} 個進行中的活動,並從不同角度給出建議。
+          將分析{" "}
+          <button
+            type="button"
+            onClick={onOpenFilter}
+            className="cursor-pointer font-semibold text-orange underline-offset-2 hover:underline"
+          >
+            {accountsCount} 個帳戶{filterActive ? " (已篩選)" : ""}
+          </button>{" "}
+          下的 {campaignsCount} 個進行中活動。
           {!blockedByTier && (
             <span className="ml-1 text-gray-400">每次點擊扣 1 次配額。</span>
           )}
@@ -237,14 +355,19 @@ function ActionBar({
         >
           {blockedByTier ? "目前方案不含此功能" : quotaLabel}
         </span>
+        {hasResults && !isStreaming && (
+          <Button variant="ghost" size="sm" onClick={onPrint}>
+            匯出 PDF
+          </Button>
+        )}
         <Button
           variant="primary"
           size="sm"
           disabled={!canGenerate}
           onClick={onGenerate}
         >
-          {isPending
-            ? "5 位專家分析中..."
+          {isStreaming
+            ? "分析中..."
             : isFirstRun
               ? blockedByTier
                 ? "升級以使用 →"
@@ -268,7 +391,7 @@ interface AgentAdviceCardProps {
 
 function AgentAdviceCard({ agent, state, isLoading }: AgentAdviceCardProps) {
   return (
-    <section className="flex flex-col rounded-2xl border border-border bg-white p-4 md:p-5">
+    <section className="flex flex-col rounded-2xl border border-border bg-white p-4 print:break-inside-avoid md:p-5">
       <header className="mb-3 flex items-start gap-3">
         <div
           className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-2xl shadow-sm"
@@ -280,9 +403,6 @@ function AgentAdviceCard({ agent, state, isLoading }: AgentAdviceCardProps) {
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[15px] font-bold text-ink">{agent.name_zh}</h2>
           <div className="truncate text-[11px] text-gray-400">{agent.name_en}</div>
-          <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-gray-500">
-            {agent.role_zh}
-          </div>
         </div>
       </header>
 
@@ -305,6 +425,121 @@ function AgentAdviceCard({ agent, state, isLoading }: AgentAdviceCardProps) {
         ) : null}
       </div>
     </section>
+  );
+}
+
+// ── Account filter modal ─────────────────────────────────────
+
+interface AccountFilterModalProps {
+  open: boolean;
+  accounts: FbAccount[];
+  selectedIds: Set<string>;
+  onApply: (ids: Set<string>) => void;
+  onClose: () => void;
+}
+
+function AccountFilterModal({
+  open,
+  accounts,
+  selectedIds,
+  onApply,
+  onClose,
+}: AccountFilterModalProps) {
+  const [pending, setPending] = useState<Set<string>>(selectedIds);
+  const [search, setSearch] = useState("");
+
+  // Sync pending state every time the modal opens — without this
+  // the set persists across opens and shows stale checkmarks.
+  useEffect(() => {
+    if (open) {
+      setPending(new Set(selectedIds));
+      setSearch("");
+    }
+  }, [open, selectedIds]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return accounts;
+    return accounts.filter((a) => a.name.toLowerCase().includes(q));
+  }, [accounts, search]);
+
+  const toggle = (id: string) => {
+    setPending((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={(next) => !next && onClose()}
+      title="選擇要分析的帳戶"
+      subtitle={`已選 ${pending.size} / ${accounts.length} 個`}
+      width={460}
+    >
+      <div className="flex flex-col gap-3">
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.currentTarget.value)}
+          placeholder="搜尋帳戶..."
+          className="h-9 w-full rounded-lg border border-border bg-white px-3 text-[13px] focus:border-orange focus:outline-none"
+        />
+        <div className="flex items-center gap-2 text-[12px]">
+          <button
+            type="button"
+            onClick={() => setPending(new Set(accounts.map((a) => a.id)))}
+            className="text-orange hover:underline"
+          >
+            全選
+          </button>
+          <span className="text-gray-300">·</span>
+          <button
+            type="button"
+            onClick={() => setPending(new Set())}
+            className="text-gray-500 hover:underline"
+          >
+            清除
+          </button>
+        </div>
+        <ul className="max-h-[40vh] overflow-y-auto divide-y divide-border rounded-lg border border-border">
+          {filtered.map((a) => (
+            <li key={a.id}>
+              <label className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-bg">
+                <input
+                  type="checkbox"
+                  className="custom-cb"
+                  checked={pending.has(a.id)}
+                  onChange={() => toggle(a.id)}
+                />
+                <span className="text-[13px] text-ink">{a.name}</span>
+              </label>
+            </li>
+          ))}
+          {filtered.length === 0 && (
+            <li className="px-3 py-4 text-center text-[12px] text-gray-400">
+              沒有符合的帳戶
+            </li>
+          )}
+        </ul>
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            取消
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={pending.size === 0}
+            onClick={() => onApply(pending)}
+          >
+            套用
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -339,4 +574,21 @@ function buildDigests(
     });
   }
   return out;
+}
+
+/** Compact relative-time formatter — "剛剛" / "X 分鐘前" / "X 小時
+ *  前" / "X 天前". Re-evaluated on every render via the parent's
+ *  30s tick state, no dependency on Intl.RelativeTimeFormat
+ *  (bundle-size-conscious; Intl pulls in CLDR data on some
+ *  polyfills). */
+function formatRelative(d: Date): string {
+  const sec = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (sec < 30) return "剛剛產生";
+  if (sec < 60) return "不到 1 分鐘前";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} 分鐘前產生`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} 小時前產生`;
+  const day = Math.floor(hr / 24);
+  return `${day} 天前產生`;
 }
