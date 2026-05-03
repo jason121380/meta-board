@@ -8,6 +8,7 @@ import {
 import { useBillingUsage } from "@/api/hooks/useSubscription";
 import { Button } from "@/components/Button";
 import { confirm } from "@/components/ConfirmDialog";
+import { GraceBanner } from "@/components/GraceBanner";
 import { Modal } from "@/components/Modal";
 import { toast } from "@/components/Toast";
 import { UpgradeModal, type UpgradeModalState } from "@/components/UpgradeModal";
@@ -76,7 +77,9 @@ export function LineChannelsContent() {
   };
 
   return (
-    <div className="rounded-xl border border-border bg-white">
+    <>
+      <GraceBanner usage={usageQuery.data} resource="line_channels" />
+      <div className="rounded-xl border border-border bg-white">
       <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
         <div className="flex items-baseline gap-2">
           <span className="text-[13px] font-bold text-ink">LINE 官方帳號</span>
@@ -115,7 +118,8 @@ export function LineChannelsContent() {
       {editing && (
         <ChannelEditModal mode="edit" channel={editing} onClose={() => setEditing(null)} />
       )}
-    </div>
+      </div>
+    </>
   );
 }
 

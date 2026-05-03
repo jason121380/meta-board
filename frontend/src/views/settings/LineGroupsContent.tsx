@@ -9,6 +9,7 @@ import {
 import { useBillingUsage } from "@/api/hooks/useSubscription";
 import { useFbAuth } from "@/auth/FbAuthProvider";
 import { confirm } from "@/components/ConfirmDialog";
+import { GraceBanner } from "@/components/GraceBanner";
 import { toast } from "@/components/Toast";
 import { UpgradeModal, type UpgradeModalState } from "@/components/UpgradeModal";
 import { cn } from "@/lib/cn";
@@ -170,6 +171,7 @@ export function LineGroupsContent() {
   return (
     <>
       <UpgradeModal state={upgradeState} onClose={() => setUpgradeState(null)} />
+      <GraceBanner usage={usageQuery.data} resource="line_groups" />
       {!isUnlimited && (
         <div
           className={cn(

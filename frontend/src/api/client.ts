@@ -721,6 +721,32 @@ export const api = {
     config: () => request<PricingConfigResponse>("GET", "/api/pricing/config"),
   },
 
+  optimization: {
+    /** Metadata for the 5 expert agents (id, name, emoji, color, role).
+     *  Cached indefinitely — only changes on a deploy. */
+    agents: () =>
+      request<{ data: AgentMeta[] }>("GET", "/api/optimization/agents"),
+    /** Generate one expert's analysis of the current campaign set.
+     *  The response is markdown; render it with the lightweight
+     *  Markdown component bundled in OptimizationView. */
+    agentAdvice: (input: {
+      agentId: string;
+      dateLabel: string;
+      campaigns: AgentCampaignDigest[];
+    }) =>
+      request<{ data: { agent_id: string; advice_md: string } }>(
+        "POST",
+        "/api/optimization/agent-advice",
+        {
+          body: {
+            agent_id: input.agentId,
+            date_label: input.dateLabel,
+            campaigns: input.campaigns,
+          },
+        },
+      ),
+  },
+
   billing: {
     /** Get the calling user's subscription state + tier limits. */
     me: (fbUserId: string) =>
@@ -753,6 +779,46 @@ export interface BillingUsage {
   tier: TierId;
   limits: Record<LimitResource, number>;
   usage: Record<LimitResource, number>;
+  grace: BillingGrace;
+}
+
+/** Grace-period state attached to /api/billing/usage. When the user
+ *  is over any cap (typically post-downgrade), the timer starts; if
+ *  they stay over for `period_days` the scheduler stops firing the
+ *  excess push configs. Frontend uses this to render a countdown
+ *  banner that turns into a "已停用" notice once `expired` flips. */
+export interface BillingGrace {
+  over_limit_since: string | null;
+  expires_at: string | null;
+  expired: boolean;
+  period_days: number;
+}
+
+/** Display metadata for one expert agent in the 成效優化中心 board. */
+export interface AgentMeta {
+  id: string;
+  name_zh: string;
+  name_en: string;
+  role_zh: string;
+  emoji: string;
+  color: string;
+}
+
+/** Per-campaign snapshot the frontend ships with every agent-advice
+ *  request. Keep keys snake_case to match the backend Pydantic model. */
+export interface AgentCampaignDigest {
+  name: string;
+  account_name?: string;
+  objective?: string;
+  status?: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  frequency: number;
+  msgs: number;
+  msg_cost: number;
 }
 
 /** 403 detail body returned by tier-gated endpoints. */

@@ -1,7 +1,8 @@
 import { type SubscriptionState, api } from "@/api/client";
-import { usePricingConfig, useSubscription } from "@/api/hooks/useSubscription";
+import { useBillingUsage, usePricingConfig, useSubscription } from "@/api/hooks/useSubscription";
 import { useFbAuth } from "@/auth/FbAuthProvider";
 import { Button } from "@/components/Button";
+import { GraceBanner } from "@/components/GraceBanner";
 import { LoadingState } from "@/components/LoadingState";
 import { toast } from "@/components/Toast";
 import { Topbar } from "@/layout/Topbar";
@@ -22,6 +23,7 @@ import { Link, useSearchParams } from "react-router-dom";
 export function BillingView() {
   const subQuery = useSubscription();
   const cfgQuery = usePricingConfig();
+  const usageQuery = useBillingUsage();
   const { user } = useFbAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [openingPortal, setOpeningPortal] = useState(false);
@@ -94,6 +96,7 @@ export function BillingView() {
     <>
       <Topbar title="我的訂閱" />
       <div className="mx-auto flex w-full max-w-[800px] flex-col gap-4 p-3 md:p-5">
+        <GraceBanner usage={usageQuery.data} />
         <CurrentPlanCard sub={sub} tierName={tierName} />
         <UsageCard sub={sub} />
 
