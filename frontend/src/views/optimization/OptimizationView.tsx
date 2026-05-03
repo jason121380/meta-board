@@ -26,6 +26,18 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
 
+/** localStorage key + payload contract for "last successful run".
+ *  Bumped to 2 → wipe on schema change so old corrupt entries
+ *  don't show up as half-rendered cards. */
+const LAST_RUN_STORAGE_KEY = "ai-staff-last-run";
+const LAST_RUN_VERSION = 1;
+interface StoredLastRun {
+  version: number;
+  generatedAt: string;
+  dateLabel: string;
+  cards: Record<string, { advice_md: string | null; error: string | null } | null>;
+}
+
 /**
  * AI 幕僚 — multi-agent advisor board with NDJSON streaming.
  *
@@ -106,6 +118,30 @@ export function OptimizationView() {
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
   const [upgradeState, setUpgradeState] = useState<UpgradeModalState | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Restore the last successful run from localStorage so a refresh
+  // doesn't wipe what the user just paid for. Stored payload keeps
+  // the dateLabel + filter context too — when the current filters
+  // disagree with the stored ones, we still show the cards but the
+  // relative-time pill makes it obvious they're stale (the user's
+  // own discretion whether to re-generate or not).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LAST_RUN_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as StoredLastRun | null;
+      if (!parsed || parsed.version !== LAST_RUN_VERSION) return;
+      setCards(parsed.cards);
+      setGeneratedAt(new Date(parsed.generatedAt));
+    } catch {
+      // Corrupt entry — clear so subsequent loads don't keep failing.
+      localStorage.removeItem(LAST_RUN_STORAGE_KEY);
+    }
+    // Intentionally run once on mount — we don't want subsequent
+    // re-renders to clobber freshly-streamed results with the saved
+    // copy.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Tick the relative-time label every 30s. Cheap because the
   // formatter is just date math; cleared when no timestamp.
@@ -207,8 +243,28 @@ export function OptimizationView() {
             });
           },
           onDone: () => {
-            setGeneratedAt(new Date());
+            const at = new Date();
+            setGeneratedAt(at);
             usageQuery.refetch();
+            // Snapshot the freshest card state into localStorage so
+            // the user can refresh / close / reopen the tab and
+            // still see what they just paid for. Read from a state
+            // setter to capture the very latest cards (the parent
+            // closure's `cards` would be stale here).
+            setCards((latest) => {
+              try {
+                const payload: StoredLastRun = {
+                  version: LAST_RUN_VERSION,
+                  generatedAt: at.toISOString(),
+                  dateLabel,
+                  cards: latest,
+                };
+                localStorage.setItem(LAST_RUN_STORAGE_KEY, JSON.stringify(payload));
+              } catch {
+                /* quota exceeded / private mode — silently ignore */
+              }
+              return latest;
+            });
           },
         },
       );
