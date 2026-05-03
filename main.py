@@ -1851,7 +1851,11 @@ TIER_CONFIGS: dict = {
         "line_channels_limit": 0,
         "line_groups_limit": 0,
         "monthly_push_limit": 0,
-        "agent_advice_limit": 0,
+        # Free tier gets 3 LIFETIME trial runs (not per-month). The
+        # period is enforced by the tier check in
+        # _count_advice_runs_for_quota — paid tiers count this
+        # month, free counts forever.
+        "agent_advice_limit": 3,
         "polar_product_id": "",
     },
     "basic": {
@@ -1863,7 +1867,7 @@ TIER_CONFIGS: dict = {
         "line_channels_limit": 1,
         "line_groups_limit": 3,
         "monthly_push_limit": 30,
-        "agent_advice_limit": 1,
+        "agent_advice_limit": 2,
         "polar_product_id": POLAR_PRODUCT_ID_BASIC,
     },
     "plus": {
@@ -1875,7 +1879,7 @@ TIER_CONFIGS: dict = {
         "line_channels_limit": 3,
         "line_groups_limit": 15,
         "monthly_push_limit": 100,
-        "agent_advice_limit": 4,
+        "agent_advice_limit": 6,
         "polar_product_id": POLAR_PRODUCT_ID_PLUS,
     },
     "max": {
@@ -2106,10 +2110,10 @@ async def _count_user_push_configs(fb_user_id: str) -> int:
 
 
 async def _count_monthly_advice_runs(fb_user_id: str) -> int:
-    """Number of 成效優化中心 generation clicks this user has fired
-    so far this calendar month (UTC). One row in `agent_advice_runs`
-    = one click = one quota use (fans out to all 5 agents in
-    parallel on the backend)."""
+    """AI 幕僚 generation clicks this user has fired so far this
+    calendar month (UTC). One row in `agent_advice_runs` = one click
+    = one quota use (fans out to all 5 agents in parallel on the
+    backend). Used by paid tiers (basic / plus / max)."""
     if _db_pool is None or not fb_user_id:
         return 0
     now = datetime.now(timezone.utc)
@@ -2124,6 +2128,30 @@ async def _count_monthly_advice_runs(fb_user_id: str) -> int:
             month_start,
         )
     return int(n or 0)
+
+
+async def _count_lifetime_advice_runs(fb_user_id: str) -> int:
+    """All-time AI 幕僚 generation clicks for this user. Used by the
+    Free tier, which gets 3 LIFETIME trial runs rather than a
+    monthly reset — the trials are a "try before you subscribe"
+    affordance, not a recurring allowance."""
+    if _db_pool is None or not fb_user_id:
+        return 0
+    async with _db_pool.acquire() as conn:
+        n = await conn.fetchval(
+            "SELECT COUNT(*) FROM agent_advice_runs WHERE fb_user_id = $1",
+            fb_user_id,
+        )
+    return int(n or 0)
+
+
+async def _count_advice_runs_for_quota(fb_user_id: str, tier: str) -> int:
+    """Pick the right counter based on the user's current tier.
+    Keeps the quota arithmetic in one place so the endpoint and the
+    /api/billing/usage view always agree on what 'used' means."""
+    if str(tier or "free").lower() == "free":
+        return await _count_lifetime_advice_runs(fb_user_id)
+    return await _count_monthly_advice_runs(fb_user_id)
 
 
 async def _count_monthly_pushes(fb_user_id: str) -> int:
@@ -2305,7 +2333,7 @@ async def get_billing_usage(fb_user_id: str = Query(...)):
         "line_channels": await _count_line_channels(fb_user_id),
         "line_groups": await _count_user_push_configs(fb_user_id),
         "monthly_push": await _count_monthly_pushes(fb_user_id),
-        "agent_advice": await _count_monthly_advice_runs(fb_user_id),
+        "agent_advice": await _count_advice_runs_for_quota(fb_user_id, limits["tier"]),
     }
     # Grace period only watches the three "stock" resources (the ones
     # the user explicitly configured) — monthly_push and agent_advice
@@ -2334,6 +2362,10 @@ async def get_billing_usage(fb_user_id: str = Query(...)):
                 "agent_advice": limits["agent_advice"],
             },
             "usage": usage,
+            # Free tier counts AI 幕僚 lifetime ("trial"); paid tiers
+            # reset every calendar month. Frontend reads this to
+            # pick the right wording ("免費試用" vs "本月").
+            "agent_advice_period": "lifetime" if str(limits["tier"]).lower() == "free" else "monthly",
             "grace": {
                 "over_limit_since": over_since.isoformat() if over_since else None,
                 "expires_at": grace_expires_at.isoformat() if grace_expires_at else None,
@@ -2662,7 +2694,7 @@ async def _apply_customer_event(payload: dict) -> Optional[str]:
                ad_accounts_limit, line_channels_limit,
                line_groups_limit, monthly_push_limit,
                agent_advice_limit)
-            VALUES ($1, $2, 'free', 'free', 1, 0, 0, 0, 0)
+            VALUES ($1, $2, 'free', 'free', 1, 0, 0, 0, 3)
             ON CONFLICT (fb_user_id) DO UPDATE SET
               polar_customer_id = COALESCE(subscriptions.polar_customer_id, EXCLUDED.polar_customer_id),
               updated_at = NOW()
@@ -5865,17 +5897,26 @@ async def run_optimization_agents(req: RunAgentsRequest):
             "agent_advice",
             0,
             limits["tier"],
-            "Free 方案無法使用「成效優化中心 AI 分析」,請升級至 Basic 以上",
+            "目前方案無法使用「AI 幕僚」,請升級至 Basic 以上",
         )
     used = 0
+    is_free = str(limits["tier"]).lower() == "free"
     if not _is_unlimited(cap):
-        used = await _count_monthly_advice_runs(req.fb_user_id)
+        used = await _count_advice_runs_for_quota(req.fb_user_id, limits["tier"])
         if used >= cap:
+            # Wording differs by period: free tier exhausts a
+            # lifetime trial allowance, paid tiers exhaust a monthly
+            # reset. Both end up in the upgrade modal — the message
+            # is what differs.
+            if is_free:
+                msg = f"免費試用 {cap} 次已用完,請升級方案以繼續使用 AI 幕僚"
+            else:
+                msg = f"本月 AI 幕僚配額已用完 ({used}/{cap}),請升級方案或下個月再試"
             raise _tier_limit_error(
                 "agent_advice",
                 cap,
                 limits["tier"],
-                f"本月 AI 分析配額已用完 ({used}/{cap}),請升級方案或下個月再試",
+                msg,
             )
 
     prompts = _load_agent_prompts()

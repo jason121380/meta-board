@@ -794,6 +794,10 @@ export interface BillingUsage {
   limits: Record<LimitResource, number>;
   usage: Record<LimitResource, number>;
   grace: BillingGrace;
+  /** Whether the agent_advice usage counter resets monthly (paid
+   *  tiers) or accumulates for the user's lifetime (Free trial).
+   *  Drives the "本月" vs "免費試用" wording on the AI 幕僚 page. */
+  agent_advice_period: "monthly" | "lifetime";
 }
 
 /** Grace-period state attached to /api/billing/usage. When the user
