@@ -35,6 +35,13 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 
 # Runtime token override (from FB Login)
 _runtime_token: Optional[str] = None
+# In-memory set of FB user ids that have successfully completed
+# `POST /api/auth/token`. Persisted to `shared_settings._fb_known_users`
+# so it survives restarts. Used by `_assert_known_user()` to reject
+# read endpoints that take `fb_user_id` as a query param from
+# unauthenticated callers — without it any visitor knowing a valid
+# operator id could probe billing / AI 幕僚 endpoints.
+_KNOWN_FB_USERS: "set[str]" = set()
 # Shared httpx client (created in lifespan)
 _http_client: Optional[httpx.AsyncClient] = None
 # Shared asyncpg pool (created in lifespan when DATABASE_URL is set).
@@ -582,6 +589,29 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             print(f"[startup] runtime token restore failed: {exc}", flush=True)
 
+        # Restore the set of FB user ids that have logged in before.
+        # New endpoints use this as the auth gate (see
+        # `_assert_known_user`). Failure is non-fatal — set stays
+        # empty and the next successful login repopulates it.
+        try:
+            async with _db_pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT value FROM shared_settings WHERE key = $1",
+                    "_fb_known_users",
+                )
+            if row:
+                v = row["value"]
+                if isinstance(v, str):
+                    v = _json.loads(v)
+                if isinstance(v, list):
+                    _KNOWN_FB_USERS.update(str(x) for x in v if x)
+                    print(
+                        f"[startup] known FB users: restored {len(_KNOWN_FB_USERS)} from PG",
+                        flush=True,
+                    )
+        except Exception as exc:
+            print(f"[startup] known users restore failed: {exc}", flush=True)
+
     # Multi-user (2026-04-30): no auto-seeded default channel.
     # Each user adds their own LINE Official Accounts via the UI;
     # there is no shared/team-wide channel anymore. Existing
@@ -654,10 +684,20 @@ app = FastAPI(title="FB Ads Dashboard", lifespan=lifespan)
 
 # CORS: explicit allowlist via env (comma-separated), e.g.
 #   ALLOWED_ORIGINS=https://meta.lure.agency,https://staging.lure.agency
-# Wildcard is opt-in via ALLOWED_ORIGINS=* — kept for legacy local dev.
+# Wildcard is opt-in via ALLOWED_ORIGINS=* — required for legacy local dev
+# but no longer the default. Unset env now means "same-origin only" so
+# misconfigured production deploys fail closed instead of open.
 _RAW_ORIGINS = os.getenv("ALLOWED_ORIGINS", "").strip()
-if _RAW_ORIGINS == "*" or _RAW_ORIGINS == "":
+if _RAW_ORIGINS == "*":
     _CORS_ORIGINS: List[str] = ["*"]
+elif not _RAW_ORIGINS:
+    _CORS_ORIGINS = []
+    print(
+        "[startup] WARNING: ALLOWED_ORIGINS unset — CORS will reject all "
+        "cross-origin requests. Set ALLOWED_ORIGINS=https://your.domain "
+        "(or `*` for local dev) to enable cross-origin access.",
+        flush=True,
+    )
 else:
     _CORS_ORIGINS = [o.strip() for o in _RAW_ORIGINS.split(",") if o.strip()]
 app.add_middleware(
@@ -1522,6 +1562,75 @@ async def _persist_runtime_token(token: Optional[str]) -> None:
         print(f"[token] persist failed: {exc}", flush=True)
 
 
+async def _persist_known_user(uid: str) -> None:
+    """Append `uid` to the `shared_settings._fb_known_users` JSON
+    array. Idempotent. Failures are logged but never raised — the
+    in-memory set still works for the rest of the process lifetime."""
+    if not uid or _db_pool is None:
+        return
+    try:
+        async with _db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT value FROM shared_settings WHERE key = $1",
+                "_fb_known_users",
+            )
+            existing: List[str] = []
+            if row:
+                v = row["value"]
+                if isinstance(v, str):
+                    v = _json.loads(v)
+                if isinstance(v, list):
+                    existing = [str(x) for x in v if x]
+            if uid in existing:
+                return
+            existing.append(uid)
+            await conn.execute(
+                """
+                INSERT INTO shared_settings (key, value, updated_at)
+                VALUES ($1, $2::jsonb, NOW())
+                ON CONFLICT (key) DO UPDATE
+                SET value = EXCLUDED.value, updated_at = NOW()
+                """,
+                "_fb_known_users",
+                _json.dumps(existing),
+            )
+    except Exception as exc:
+        print(f"[auth] persist known user failed: {exc}", flush=True)
+
+
+def _assert_known_user(uid: str) -> None:
+    """Raise 401 if `uid` is not in the set of FB user ids that have
+    successfully logged in via `POST /api/auth/token`. This is the
+    single-tenant agency tool's substitute for a real session — it
+    blocks random callers from probing read endpoints with arbitrary
+    fb_user_id query params."""
+    if not uid or uid not in _KNOWN_FB_USERS:
+        raise HTTPException(status_code=401, detail="未登入或登入已過期")
+
+
+# Per-user rate limit for the AI 幕僚 endpoints. The Gemini quota is
+# the cost ceiling, but a low rate ceiling adds defence-in-depth so a
+# logged-in operator (or a leaked fb_user_id) can't spam the endpoint
+# in a tight loop. In-memory dict — single-process Zeabur deploy, no
+# Redis needed; a process restart simply resets everyone's window.
+_AGENT_RATE_LIMIT_SECONDS = 10
+_AGENT_RATE_LIMIT: "dict[str, float]" = {}
+
+
+def _check_agent_rate_limit(uid: str) -> None:
+    if not uid:
+        return
+    now = time.monotonic()
+    last = _AGENT_RATE_LIMIT.get(uid)
+    if last is not None and now - last < _AGENT_RATE_LIMIT_SECONDS:
+        wait = int(_AGENT_RATE_LIMIT_SECONDS - (now - last)) + 1
+        raise HTTPException(
+            status_code=429,
+            detail=f"AI 幕僚請求太頻繁,請等待 {wait} 秒後再試",
+        )
+    _AGENT_RATE_LIMIT[uid] = now
+
+
 @app.post("/api/auth/token")
 async def set_token(payload: TokenPayload):
     global _runtime_token
@@ -1529,10 +1638,14 @@ async def set_token(payload: TokenPayload):
     try:
         # Get basic profile
         me = await fb_get("me", {"fields": "id,name,picture"})
+        uid = str(me.get("id") or "")
         pic = me.get("picture", {}).get("data", {}).get("url")
         # Only persist after the token verifies — avoids storing
         # garbage that would 401 every share-page viewer.
         await _persist_runtime_token(payload.token)
+        if uid:
+            _KNOWN_FB_USERS.add(uid)
+            await _persist_known_user(uid)
         return {"ok": True, "name": me.get("name"), "id": me.get("id"), "pictureUrl": pic}
     except Exception as e:
         _runtime_token = None
@@ -1946,6 +2059,7 @@ async def get_billing_me(fb_user_id: str = Query(...)):
     Falls back to free-tier defaults when no row exists, so the
     frontend never has to special-case "user has never subscribed".
     """
+    _assert_known_user(fb_user_id)
     if _db_pool is None:
         return {"data": _free_tier_state()}
     async with _db_pool.acquire() as conn:
@@ -2327,6 +2441,7 @@ async def get_billing_usage(fb_user_id: str = Query(...)):
     above one or more caps (typically post-downgrade): we maintain
     `over_limit_since` lazily here so the timer starts immediately
     on the first usage check after they go over."""
+    _assert_known_user(fb_user_id)
     limits = await _get_user_limits(fb_user_id)
     usage = {
         "ad_accounts": await _count_selected_accounts(fb_user_id),
@@ -5996,8 +6111,8 @@ async def run_optimization_agents(req: RunAgentsRequest):
 
 
 async def _run_optimization_agents_inner(req: RunAgentsRequest):
-    if not req.fb_user_id:
-        raise HTTPException(status_code=401, detail="Missing fb_user_id")
+    _assert_known_user(req.fb_user_id)
+    _check_agent_rate_limit(req.fb_user_id)
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=503, detail="Gemini API key 未設定")
     if not req.campaigns:
@@ -6143,7 +6258,8 @@ async def get_last_run(fb_user_id: str = Query(...)):
     frontend to hydrate the cards on mount so a refresh / new
     device sees the same report. Filters out legacy quota-only
     rows where payload IS NULL."""
-    if _db_pool is None or not fb_user_id:
+    _assert_known_user(fb_user_id)
+    if _db_pool is None:
         return {"data": None}
     try:
         async with _db_pool.acquire() as conn:
@@ -6203,8 +6319,8 @@ async def run_optimization_agents_stream(req: RunAgentsRequest):
     """NDJSON streaming variant — see comment above for protocol."""
     # Pre-flight (these MUST raise before we wrap the body in
     # StreamingResponse, otherwise the client won't see the 4xx).
-    if not req.fb_user_id:
-        raise HTTPException(status_code=401, detail="Missing fb_user_id")
+    _assert_known_user(req.fb_user_id)
+    _check_agent_rate_limit(req.fb_user_id)
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=503, detail="Gemini API key 未設定")
     if not req.campaigns:
