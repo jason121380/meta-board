@@ -4,6 +4,7 @@ import { useFbAuth } from "@/auth/FbAuthProvider";
 import { Button } from "@/components/Button";
 import { GraceBanner } from "@/components/GraceBanner";
 import { LoadingState } from "@/components/LoadingState";
+import { PolarLanguageNotice } from "@/components/PolarLanguageNotice";
 import { toast } from "@/components/Toast";
 import { Topbar } from "@/layout/Topbar";
 import { fN } from "@/lib/format";
@@ -118,6 +119,9 @@ export function BillingView() {
           </Link>
         </div>
 
+        {sub.polar_customer_id && sub.tier !== "free" ? (
+          <PolarLanguageNotice context="portal" />
+        ) : null}
       </div>
     </>
   );
