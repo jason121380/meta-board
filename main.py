@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -1852,11 +1852,11 @@ TIER_CONFIGS: dict = {
         "line_channels_limit": 0,
         "line_groups_limit": 0,
         "monthly_push_limit": 0,
-        # Free tier gets 3 LIFETIME trial runs (not per-month). The
+        # Free tier gets 40 LIFETIME trial runs (not per-month). The
         # period is enforced by the tier check in
         # _count_advice_runs_for_quota — paid tiers count this
         # month, free counts forever.
-        "agent_advice_limit": 3,
+        "agent_advice_limit": 40,
         "polar_product_id": "",
     },
     "basic": {
@@ -2688,7 +2688,7 @@ async def _apply_customer_event(payload: dict) -> Optional[str]:
                ad_accounts_limit, line_channels_limit,
                line_groups_limit, monthly_push_limit,
                agent_advice_limit)
-            VALUES ($1, $2, 'free', 'free', 1, 0, 0, 0, 3)
+            VALUES ($1, $2, 'free', 'free', 1, 0, 0, 0, 40)
             ON CONFLICT (fb_user_id) DO UPDATE SET
               polar_customer_id = COALESCE(subscriptions.polar_customer_id, EXCLUDED.polar_customer_id),
               updated_at = NOW()
@@ -5714,6 +5714,17 @@ AGENT_META = [
         "emoji": "📊",
         "color": "#0891b2",
     },
+    {
+        "id": "agency_ceo",
+        "name_zh": "代理商 CEO",
+        "name_en": "Agency CEO",
+        # role_zh kept for backwards-compat / Pricing page; the
+        # 6-card grid intentionally hides the third row to make
+        # the layout feel less crowded (per design feedback).
+        "role_zh": "P&L / 客戶組合配置 / 風險與成長",
+        "emoji": "👔",
+        "color": "#475569",
+    },
 ]
 
 
@@ -6075,6 +6086,162 @@ async def _run_optimization_agents_inner(req: RunAgentsRequest):
             },
         }
     }
+
+
+# ── Streaming variant ────────────────────────────────────────────
+#
+# /api/optimization/run-agents-stream emits NDJSON: one JSON line
+# per event, terminated by `\n`. The client parses incrementally
+# and fills each card the moment its agent completes (instead of
+# blocking on the slowest of 5). One quota use, same as the
+# non-streaming endpoint.
+#
+# Event types:
+#   { "type": "agent_done", "agent_id": "...", "advice_md": "...",
+#     "error": null | "..." }       — emitted 5 times, in completion
+#                                     order (slowest last)
+#   { "type": "done", "quota": { "used_this_month": N, "limit": Y,
+#     "tier": "..." } }              — emitted once at the end
+#
+# Pre-flight 4xx errors (auth, no campaigns, quota exhausted) are
+# raised BEFORE the StreamingResponse is constructed so the client
+# can catch them on the response object instead of having to parse
+# the stream just to find an error.
+
+async def _call_one_agent_with_id(
+    agent_id: str,
+    persona: str,
+    table: str,
+    date_label: str,
+    n_campaigns: int,
+) -> tuple:
+    """Wrapper that returns (agent_id, text|None, error|None) so the
+    streaming loop can dispatch events without losing the agent
+    identity (asyncio.as_completed only gives the future, not the
+    metadata we attached when scheduling)."""
+    try:
+        text = await _call_one_agent(persona, table, date_label, n_campaigns)
+        return (agent_id, text, None)
+    except BaseException as exc:
+        return (agent_id, None, str(exc) or exc.__class__.__name__)
+
+
+@app.post("/api/optimization/run-agents-stream")
+async def run_optimization_agents_stream(req: RunAgentsRequest):
+    """NDJSON streaming variant — see comment above for protocol."""
+    # Pre-flight (these MUST raise before we wrap the body in
+    # StreamingResponse, otherwise the client won't see the 4xx).
+    if not req.fb_user_id:
+        raise HTTPException(status_code=401, detail="Missing fb_user_id")
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=503, detail="Gemini API key 未設定")
+    if not req.campaigns:
+        raise HTTPException(status_code=400, detail="目前沒有可分析的行銷活動")
+
+    try:
+        limits = await _get_user_limits(req.fb_user_id)
+    except Exception as exc:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=502,
+            detail=f"讀取方案配額失敗:{exc.__class__.__name__}: {exc}",
+        )
+    cap = limits["agent_advice"]
+    if cap == 0:
+        raise _tier_limit_error(
+            "agent_advice", 0, limits["tier"],
+            "目前方案無法使用「AI 幕僚」,請升級至 Basic 以上",
+        )
+    used = 0
+    is_free = str(limits["tier"]).lower() == "free"
+    if not _is_unlimited(cap):
+        try:
+            used = await _count_advice_runs_for_quota(req.fb_user_id, limits["tier"])
+        except Exception as exc:
+            traceback.print_exc()
+            raise HTTPException(
+                status_code=502,
+                detail=f"讀取使用次數失敗:{exc.__class__.__name__}: {exc}",
+            )
+        if used >= cap:
+            msg = (
+                f"免費試用 {cap} 次已用完,請升級方案以繼續使用 AI 幕僚"
+                if is_free
+                else f"本月 AI 幕僚配額已用完 ({used}/{cap}),請升級方案或下個月再試"
+            )
+            raise _tier_limit_error("agent_advice", cap, limits["tier"], msg)
+
+    prompts = _load_agent_prompts()
+    table = _format_campaigns_for_prompt(req.campaigns)
+    n = len(req.campaigns)
+
+    async def stream():
+        success_count = 0
+        tasks = [
+            _call_one_agent_with_id(
+                meta["id"], prompts.get(meta["id"], ""),
+                table, req.date_label, n,
+            )
+            for meta in AGENT_META
+        ]
+        for coro in asyncio.as_completed(tasks):
+            try:
+                agent_id, text, err = await coro
+            except Exception as exc:
+                # Defensive — _call_one_agent_with_id is supposed
+                # to absorb everything, but a TaskGroup-level
+                # cancellation could still bubble.
+                agent_id, text, err = "?", None, f"{exc.__class__.__name__}: {exc}"
+            if text:
+                success_count += 1
+            yield (
+                json.dumps(
+                    {
+                        "type": "agent_done",
+                        "agent_id": agent_id,
+                        "advice_md": text,
+                        "error": err,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            ).encode("utf-8")
+
+        new_used = used
+        if success_count > 0 and _db_pool is not None:
+            try:
+                async with _db_pool.acquire() as conn:
+                    await conn.execute(
+                        "INSERT INTO agent_advice_runs (fb_user_id) VALUES ($1)",
+                        req.fb_user_id,
+                    )
+                new_used = used + 1
+            except Exception:
+                traceback.print_exc()
+
+        yield (
+            json.dumps(
+                {
+                    "type": "done",
+                    "quota": {
+                        "used_this_month": new_used,
+                        "limit": cap,
+                        "tier": limits["tier"],
+                    },
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        ).encode("utf-8")
+
+    return StreamingResponse(
+        stream(),
+        media_type="application/x-ndjson",
+        # Disable any reverse-proxy buffering — without this Zeabur
+        # / nginx may hold the chunks until the response closes,
+        # which defeats the entire point of streaming.
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
 
 
 @app.post("/api/ai/chat")
