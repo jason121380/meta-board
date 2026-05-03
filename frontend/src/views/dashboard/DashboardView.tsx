@@ -100,7 +100,7 @@ export function DashboardView() {
   const activeAccountId = activeAccounts[0]?.id ?? null;
 
   // Filters (date + activeOnly)
-  const date = useFiltersStore((s) => s.date.dashboard);
+  const date = useFiltersStore((s) => s.date.shared);
   const setDate = useFiltersStore((s) => s.setDate);
   const activeOnly = useFiltersStore((s) => s.activeOnly);
   const setActiveOnly = useFiltersStore((s) => s.setActiveOnly);
@@ -153,7 +153,7 @@ export function DashboardView() {
             className="bg-transparent px-0 py-0"
           />
           <TopbarSeparator />
-          <DatePicker value={date} onChange={(cfg) => setDate("dashboard", cfg)} />
+          <DatePicker value={date} onChange={(cfg) => setDate("shared", cfg)} />
           <button
             type="button"
             onClick={toggleStatsCollapsed}

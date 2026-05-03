@@ -3,7 +3,64 @@ import { useFbAuth } from "@/auth/FbAuthProvider";
 import type { DateConfig } from "@/lib/datePicker";
 import type { FbAccount, FbCampaign, FbInsights } from "@/types/fb";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
+
+// ── localStorage snapshot ─────────────────────────────────────
+//
+// Persists the most recent successful overview response so a hard
+// refresh (or first paint after navigating back to the app) shows
+// last-seen numbers immediately, while a live refetch runs in the
+// background. This is what lets the dashboard / analytics / alerts
+// / finance / store-expenses views render without a 5-15s spinner
+// after a browser reload.
+//
+// Bounded storage: ONE entry total, keyed on (idsKey, date,
+// includeArchived). Switching to a different account-set or date
+// preset overwrites the previous snapshot — historical entries are
+// not retained (would risk blowing the localStorage quota with 50+
+// KB campaign blobs each).
+
+const SNAPSHOT_KEY = "fb-overview-snapshot";
+const SNAPSHOT_MAX_AGE_MS = 24 * 60 * 60_000; // ignore anything older than 24h
+
+interface OverviewSnapshot {
+  hash: string;
+  savedAt: number;
+  // Stored verbatim — same shape the React Query cache holds.
+  data: Awaited<ReturnType<typeof api.overview.batch>>;
+}
+
+function snapshotHash(idsKey: string, date: DateConfig, includeArchived: boolean): string {
+  return `${idsKey}|${date.preset}|${date.from ?? ""}|${date.to ?? ""}|${includeArchived ? 1 : 0}`;
+}
+
+function readOverviewSnapshot(
+  hash: string,
+): Awaited<ReturnType<typeof api.overview.batch>> | undefined {
+  try {
+    const raw = localStorage.getItem(SNAPSHOT_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as OverviewSnapshot;
+    if (parsed.hash !== hash) return undefined;
+    if (Date.now() - parsed.savedAt > SNAPSHOT_MAX_AGE_MS) return undefined;
+    return parsed.data;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeOverviewSnapshot(
+  hash: string,
+  data: Awaited<ReturnType<typeof api.overview.batch>>,
+): void {
+  try {
+    const entry: OverviewSnapshot = { hash, savedAt: Date.now(), data };
+    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(entry));
+  } catch {
+    // QuotaExceeded / private mode — silently skip. Live data is
+    // still in the React Query memory cache for this session.
+  }
+}
 
 /**
  * Two-phase batch multi-account overview hook.
@@ -72,7 +129,14 @@ export function useMultiAccountOverview(
     staleTime: 5 * 60_000,
   });
 
-  // Phase 2: full (with insights — slow)
+  // Phase 2: full (with insights — slow). placeholderData seeds the
+  // query with the last-seen snapshot from localStorage so the UI
+  // renders instantly on hard refresh / app re-open. The live query
+  // still fires in the background; once it resolves the cards
+  // refresh in place. snapHash is recomputed when accounts or date
+  // change so a stale snapshot for a different combo is correctly
+  // ignored.
+  const snapHash = snapshotHash(idsKey, date, !!opts.includeArchived);
   const fullQuery = useQuery({
     queryKey: ["overview", idsKey, date, !!opts.includeArchived],
     queryFn: async () => {
@@ -83,7 +147,18 @@ export function useMultiAccountOverview(
     },
     enabled,
     staleTime: 5 * 60_000,
+    placeholderData: () => readOverviewSnapshot(snapHash),
   });
+
+  // Persist successful responses — placeholder hits feel instant
+  // because we wrote here last time. Skip writes when the response
+  // came from the placeholder (isFetching means a refetch is in
+  // flight — wait for it to land before saving).
+  useEffect(() => {
+    if (fullQuery.isSuccess && !fullQuery.isFetching && fullQuery.data) {
+      writeOverviewSnapshot(snapHash, fullQuery.data);
+    }
+  }, [fullQuery.isSuccess, fullQuery.isFetching, fullQuery.data, snapHash]);
 
   // Prefer full data when available, fall back to lite.
   const activeData = fullQuery.data ?? liteQuery.data;
@@ -113,9 +188,14 @@ export function useMultiAccountOverview(
     return { campaigns: camps, insights: insMap, errors: errs };
   }, [accounts, activeData]);
 
-  // isLoading = nothing to show yet (both lite and full still loading).
-  // Once lite resolves, we have campaigns to render.
-  const isLoading = liteQuery.isLoading && fullQuery.isLoading;
+  // `fullQuery.data` is populated either by a live success OR by
+  // the localStorage placeholder. Either way we have insight numbers
+  // to show — UI shouldn't shimmer when cached numbers are in hand.
+  const hasFullData = fullQuery.data !== undefined;
+
+  // isLoading = nothing to show yet (no live data, no placeholder,
+  // and lite is also still in flight).
+  const isLoading = !hasFullData && liteQuery.isLoading && fullQuery.isLoading;
 
   return {
     campaigns,
@@ -124,7 +204,9 @@ export function useMultiAccountOverview(
     isLoading,
     isFetching: fullQuery.isFetching,
     isError: fullQuery.isError && liteQuery.isError,
-    insightsPending: !fullQuery.isSuccess && !fullQuery.isError,
+    // Treat placeholder-from-localStorage as "we have insights" so
+    // StatsGrid renders the cached numbers instead of shimmer.
+    insightsPending: !hasFullData && !fullQuery.isError,
     loadedCount: isLoading ? 0 : accounts.length,
     totalCount: accounts.length,
   };

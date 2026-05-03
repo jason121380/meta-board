@@ -31,7 +31,7 @@ export function AlertsView() {
   const setSelectedAcctId = useUiStore((s) => s.setAlertSelectedAcctId);
   const settingsReady = useUiStore((s) => s.settingsReady);
 
-  const date = useFiltersStore((s) => s.date.alerts);
+  const date = useFiltersStore((s) => s.date.shared);
   const setDate = useFiltersStore((s) => s.setDate);
 
   // Batch endpoint — ALWAYS request the full visible account set,
@@ -68,7 +68,7 @@ export function AlertsView() {
             className="bg-transparent px-0 py-0"
           />
           <TopbarSeparator />
-          <DatePicker value={date} onChange={(cfg) => setDate("alerts", cfg)} />
+          <DatePicker value={date} onChange={(cfg) => setDate("shared", cfg)} />
         </div>
       </Topbar>
 

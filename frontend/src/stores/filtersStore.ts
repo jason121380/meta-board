@@ -3,8 +3,20 @@ import { create } from "zustand";
 
 /**
  * Filters store — tracks the date-picker config and "show only with
- * spend" toggle for each view. Each view has its own config so
- * switching views doesn't stomp on the others' dates.
+ * spend" toggle for each view.
+ *
+ * Date design: as of 2026-05, the five "live FB metrics" views
+ * (dashboard / analytics / alerts / finance / storeExpenses) share
+ * a single `date.shared` slot. Operators almost always look at the
+ * same time window across these tabs ("how did 本月 do?"); having
+ * each tab carry its own date meant switching tabs blew the React
+ * Query cache (different `date` → different query key → fresh
+ * fetch + spinner). Sharing the slot lets RQ's 5-minute staleTime
+ * actually hold across navigation.
+ *
+ * `optimization` (AI 幕僚) keeps its own slot — that view
+ * snapshots a moment in time, so coupling it to live-metric date
+ * changes would be confusing.
  *
  * Persisted key:
  *   filterActiveOnly → `filter_active_only` (boolean, default true)
@@ -14,20 +26,14 @@ import { create } from "zustand";
  * when they open any view.
  */
 
-export type ViewKey =
-  | "dashboard"
-  | "analytics"
-  | "alerts"
-  | "optimization"
-  | "finance"
-  | "storeExpenses";
+export type ViewKey = "shared" | "optimization";
 
 const defaultDate = (): DateConfig => ({ preset: "this_month", from: null, to: null });
 
 export interface FiltersState {
   /** Dashboard "只顯示有花費" toggle. */
   activeOnly: boolean;
-  /** Per-view date configs. */
+  /** Per-view date configs. See module doc for the slot layout. */
   date: Record<ViewKey, DateConfig>;
 
   setActiveOnly: (v: boolean) => void;
@@ -37,12 +43,8 @@ export interface FiltersState {
 export const useFiltersStore = create<FiltersState>((set) => ({
   activeOnly: true,
   date: {
-    dashboard: defaultDate(),
-    analytics: defaultDate(),
-    alerts: defaultDate(),
+    shared: defaultDate(),
     optimization: defaultDate(),
-    finance: defaultDate(),
-    storeExpenses: defaultDate(),
   },
   setActiveOnly: (v) => set({ activeOnly: v }),
   setDate: (view, config) => set((state) => ({ date: { ...state.date, [view]: config } })),
