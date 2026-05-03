@@ -6464,6 +6464,17 @@ def _render_pdf_html(req: ExportPdfRequest) -> str:
     """
 
 
+def _render_pdf_bytes(html_str: str) -> bytes:
+    """Synchronous weasyprint render. Lives in its own function so
+    asyncio.to_thread can hand it off cleanly. Font cache is built
+    lazily by Pango on first use — subsequent calls in the same
+    process are 5-10x faster, so the slowness ceiling is bounded
+    to the first call after deploy."""
+    from weasyprint import HTML
+
+    return HTML(string=html_str).write_pdf()
+
+
 @app.post("/api/optimization/export-pdf")
 async def export_optimization_pdf(req: ExportPdfRequest):
     """Render the user's already-generated AI 幕僚 advice into a
@@ -6496,15 +6507,12 @@ async def export_optimization_pdf(req: ExportPdfRequest):
         h2 = match.group(0)
         return f'<div class="callout"><div class="callout-badge">★ 立即執行</div>{h2}'
 
-    # Find <h2>...優先...</h2> and open a callout div before it.
     html_str = re.sub(
         r"<h2[^>]*>[^<]*(?:優先|Priority|待辦|Action)[^<]*</h2>",
         _wrap_callout,
         html_str,
         flags=re.IGNORECASE,
     )
-    # Close the callout right before the next h2 (or section close).
-    # Simplistic — assumes one callout per agent section.
     html_str = re.sub(
         r'(<div class="callout">.+?)(?=<h2|</section>)',
         lambda m: m.group(1) + "</div>",
@@ -6512,14 +6520,35 @@ async def export_optimization_pdf(req: ExportPdfRequest):
         flags=re.DOTALL,
     )
 
+    # weasyprint's write_pdf is CPU-bound and synchronous. Running
+    # it directly on the event loop blocks every other request for
+    # the duration (5-15s on cold start, longer if the image's
+    # font cache hasn't been warmed). Hand it off to a thread so
+    # uvicorn's worker stays responsive AND so the request can
+    # actually complete instead of getting killed by the proxy
+    # timeout. asyncio.wait_for adds an explicit deadline so a
+    # genuine weasyprint hang surfaces as a clean 504 with a
+    # useful message rather than a bare connection drop.
+    import time
+    start = time.monotonic()
     try:
-        pdf_bytes = HTML(string=html_str).write_pdf()
+        pdf_bytes = await asyncio.wait_for(
+            asyncio.to_thread(_render_pdf_bytes, html_str),
+            timeout=45.0,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail="PDF render 超時(>45s,可能是字體 cache 第一次建立,稍後再試)",
+        )
     except Exception as exc:
         traceback.print_exc()
         raise HTTPException(
             status_code=502,
             detail=f"PDF render 失敗:{exc.__class__.__name__}: {exc}",
         )
+    elapsed_ms = int((time.monotonic() - start) * 1000)
+    print(f"[pdf] rendered {len(pdf_bytes)} bytes in {elapsed_ms}ms", flush=True)
 
     from datetime import datetime as _dt
 
