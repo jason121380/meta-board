@@ -6,9 +6,11 @@ import {
   useLineGroups,
   useTestLinePush,
 } from "@/api/hooks/useLinePush";
+import { useBillingUsage } from "@/api/hooks/useSubscription";
 import { useFbAuth } from "@/auth/FbAuthProvider";
 import { confirm } from "@/components/ConfirmDialog";
 import { toast } from "@/components/Toast";
+import { UpgradeModal, type UpgradeModalState } from "@/components/UpgradeModal";
 import { cn } from "@/lib/cn";
 import { useMemo, useState } from "react";
 import { GroupPushConfigModal } from "./GroupPushConfigModal";
@@ -98,6 +100,24 @@ export function LineGroupsContent() {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<"channel" | "group" | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const usageQuery = useBillingUsage();
+  const groupCap = usageQuery.data?.limits.line_groups ?? -1;
+  const groupsUsed = usageQuery.data?.usage.line_groups ?? 0;
+  const isUnlimited = groupCap < 0 || groupCap >= 999_000;
+  const atLimit = !isUnlimited && groupsUsed >= groupCap;
+  const [upgradeState, setUpgradeState] = useState<UpgradeModalState | null>(null);
+
+  const tryAddPush = (target: NonNullable<EditTarget>) => {
+    if (atLimit) {
+      setUpgradeState({
+        resource: "line_groups",
+        tier: usageQuery.data?.tier ?? "free",
+        limit: groupCap,
+      });
+      return;
+    }
+    setEditTarget(target);
+  };
 
   const onSort = (key: "channel" | "group") => {
     if (sortKey === key) {
@@ -149,6 +169,23 @@ export function LineGroupsContent() {
 
   return (
     <>
+      <UpgradeModal state={upgradeState} onClose={() => setUpgradeState(null)} />
+      {!isUnlimited && (
+        <div
+          className={cn(
+            "mb-3 flex items-center justify-between rounded-lg border px-3 py-2 text-[12px]",
+            atLimit
+              ? "border-orange bg-orange-bg text-orange"
+              : "border-border bg-white text-gray-500",
+          )}
+        >
+          <span>
+            推播設定 <span className="font-semibold tabular-nums text-ink">{groupsUsed}</span> /{" "}
+            <span className="tabular-nums">{groupCap}</span>
+          </span>
+          {atLimit && <span className="font-semibold">已達上限</span>}
+        </div>
+      )}
       <div className="mb-3 flex items-center gap-2">
         <input
           type="search"
@@ -199,7 +236,7 @@ export function LineGroupsContent() {
                     accessibleAccountIds={accessibleAccountIds}
                     canAddPush={!!g.channel_owner_fb_user_id && g.channel_owner_fb_user_id === currentUserId}
                     onAddPush={() =>
-                      setEditTarget({
+                      tryAddPush({
                         groupId: g.group_id,
                         groupDisplayName: displayName,
                         editing: null,

@@ -5,10 +5,12 @@ import {
   useLineChannels,
   useUpdateLineChannel,
 } from "@/api/hooks/useLinePush";
+import { useBillingUsage } from "@/api/hooks/useSubscription";
 import { Button } from "@/components/Button";
 import { confirm } from "@/components/ConfirmDialog";
 import { Modal } from "@/components/Modal";
 import { toast } from "@/components/Toast";
+import { UpgradeModal, type UpgradeModalState } from "@/components/UpgradeModal";
 import { cn } from "@/lib/cn";
 import { useEffect, useState } from "react";
 
@@ -52,15 +54,48 @@ export function LineChannelsContent() {
   const channels = channelsQuery.data ?? [];
   const [editing, setEditing] = useState<ChannelRow | null>(null);
   const [creating, setCreating] = useState(false);
+  const usageQuery = useBillingUsage();
+  const channelCap = usageQuery.data?.limits.line_channels ?? -1;
+  const isUnlimited = channelCap < 0 || channelCap >= 999_000;
+  // Count user-owned (non-orphan, editable) channels — that's what
+  // the backend's _count_line_channels join returns.
+  const ownedCount = channels.filter((c) => c.editable).length;
+  const atLimit = !isUnlimited && ownedCount >= channelCap;
+  const [upgradeState, setUpgradeState] = useState<UpgradeModalState | null>(null);
+
+  const handleAddClick = () => {
+    if (atLimit) {
+      setUpgradeState({
+        resource: "line_channels",
+        tier: usageQuery.data?.tier ?? "free",
+        limit: channelCap,
+      });
+      return;
+    }
+    setCreating(true);
+  };
 
   return (
     <div className="rounded-xl border border-border bg-white">
       <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
-        <div className="text-[13px] font-bold text-ink">LINE 官方帳號</div>
-        <Button variant="ghost" size="sm" onClick={() => setCreating(true)}>
+        <div className="flex items-baseline gap-2">
+          <span className="text-[13px] font-bold text-ink">LINE 官方帳號</span>
+          {!isUnlimited && (
+            <span
+              className={cn(
+                "text-[11px]",
+                atLimit ? "font-semibold text-orange" : "text-gray-400",
+              )}
+            >
+              {ownedCount} / {channelCap}
+            </span>
+          )}
+        </div>
+        <Button variant="ghost" size="sm" onClick={handleAddClick}>
           + 新增官方帳號
         </Button>
       </div>
+      <UpgradeModal state={upgradeState} onClose={() => setUpgradeState(null)} />
 
       {channelsQuery.isLoading ? (
         <div className="px-3 py-4 text-center text-[12px] text-gray-500">載入中...</div>

@@ -1,8 +1,10 @@
 import { useAccounts } from "@/api/hooks/useAccounts";
+import { useBillingUsage } from "@/api/hooks/useSubscription";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
 import { Loading } from "@/components/Loading";
 import { toast } from "@/components/Toast";
+import { UpgradeModal, type UpgradeModalState } from "@/components/UpgradeModal";
 import { Topbar } from "@/layout/Topbar";
 import { accountStatusColor, accountStatusLabel } from "@/lib/accountStatus";
 import { cn } from "@/lib/cn";
@@ -91,7 +93,20 @@ export function SettingsView() {
     });
   };
 
+  const usageQuery = useBillingUsage();
+  const adCap = usageQuery.data?.limits.ad_accounts ?? -1;
+  const isUnlimited = adCap < 0 || adCap >= 999_000;
+  const [upgradeState, setUpgradeState] = useState<UpgradeModalState | null>(null);
+
   const save = () => {
+    if (!isUnlimited && pendingChecked.size > adCap) {
+      setUpgradeState({
+        resource: "ad_accounts",
+        tier: usageQuery.data?.tier ?? "free",
+        limit: adCap,
+      });
+      return;
+    }
     setSelectedIds([...pendingChecked]);
     // Drop cached overview/insights data so the destination view
     // remounts into its LoadingState instead of flashing stale numbers
@@ -129,14 +144,22 @@ export function SettingsView() {
     <>
       <Topbar title="廣告帳號設定">
         <div className="flex items-center gap-2 md:gap-3">
-          <span className="hidden text-xs text-gray-500 md:inline">
-            已選 {pendingCount} / {totalCount} 個帳戶
+          <span
+            className={cn(
+              "hidden text-xs md:inline",
+              !isUnlimited && pendingCount > adCap ? "font-semibold text-orange" : "text-gray-500",
+            )}
+          >
+            {isUnlimited
+              ? `已選 ${pendingCount} / ${totalCount} 個帳戶`
+              : `已選 ${pendingCount} / 上限 ${adCap}`}
           </span>
           <Button variant="primary" size="sm" onClick={save}>
             儲存
           </Button>
         </div>
       </Topbar>
+      <UpgradeModal state={upgradeState} onClose={() => setUpgradeState(null)} />
 
       <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
         {/* Left: BM panel — full-width horizontal scroll on mobile,
