@@ -5687,7 +5687,6 @@ AGENT_META = [
         "role_zh": "Meta 跨平台策略 / 漏斗結構 / Audience 工程",
         "emoji": "📱",
         "color": "#3b82f6",
-        "filename": "social_strategist.md",
     },
     {
         "id": "creative_strategist",
@@ -5696,7 +5695,6 @@ AGENT_META = [
         "role_zh": "Hook-Body-CTA / A/B 測試 / 素材疲勞偵測",
         "emoji": "✍️",
         "color": "#f59e0b",
-        "filename": "creative_strategist.md",
     },
     {
         "id": "auditor",
@@ -5705,7 +5703,6 @@ AGENT_META = [
         "role_zh": "200+ checkpoint / Severity / 美金影響估算",
         "emoji": "📋",
         "color": "#a855f7",
-        "filename": "auditor.md",
     },
     {
         "id": "growth_hacker",
@@ -5714,7 +5711,6 @@ AGENT_META = [
         "role_zh": "漏斗 / LTV:CAC / A/B 實驗 / 病毒迴圈",
         "emoji": "🚀",
         "color": "#10b981",
-        "filename": "growth_hacker.md",
     },
     {
         "id": "analytics_reporter",
@@ -5723,39 +5719,26 @@ AGENT_META = [
         "role_zh": "KPI / 統計顯著性 / 預測模型 / 數據說故事",
         "emoji": "📊",
         "color": "#0891b2",
-        "filename": "analytics_reporter.md",
     },
 ]
 
-_AGENT_PROMPTS_CACHE: Optional[dict] = None
-
 
 def _load_agent_prompts() -> dict:
-    """Read the 5 persona markdown files into memory once. Cached
-    at module level so every advice request after the first is a
-    pure dict lookup."""
-    global _AGENT_PROMPTS_CACHE
-    if _AGENT_PROMPTS_CACHE is not None:
-        return _AGENT_PROMPTS_CACHE
-    out: dict = {}
-    base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_personas")
-    for meta in AGENT_META:
-        path = os.path.join(base, meta["filename"])
-        try:
-            with open(path, encoding="utf-8") as f:
-                out[meta["id"]] = f.read()
-        except Exception as exc:
-            print(f"[agents] failed to load {meta['id']}: {exc}", flush=True)
-            out[meta["id"]] = ""
-    _AGENT_PROMPTS_CACHE = out
-    return out
+    """Return the 5 persona system-prompts. Imported from the
+    `agent_personas` Python module so the bytes are guaranteed to
+    ship with the deploy artefact (the previous disk-read approach
+    silently failed on Zeabur whenever the agent_personas/ folder
+    didn't make it into the runtime image)."""
+    from agent_personas import PERSONAS
+
+    return PERSONAS
 
 
 @app.get("/api/optimization/agents")
 async def list_optimization_agents():
     """Return the 5 expert agents' display metadata (no system
     prompts — those are server-side only)."""
-    return {"data": [{k: v for k, v in m.items() if k != "filename"} for m in AGENT_META]}
+    return {"data": list(AGENT_META)}
 
 
 class CampaignDigest(BaseModel):
