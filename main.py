@@ -5735,6 +5735,46 @@ async def list_optimization_agents():
     return {"data": list(AGENT_META)}
 
 
+@app.get("/api/optimization/health")
+async def optimization_health():
+    """Diagnostic endpoint — verifies agent_personas module loaded
+    + GEMINI_API_KEY set + DB column present, without burning any
+    Gemini tokens. Useful for triaging "API 500: HTTP 500" without
+    SSH'ing into the deploy."""
+    out: dict = {
+        "gemini_api_key_set": bool(GEMINI_API_KEY),
+        "gemini_model": GEMINI_MODEL,
+    }
+    try:
+        prompts = _load_agent_prompts()
+        out["personas_loaded"] = len(prompts)
+        out["personas_total_chars"] = sum(len(v) for v in prompts.values())
+        out["personas_ids"] = sorted(prompts.keys())
+    except Exception as exc:
+        out["personas_error"] = f"{exc.__class__.__name__}: {exc}"
+    if _db_pool is not None:
+        try:
+            async with _db_pool.acquire() as conn:
+                col = await conn.fetchval(
+                    """
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'subscriptions'
+                      AND column_name = 'agent_advice_limit'
+                    """
+                )
+                out["agent_advice_column_exists"] = bool(col)
+                tbl = await conn.fetchval(
+                    """
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_name = 'agent_advice_runs'
+                    """
+                )
+                out["agent_advice_runs_table_exists"] = bool(tbl)
+        except Exception as exc:
+            out["db_error"] = f"{exc.__class__.__name__}: {exc}"
+    return out
+
+
 class CampaignDigest(BaseModel):
     """Compact snapshot of one campaign that the frontend ships up
     with each agent-advice request. Keeps the prompt small enough
@@ -5873,26 +5913,27 @@ async def _call_one_agent(
 
 @app.post("/api/optimization/run-agents")
 async def run_optimization_agents(req: RunAgentsRequest):
-    """Fan out the user's currently visible campaigns to all 5
-    expert agents in parallel and return their advice. Counts as
-    ONE quota use against the user's monthly `agent_advice_limit`.
-
-    Quota:
-      - free  → 3 lifetime trial runs
-      - basic → 2 / month
-      - plus  → 6 / month
-      - max   → unlimited
-
-    Resilience: if at least one agent succeeds we record a row in
-    `agent_advice_runs` (= quota consumed) and return a mixed
-    success/error array. If ALL 5 fail we don't write the row, so a
-    Gemini outage doesn't burn the user's monthly allowance.
-
-    The whole body runs inside a try/except that converts any
-    unhandled exception to a 502 with a useful message — without it
-    the frontend just sees "API 500: HTTP 500" and we have no way
-    to root-cause from outside the Zeabur logs.
+    """See module docstring for full behaviour. Outermost try/except
+    converts any otherwise-uncaught exception (ImportError on the
+    inline persona module, asyncpg connection blip, surprise
+    KeyError) into a 502 with the class name + message in the
+    detail. Without this we lose all visibility — FastAPI's default
+    handler returns a body-less 500 and the frontend just shows
+    "API 500: HTTP 500" with zero context.
     """
+    try:
+        return await _run_optimization_agents_inner(req)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI 幕僚未預期錯誤:{exc.__class__.__name__}: {exc}",
+        )
+
+
+async def _run_optimization_agents_inner(req: RunAgentsRequest):
     if not req.fb_user_id:
         raise HTTPException(status_code=401, detail="Missing fb_user_id")
     if not GEMINI_API_KEY:
