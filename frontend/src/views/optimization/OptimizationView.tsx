@@ -206,6 +206,15 @@ export function OptimizationView() {
     return () => abortRef.current?.abort();
   }, []);
 
+  // Are there any cards on screen (cached, hydrated, or freshly
+  // streamed)? Derived from the cards object — any agent with a
+  // non-null state counts. Used to short-circuit the
+  // overview-loading gate so users with persisted runs don't see a
+  // progress bar on every page open.
+  const hasAnyCards = useMemo(
+    () => Object.values(cards).some((c) => c != null),
+    [cards],
+  );
   const usage = usageQuery.data;
   const adviceLimit = usage?.limits.agent_advice ?? 0;
   const adviceUsed = usage?.usage.agent_advice ?? 0;
@@ -213,7 +222,11 @@ export function OptimizationView() {
   const remaining = isUnlimited ? Number.POSITIVE_INFINITY : Math.max(0, adviceLimit - adviceUsed);
   const blockedByTier = adviceLimit === 0;
   const quotaExhausted = !isUnlimited && remaining <= 0;
-  const canGenerate = digests.length > 0 && !isStreaming && !quotaExhausted;
+  const overviewLoading = overview.isLoading || overview.insightsPending;
+  // Generate is gated on having loaded campaign data — no point
+  // calling Gemini with an empty digest.
+  const canGenerate =
+    !overviewLoading && digests.length > 0 && !isStreaming && !quotaExhausted;
   const isFirstRun = Object.keys(cards).length === 0 && !isStreaming;
   const isLifetime = usage?.agent_advice_period === "lifetime";
   const completedCount = agents.length - streamingIds.size;
@@ -323,13 +336,19 @@ export function OptimizationView() {
           />
         ) : visibleAll.length === 0 ? (
           <EmptyState>請先在設定中啟用廣告帳戶</EmptyState>
-        ) : overview.isLoading || overview.insightsPending ? (
+        ) : !hasAnyCards && (overview.isLoading || overview.insightsPending) ? (
+          // Only block the entire UI on the FB-API campaign fetch
+          // when we have NOTHING to show — i.e. user has never run
+          // analysis before, or has no cached / persisted run. Once
+          // cached cards exist, render them immediately and let the
+          // overview load in the background; the action bar will
+          // surface "等待活動資料載入..." on the Generate button.
           <LoadingState
             title="分析所有行銷活動中..."
             loaded={overview.loadedCount}
             total={overview.totalCount}
           />
-        ) : digests.length === 0 ? (
+        ) : !hasAnyCards && digests.length === 0 ? (
           <EmptyState>目前沒有正在進行中的行銷活動</EmptyState>
         ) : (
           <div className="flex flex-col gap-3 md:gap-4">
@@ -349,6 +368,7 @@ export function OptimizationView() {
               accountsCount={filteredAccounts.length}
               filterActive={accountFilter !== null}
               generatedAt={generatedAt}
+              isOverviewLoading={overview.isLoading || overview.insightsPending}
               onGenerate={runStream}
               onOpenFilter={() => setFilterModalOpen(true)}
             />
@@ -388,6 +408,11 @@ interface ActionBarProps {
   accountsCount: number;
   filterActive: boolean;
   generatedAt: Date | null;
+  /** True while useMultiAccountOverview is still pulling live FB
+   *  campaign data. Cached cards render immediately, but the
+   *  Generate button has to wait — no point shipping an empty
+   *  digest to Gemini. */
+  isOverviewLoading: boolean;
   onGenerate: () => void;
   onOpenFilter: () => void;
 }
@@ -408,6 +433,7 @@ function ActionBar({
   accountsCount,
   filterActive,
   generatedAt,
+  isOverviewLoading,
   onGenerate,
   onOpenFilter,
 }: ActionBarProps) {
@@ -468,13 +494,15 @@ function ActionBar({
         >
           {isStreaming
             ? "分析中..."
-            : isFirstRun
-              ? blockedByTier
-                ? "升級以使用 →"
-                : "產生分析"
-              : quotaExhausted
-                ? exhaustedLabel
-                : "重新產生"}
+            : isOverviewLoading
+              ? "等活動資料載入..."
+              : isFirstRun
+                ? blockedByTier
+                  ? "升級以使用 →"
+                  : "產生分析"
+                : quotaExhausted
+                  ? exhaustedLabel
+                  : "重新產生"}
         </Button>
       </div>
     </div>
