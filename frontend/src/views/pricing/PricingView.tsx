@@ -3,6 +3,7 @@ import { usePricingConfig, useSubscription } from "@/api/hooks/useSubscription";
 import { useFbAuth } from "@/auth/FbAuthProvider";
 import { Button } from "@/components/Button";
 import { LoadingState } from "@/components/LoadingState";
+import { PolarLanguageNotice } from "@/components/PolarLanguageNotice";
 import { toast } from "@/components/Toast";
 import { fM, fN } from "@/lib/format";
 import { useState } from "react";
@@ -86,6 +87,9 @@ export function PricingView() {
               onSubscribe={() => void handleSubscribe(tier.tier)}
             />
           ))}
+        </div>
+        <div className="mx-auto mt-5 max-w-[800px] md:mt-6">
+          <PolarLanguageNotice context="checkout" />
         </div>
       </div>
 
