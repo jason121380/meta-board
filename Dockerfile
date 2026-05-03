@@ -35,16 +35,6 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System libraries for weasyprint (PDF export of AI 幕僚 reports)
-# + Noto Sans CJK so Traditional Chinese renders as vector text in
-# the output PDF instead of falling back to ASCII boxes. ~80MB
-# added to the image — acceptable for the feature delta.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      libpango-1.0-0 libpangoft2-1.0-0 \
-      fonts-noto-cjk \
- && rm -rf /var/lib/apt/lists/*
-
 # Install Python deps first (better cache reuse)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

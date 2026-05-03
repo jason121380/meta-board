@@ -53,9 +53,9 @@ interface StoredLastRun {
  *   - per-page account filter modal so the user can narrow the
  *     analysis to a subset of their globally-selected accounts
  *     without changing the dashboard's selection
- *   - browser print export (window.print + a print stylesheet
- *     that hides the navigation chrome and lays cards out
- *     full-width for an easy "save as PDF")
+ *   - localStorage snapshot of the last successful run so a
+ *     refresh / tab close doesn't wipe the cards the user just
+ *     paid for (restore-on-mount, no Gemini re-call)
  */
 export function OptimizationView() {
   const accountsQuery = useAccounts();
@@ -158,7 +158,6 @@ export function OptimizationView() {
     return () => abortRef.current?.abort();
   }, []);
 
-  const [isExporting, setIsExporting] = useState(false);
   const usage = usageQuery.data;
   const adviceLimit = usage?.limits.agent_advice ?? 0;
   const adviceUsed = usage?.usage.agent_advice ?? 0;
@@ -170,45 +169,6 @@ export function OptimizationView() {
   const isFirstRun = Object.keys(cards).length === 0 && !isStreaming;
   const isLifetime = usage?.agent_advice_period === "lifetime";
   const completedCount = agents.length - streamingIds.size;
-
-  async function exportPdf() {
-    if (!generatedAt) return;
-    setIsExporting(true);
-    try {
-      // Pull the meta + advice for every card that has output;
-      // skip cards that errored or never finished. The backend
-      // refuses an empty list with 400, which we surface as a
-      // toast.
-      const entries = agents
-        .map((a) => {
-          const card = cards[a.id];
-          if (!card?.advice_md) return null;
-          return {
-            agent_id: a.id,
-            name_zh: a.name_zh,
-            name_en: a.name_en,
-            emoji: a.emoji,
-            color: a.color,
-            advice_md: card.advice_md,
-          };
-        })
-        .filter((x): x is NonNullable<typeof x> => x !== null);
-      if (entries.length === 0) {
-        toast("沒有可匯出的分析", "error");
-        return;
-      }
-      await api.optimization.exportPdf({
-        dateLabel,
-        accountNames: filteredAccounts.map((a) => a.name),
-        generatedAt: generatedAt.toLocaleString("zh-TW", { hour12: false }),
-        agents: entries,
-      });
-    } catch (err) {
-      toast(`PDF 匯出失敗:${(err as Error).message}`, "error");
-    } finally {
-      setIsExporting(false);
-    }
-  }
 
   async function runStream() {
     abortRef.current?.abort();
@@ -306,7 +266,7 @@ export function OptimizationView() {
         onClose={() => setFilterModalOpen(false)}
       />
 
-      <div className="min-w-0 flex-1 p-3 print:p-0 md:p-5">
+      <div className="min-w-0 flex-1 p-3 md:p-5">
         {!settingsReady ? (
           <LoadingState
             title="載入優化資料中..."
@@ -343,11 +303,9 @@ export function OptimizationView() {
               generatedAt={generatedAt}
               onGenerate={runStream}
               onOpenFilter={() => setFilterModalOpen(true)}
-              onPrint={exportPdf}
-              isExporting={isExporting}
             />
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 lg:grid-cols-3 print:grid-cols-1">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 lg:grid-cols-3">
               {agents.map((agent) => (
                 <AgentAdviceCard
                   key={agent.id}
@@ -384,8 +342,6 @@ interface ActionBarProps {
   generatedAt: Date | null;
   onGenerate: () => void;
   onOpenFilter: () => void;
-  onPrint: () => void;
-  isExporting: boolean;
 }
 
 function ActionBar({
@@ -406,8 +362,6 @@ function ActionBar({
   generatedAt,
   onGenerate,
   onOpenFilter,
-  onPrint,
-  isExporting,
 }: ActionBarProps) {
   const quotaLabel = isUnlimited
     ? "無限次"
@@ -418,7 +372,7 @@ function ActionBar({
   const hasResults = generatedAt !== null;
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-border bg-white p-4 print:hidden md:flex-row md:items-center md:justify-between md:p-5">
+    <div className="flex flex-col gap-3 rounded-2xl border border-border bg-white p-4 md:flex-row md:items-center md:justify-between md:p-5">
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2 text-[14px] font-bold text-ink">
           {isStreaming
@@ -458,11 +412,6 @@ function ActionBar({
         >
           {blockedByTier ? "目前方案不含此功能" : quotaLabel}
         </span>
-        {hasResults && !isStreaming && (
-          <Button variant="ghost" size="sm" onClick={onPrint} disabled={isExporting}>
-            {isExporting ? "匯出中..." : "匯出 PDF"}
-          </Button>
-        )}
         <Button
           variant="primary"
           size="sm"
@@ -494,7 +443,7 @@ interface AgentAdviceCardProps {
 
 function AgentAdviceCard({ agent, state, isLoading }: AgentAdviceCardProps) {
   return (
-    <section className="flex flex-col rounded-2xl border border-border bg-white p-4 print:break-inside-avoid md:p-5">
+    <section className="flex flex-col rounded-2xl border border-border bg-white p-4 md:p-5">
       <header className="mb-3 flex items-start gap-3">
         <div
           className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-2xl shadow-sm"
