@@ -42,7 +42,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the FastAPI server source. dist/ (the React build output,
 # plus favicon.png / icon-192.png / icon-512.png which Vite copies
 # from frontend/public/) comes from stage 1.
-COPY main.py line_client.py ./
+#
+# Add new top-level Python modules here as they're created — the
+# COPY is allow-listed (not `COPY . .`) so non-runtime junk
+# (.git, docs, tests, scratch files) doesn't bloat the image.
+COPY main.py line_client.py agent_personas.py ./
 COPY --from=frontend-builder /app/dist ./dist
 
 # Default to 8001 locally; Zeabur sets $PORT
