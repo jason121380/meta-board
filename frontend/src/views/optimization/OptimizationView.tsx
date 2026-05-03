@@ -122,6 +122,7 @@ export function OptimizationView() {
     return () => abortRef.current?.abort();
   }, []);
 
+  const [isExporting, setIsExporting] = useState(false);
   const usage = usageQuery.data;
   const adviceLimit = usage?.limits.agent_advice ?? 0;
   const adviceUsed = usage?.usage.agent_advice ?? 0;
@@ -133,6 +134,45 @@ export function OptimizationView() {
   const isFirstRun = Object.keys(cards).length === 0 && !isStreaming;
   const isLifetime = usage?.agent_advice_period === "lifetime";
   const completedCount = agents.length - streamingIds.size;
+
+  async function exportPdf() {
+    if (!generatedAt) return;
+    setIsExporting(true);
+    try {
+      // Pull the meta + advice for every card that has output;
+      // skip cards that errored or never finished. The backend
+      // refuses an empty list with 400, which we surface as a
+      // toast.
+      const entries = agents
+        .map((a) => {
+          const card = cards[a.id];
+          if (!card?.advice_md) return null;
+          return {
+            agent_id: a.id,
+            name_zh: a.name_zh,
+            name_en: a.name_en,
+            emoji: a.emoji,
+            color: a.color,
+            advice_md: card.advice_md,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+      if (entries.length === 0) {
+        toast("沒有可匯出的分析", "error");
+        return;
+      }
+      await api.optimization.exportPdf({
+        dateLabel,
+        accountNames: filteredAccounts.map((a) => a.name),
+        generatedAt: generatedAt.toLocaleString("zh-TW", { hour12: false }),
+        agents: entries,
+      });
+    } catch (err) {
+      toast(`PDF 匯出失敗:${(err as Error).message}`, "error");
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   async function runStream() {
     abortRef.current?.abort();
@@ -194,6 +234,10 @@ export function OptimizationView() {
         <DatePicker value={date} onChange={(cfg) => setDate("optimization", cfg)} />
       </Topbar>
       <UpgradeModal state={upgradeState} onClose={() => setUpgradeState(null)} />
+      {/* PDF export handler — defined as a closure here so it can
+          reach `cards`, `dateLabel`, `generatedAt`, etc. without
+          prop-drilling through ActionBar. */}
+      {/* (no-op JSX — actual function below) */}
       <AccountFilterModal
         open={filterModalOpen}
         accounts={visibleAll}
@@ -243,7 +287,8 @@ export function OptimizationView() {
               generatedAt={generatedAt}
               onGenerate={runStream}
               onOpenFilter={() => setFilterModalOpen(true)}
-              onPrint={() => window.print()}
+              onPrint={exportPdf}
+              isExporting={isExporting}
             />
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4 lg:grid-cols-3 print:grid-cols-1">
@@ -284,6 +329,7 @@ interface ActionBarProps {
   onGenerate: () => void;
   onOpenFilter: () => void;
   onPrint: () => void;
+  isExporting: boolean;
 }
 
 function ActionBar({
@@ -305,6 +351,7 @@ function ActionBar({
   onGenerate,
   onOpenFilter,
   onPrint,
+  isExporting,
 }: ActionBarProps) {
   const quotaLabel = isUnlimited
     ? "無限次"
@@ -356,8 +403,8 @@ function ActionBar({
           {blockedByTier ? "目前方案不含此功能" : quotaLabel}
         </span>
         {hasResults && !isStreaming && (
-          <Button variant="ghost" size="sm" onClick={onPrint}>
-            匯出 PDF
+          <Button variant="ghost" size="sm" onClick={onPrint} disabled={isExporting}>
+            {isExporting ? "匯出中..." : "匯出 PDF"}
           </Button>
         )}
         <Button
