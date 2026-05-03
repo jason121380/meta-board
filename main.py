@@ -5804,22 +5804,48 @@ class RunAgentsRequest(BaseModel):
 
 
 def _format_campaigns_for_prompt(campaigns: List[CampaignDigest]) -> str:
-    """Render the campaigns as a markdown table that fits inside the
-    prompt context. Sort by spend so the model focuses on high-impact
-    campaigns first; cap at 30 rows so the prompt stays under ~3KB."""
-    sorted_campaigns = sorted(campaigns, key=lambda c: c.spend, reverse=True)[:30]
-    lines = [
-        "| 行銷活動 | 帳號 | 狀態 | 目標 | 花費 | 曝光 | 點擊 | CTR | CPC | 頻次 | 私訊 | 私訊成本 |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|",
-    ]
+    """Render the campaigns as a markdown grouped by account so the
+    agent can structure per-account analysis. Sort accounts by total
+    spend desc, campaigns within each account by spend desc. Cap at
+    60 rows total so the prompt stays under ~6KB while still
+    covering the long-tail."""
+    sorted_campaigns = sorted(campaigns, key=lambda c: c.spend, reverse=True)[:60]
+
+    # Group by account_name. dict preserves insertion order, so the
+    # account block order matches the spend ranking of the first
+    # campaign we saw under that account.
+    by_account: dict = {}
     for c in sorted_campaigns:
-        lines.append(
-            f"| {c.name} | {c.account_name or '-'} | {c.status or '-'} | {c.objective or '-'} "
-            f"| ${c.spend:,.0f} | {int(c.impressions):,} | {int(c.clicks):,} "
-            f"| {c.ctr:.2f}% | ${c.cpc:.2f} | {c.frequency:.2f} "
-            f"| {c.msgs} | {f'${c.msg_cost:.0f}' if c.msgs > 0 else '-'} |"
+        key = c.account_name or "(未命名帳號)"
+        by_account.setdefault(key, []).append(c)
+
+    blocks: list = []
+    for acct_name, rows in by_account.items():
+        acct_spend = sum(r.spend for r in rows)
+        acct_msgs = sum(r.msgs for r in rows)
+        acct_imp = sum(r.impressions for r in rows)
+        acct_avg_msg_cost = (acct_spend / acct_msgs) if acct_msgs > 0 else 0
+        header = (
+            f"### 帳號:{acct_name}\n"
+            f"- 該帳號活動數: {len(rows)}\n"
+            f"- 總花費: ${acct_spend:,.0f}  總曝光: {int(acct_imp):,}  "
+            f"總私訊: {acct_msgs}  平均私訊成本: "
+            f"{f'${acct_avg_msg_cost:.0f}' if acct_msgs > 0 else '-'}\n"
         )
-    return "\n".join(lines)
+        table_lines = [
+            "| 活動 | 狀態 | 目標 | 花費 | CTR | CPC | 頻次 | 私訊 | 私訊成本 |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
+        for c in rows:
+            table_lines.append(
+                f"| {c.name} | {c.status or '-'} | {c.objective or '-'} "
+                f"| ${c.spend:,.0f} | {c.ctr:.2f}% | ${c.cpc:.2f} "
+                f"| {c.frequency:.2f} | {c.msgs} "
+                f"| {f'${c.msg_cost:.0f}' if c.msgs > 0 else '-'} |"
+            )
+        blocks.append(header + "\n".join(table_lines))
+
+    return "\n\n".join(blocks)
 
 
 async def _call_one_agent(
@@ -5841,24 +5867,43 @@ async def _call_one_agent(
     system_prompt = (
         f"{persona}\n\n"
         "---\n\n"
-        "以下是使用者的 Facebook 廣告活動資料,請以你的專業角度分析並給出建議。"
-        "全程使用繁體中文回答(專業術語可保留英文)。"
-        "回答格式要求:"
-        "\n1. 開頭一段 2-3 句的整體診斷"
-        "\n2. 接下來 3-5 條具體可執行的建議,每條用 `- **標題**: 內容` 的 markdown 條列"
-        "\n3. 每條建議盡量提到具體的活動名稱或帳號"
-        "\n4. 結尾用 1 句總結最該優先處理的事"
-        "\n5. 回答控制在 250 字以內,簡潔有力,避免廢話"
+        "# 任務\n"
+        "你正在審視一位廣告操盤手底下的多個 Facebook 廣告帳號。"
+        "資料以「## 帳號 → ### 各帳號活動表」格式提供,你的任務是以你的專業角度,"
+        "**逐個帳號**做出完整、具體、可執行的優化分析。"
+        "全程使用繁體中文(專業術語 / 數字 / 活動代號可保留英文 / 數字)。\n\n"
+        "# 回答結構(必須遵守)\n"
+        "1. **整體診斷**:開頭 2-3 句的跨帳號重點觀察(例:哪個帳號花費過度集中、"
+        "私訊成本兩極化、頻次失控等);用粗體 `**...**` 標重點。\n"
+        "2. **分帳號建議**:接下來針對每個帳號開一個 `### 帳號:[帳號名]` 標題,"
+        "底下寫 2-4 條條列式建議,每條格式 `- **建議標題**: 內容(點名具體活動)`,"
+        "務必引用該帳號內**具體的活動名稱**(可截短)+ 關鍵指標數字(花費 / CPC / "
+        "私訊成本 / CTR / 頻次)作佐證。\n"
+        "3. **優先處理事項**:結尾用 `## 優先處理` 標題 + 1-3 條按重要性排序的待辦,"
+        "格式 `1. [帳號] 動作`,告訴使用者今天就該做什麼。\n\n"
+        "# 風格要求\n"
+        "- 不要重複資料、不要寫 `根據資料表` 這種廢話開場\n"
+        "- 直接點名帳號 + 活動 + 數字,具體到可執行\n"
+        "- 每個建議要有 WHY(為什麼這樣建議)+ HOW(怎麼做)\n"
+        "- 同一個帳號內如果有 5+ 個活動,可以分群分析(例:「私訊類活動 vs 流量類活動」)\n"
+        "- 字數不限,但要有資訊密度;不要冗長重複"
     )
     user_prompt = (
         f"資料區間: {date_label}\n"
-        f"活動數: {n_campaigns}(下表顯示花費 Top {min(30, n_campaigns)})\n\n"
+        f"進行中活動總數: {n_campaigns}\n"
+        f"(下方資料按帳號分群,只顯示花費 Top {min(60, n_campaigns)} 個活動)\n\n"
         f"{table}"
     )
+    # maxOutputTokens raised from 800 → 4096: 800 was being hit
+    # mid-sentence (CJK uses ~2-3 tokens per character; 800 tokens
+    # ≈ 250-400 zh chars max). 4096 gives ~1500 zh chars per agent
+    # × 5 agents = ~7500 zh chars total — enough for proper
+    # per-account analysis with concrete activity names + numbers,
+    # without bloating into novel-length advice nobody reads.
     payload = {
         "system_instruction": {"parts": [{"text": system_prompt}]},
         "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
-        "generationConfig": {"temperature": 0.6, "maxOutputTokens": 800},
+        "generationConfig": {"temperature": 0.6, "maxOutputTokens": 4096},
     }
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
     try:
