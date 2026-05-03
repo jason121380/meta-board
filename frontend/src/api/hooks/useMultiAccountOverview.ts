@@ -154,10 +154,18 @@ export function useMultiAccountOverview(
   // because we wrote here last time. Skip writes when the response
   // came from the placeholder (isFetching means a refetch is in
   // flight — wait for it to land before saving).
+  //
+  // The write is deferred via setTimeout(0) so JSON.stringify of
+  // the (potentially 100KB+ for 60 accounts) blob lands AFTER the
+  // success render commits, instead of blocking the main thread on
+  // the very paint that's trying to show fresh data.
   useEffect(() => {
     if (fullQuery.isSuccess && !fullQuery.isFetching && fullQuery.data) {
-      writeOverviewSnapshot(snapHash, fullQuery.data);
+      const data = fullQuery.data;
+      const handle = setTimeout(() => writeOverviewSnapshot(snapHash, data), 0);
+      return () => clearTimeout(handle);
     }
+    return undefined;
   }, [fullQuery.isSuccess, fullQuery.isFetching, fullQuery.data, snapHash]);
 
   // Prefer full data when available, fall back to lite.
