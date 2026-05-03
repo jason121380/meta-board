@@ -753,6 +753,19 @@ export interface BillingUsage {
   tier: TierId;
   limits: Record<LimitResource, number>;
   usage: Record<LimitResource, number>;
+  grace: BillingGrace;
+}
+
+/** Grace-period state attached to /api/billing/usage. When the user
+ *  is over any cap (typically post-downgrade), the timer starts; if
+ *  they stay over for `period_days` the scheduler stops firing the
+ *  excess push configs. Frontend uses this to render a countdown
+ *  banner that turns into a "已停用" notice once `expired` flips. */
+export interface BillingGrace {
+  over_limit_since: string | null;
+  expires_at: string | null;
+  expired: boolean;
+  period_days: number;
 }
 
 /** 403 detail body returned by tier-gated endpoints. */

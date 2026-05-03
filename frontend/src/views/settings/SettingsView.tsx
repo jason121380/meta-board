@@ -2,6 +2,7 @@ import { useAccounts } from "@/api/hooks/useAccounts";
 import { useBillingUsage } from "@/api/hooks/useSubscription";
 import { Button } from "@/components/Button";
 import { EmptyState } from "@/components/EmptyState";
+import { GraceBanner } from "@/components/GraceBanner";
 import { Loading } from "@/components/Loading";
 import { toast } from "@/components/Toast";
 import { UpgradeModal, type UpgradeModalState } from "@/components/UpgradeModal";
@@ -160,6 +161,10 @@ export function SettingsView() {
         </div>
       </Topbar>
       <UpgradeModal state={upgradeState} onClose={() => setUpgradeState(null)} />
+
+      <div className="px-3 pt-3 md:px-5 md:pt-4">
+        <GraceBanner usage={usageQuery.data} resource="ad_accounts" />
+      </div>
 
       <div className="flex flex-1 flex-col overflow-hidden md:flex-row">
         {/* Left: BM panel — full-width horizontal scroll on mobile,

@@ -459,6 +459,9 @@ async def lifespan(app: FastAPI):
                 await conn.execute(
                     "ALTER TABLE subscriptions DROP COLUMN IF EXISTS grandfathered"
                 )
+                await conn.execute(
+                    "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS over_limit_since TIMESTAMPTZ"
+                )
                 # `billing_events`: webhook idempotency log + audit
                 # trail. Polar can re-deliver events; the unique
                 # constraint on polar_event_id makes ingest a no-op
@@ -2080,6 +2083,64 @@ async def _count_monthly_pushes(fb_user_id: str) -> int:
     return int(n or 0)
 
 
+async def _grace_blocked(
+    fb_user_id: str,
+    config_id: str,
+    cache: dict,
+) -> bool:
+    """True iff this push config should be skipped because the owner
+    is over the line_groups cap AND past the grace period.
+
+    `cache` is a per-tick dict mapping owner uid to either:
+      - None (no enforcement: under limit, unlimited tier, or still
+        in grace period) — every config OK
+      - set[str] of OLDEST N config IDs that are still allowed
+    """
+    if fb_user_id in cache:
+        allowed = cache[fb_user_id]
+        return allowed is not None and config_id not in allowed
+
+    limits = await _get_user_limits(fb_user_id)
+    cap = limits["line_groups"]
+    if _is_unlimited(cap):
+        cache[fb_user_id] = None
+        return False
+    if _db_pool is None:
+        cache[fb_user_id] = None
+        return False
+    async with _db_pool.acquire() as conn:
+        over_since = await conn.fetchval(
+            "SELECT over_limit_since FROM subscriptions WHERE fb_user_id = $1",
+            fb_user_id,
+        )
+    if over_since is None:
+        cache[fb_user_id] = None
+        return False
+    if datetime.now(timezone.utc) < over_since + timedelta(days=GRACE_PERIOD_DAYS):
+        cache[fb_user_id] = None
+        return False
+    # Grace expired AND user has been over → keep only the oldest cap
+    # configs alive. created_at sort means new additions are blocked
+    # first, which matches the user's mental model (they remember the
+    # ones they set up early).
+    async with _db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT c.id::text AS id FROM campaign_line_push_configs c
+            JOIN line_groups g ON g.group_id = c.group_id
+            JOIN line_channels ch ON ch.id = g.channel_id
+            WHERE ch.owner_fb_user_id = $1
+            ORDER BY c.created_at ASC
+            LIMIT $2
+            """,
+            fb_user_id,
+            cap,
+        )
+    allowed = {r["id"] for r in rows}
+    cache[fb_user_id] = allowed
+    return config_id not in allowed
+
+
 async def _get_group_owner(group_id: str) -> Optional[str]:
     """Return the owner fb_user_id for a given LINE group via its
     channel ownership. Used by the scheduler to look up the user
@@ -2116,12 +2177,79 @@ def _tier_limit_error(resource: str, limit: int, tier: str, message: str) -> HTT
     )
 
 
+# Days the user keeps full access after their usage first goes over
+# the new tier's cap (typically because they downgraded). Mirrors the
+# SaaS-standard "grace period" pattern — gives the user a window to
+# trim resources or change their mind without immediately losing
+# functionality. After expiry, the scheduler stops firing the excess
+# push configs (which is the only resource that incurs ongoing cost).
+GRACE_PERIOD_DAYS = 30
+
+
+async def _refresh_over_limit_since(fb_user_id: str, usage: dict, limits: dict) -> Optional[datetime]:
+    """Lazily maintain the `over_limit_since` timestamp on the
+    subscriptions row. Called from /api/billing/usage so the grace
+    timer starts the first time we observe an over-limit state and
+    clears as soon as the user trims back under the cap.
+
+    Returns the current `over_limit_since` value (after potential
+    update) so the caller can compute `grace_expires_at`."""
+    if _db_pool is None or not fb_user_id:
+        return None
+    over = any(
+        not _is_unlimited(limits[k]) and usage[k] > limits[k]
+        for k in ("ad_accounts", "line_channels", "line_groups")
+    )
+    async with _db_pool.acquire() as conn:
+        existing = await conn.fetchval(
+            "SELECT over_limit_since FROM subscriptions WHERE fb_user_id = $1",
+            fb_user_id,
+        )
+        if over and existing is None:
+            now = datetime.now(timezone.utc)
+            await conn.execute(
+                "UPDATE subscriptions SET over_limit_since = $1 WHERE fb_user_id = $2",
+                now,
+                fb_user_id,
+            )
+            return now
+        if not over and existing is not None:
+            await conn.execute(
+                "UPDATE subscriptions SET over_limit_since = NULL WHERE fb_user_id = $1",
+                fb_user_id,
+            )
+            return None
+        return existing
+
+
 @app.get("/api/billing/usage")
 async def get_billing_usage(fb_user_id: str = Query(...)):
     """Return the user's tier limits + current usage for each capped
     resource. Frontend uses this to render "X / Y 已使用" indicators
-    and decide whether to disable / intercept Add buttons."""
+    and decide whether to disable / intercept Add buttons.
+
+    Also surfaces grace-period state when the user is currently
+    above one or more caps (typically post-downgrade): we maintain
+    `over_limit_since` lazily here so the timer starts immediately
+    on the first usage check after they go over."""
     limits = await _get_user_limits(fb_user_id)
+    usage = {
+        "ad_accounts": await _count_selected_accounts(fb_user_id),
+        "line_channels": await _count_line_channels(fb_user_id),
+        "line_groups": await _count_user_push_configs(fb_user_id),
+        "monthly_push": await _count_monthly_pushes(fb_user_id),
+    }
+    over_since = await _refresh_over_limit_since(fb_user_id, usage, {
+        "ad_accounts": limits["ad_accounts"],
+        "line_channels": limits["line_channels"],
+        "line_groups": limits["line_groups"],
+        "monthly_push": limits["monthly_push"],
+    })
+    grace_expires_at: Optional[datetime] = None
+    grace_expired = False
+    if over_since is not None:
+        grace_expires_at = over_since + timedelta(days=GRACE_PERIOD_DAYS)
+        grace_expired = datetime.now(timezone.utc) >= grace_expires_at
     return {
         "data": {
             "tier": limits["tier"],
@@ -2131,11 +2259,12 @@ async def get_billing_usage(fb_user_id: str = Query(...)):
                 "line_groups": limits["line_groups"],
                 "monthly_push": limits["monthly_push"],
             },
-            "usage": {
-                "ad_accounts": await _count_selected_accounts(fb_user_id),
-                "line_channels": await _count_line_channels(fb_user_id),
-                "line_groups": await _count_user_push_configs(fb_user_id),
-                "monthly_push": await _count_monthly_pushes(fb_user_id),
+            "usage": usage,
+            "grace": {
+                "over_limit_since": over_since.isoformat() if over_since else None,
+                "expires_at": grace_expires_at.isoformat() if grace_expires_at else None,
+                "expired": grace_expired,
+                "period_days": GRACE_PERIOD_DAYS,
             },
         }
     }
@@ -5238,6 +5367,11 @@ async def _scheduler_tick() -> None:
                     [r["id"] for r in due],
                 )
 
+    # Per-tick cache so we only resolve allowed-config sets / limits
+    # once per owner even if many of their configs are due in the
+    # same tick.
+    _grace_cache: dict[str, Optional[set]] = {}
+
     for row in due:
         cfg = _config_row_to_dict(row)
         # Tier limit gate: skip the push when the owning user has
@@ -5246,6 +5380,46 @@ async def _scheduler_tick() -> None:
         # on the next tick (which would just hit the same cap).
         owner_uid = await _get_group_owner(cfg["group_id"])
         if owner_uid:
+            # Grace-period gate (line_groups cap): once the user has
+            # been over their tier's line_groups cap for >30 days, only
+            # the OLDEST N configs (N = cap) are still allowed to fire.
+            # The rest are skipped here so they don't burn the user's
+            # monthly_push budget on configs they no longer pay for.
+            blocked = await _grace_blocked(
+                owner_uid, str(cfg["id"]), _grace_cache
+            )
+            if blocked:
+                next_run_skip = _compute_next_run(
+                    cfg["frequency"],
+                    cfg["weekdays"],
+                    cfg["month_day"],
+                    cfg["hour"],
+                    cfg["minute"],
+                )
+                err_msg = "已超過方案 LINE 群組推播上限,寬限期已結束,本次跳過"
+                async with _db_pool.acquire() as conn:
+                    await conn.execute(
+                        """
+                        UPDATE campaign_line_push_configs
+                        SET last_run_at = $1, next_run_at = $2,
+                            last_error = $3, updated_at = NOW()
+                        WHERE id = $4::uuid
+                        """,
+                        now,
+                        next_run_skip,
+                        err_msg,
+                        cfg["id"],
+                    )
+                    await conn.execute(
+                        """
+                        INSERT INTO line_push_logs (config_id, success, error)
+                        VALUES ($1::uuid, FALSE, $2)
+                        """,
+                        cfg["id"],
+                        err_msg,
+                    )
+                print(f"[scheduler] grace-expired skip: {cfg['id']}", flush=True)
+                continue
             owner_limits = await _get_user_limits(owner_uid)
             push_cap = owner_limits["monthly_push"]
             if not _is_unlimited(push_cap):
