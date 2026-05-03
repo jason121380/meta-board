@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, List
 from zoneinfo import ZoneInfo
 import asyncio
+import traceback
 import base64
 import hashlib
 import hmac
@@ -2013,39 +2014,32 @@ async def _get_user_limits(fb_user_id: str) -> dict:
     }
     if _db_pool is None or not fb_user_id:
         return free_limits
+    # SELECT * + dict access so a missing `agent_advice_limit`
+    # column (lifespan migration hasn't fired yet on this pod) is
+    # tolerated by the .get() fallback below instead of crashing the
+    # query with "column does not exist".
     async with _db_pool.acquire() as conn:
         row = await conn.fetchrow(
-            """
-            SELECT tier, status,
-                   ad_accounts_limit, line_channels_limit,
-                   line_groups_limit, monthly_push_limit,
-                   agent_advice_limit
-            FROM subscriptions
-            WHERE fb_user_id = $1
-            """,
+            "SELECT * FROM subscriptions WHERE fb_user_id = $1",
             fb_user_id,
         )
     if not row or str(row["status"] or "").lower() == "canceled":
         return free_limits
+    row_d = dict(row)
     return {
-        "tier": row["tier"] or "free",
-        "ad_accounts": int(row["ad_accounts_limit"] or 0),
-        "line_channels": int(row["line_channels_limit"] or 0),
-        "line_groups": int(row["line_groups_limit"] or 0),
+        "tier": row_d.get("tier") or "free",
+        "ad_accounts": int(row_d.get("ad_accounts_limit") or 0),
+        "line_channels": int(row_d.get("line_channels_limit") or 0),
+        "line_groups": int(row_d.get("line_groups_limit") or 0),
         "monthly_push": (
             _UNLIMITED_SENTINEL
-            if row["monthly_push_limit"] is None
-            else int(row["monthly_push_limit"])
+            if row_d.get("monthly_push_limit") is None
+            else int(row_d["monthly_push_limit"])
         ),
-        # NULL in DB = unlimited (mirrors monthly_push); 0 = no access
-        # (free tier). When the column doesn't exist yet on legacy
-        # rows asyncpg returns None, which we map to unlimited only
-        # for paid tiers — free defaults to 0 above so this branch
-        # only fires for grandfathered paid subscriptions.
         "agent_advice": (
-            _tier_default_agent_advice(row["tier"])
-            if row["agent_advice_limit"] is None
-            else int(row["agent_advice_limit"])
+            _tier_default_agent_advice(row_d.get("tier"))
+            if row_d.get("agent_advice_limit") is None
+            else int(row_d["agent_advice_limit"])
         ),
     }
 
@@ -5827,25 +5821,53 @@ async def _call_one_agent(
         "generationConfig": {"temperature": 0.6, "maxOutputTokens": 800},
     }
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-    r = await _http_client.post(
-        url,
-        json=payload,
-        headers={"x-goog-api-key": GEMINI_API_KEY},
-        timeout=_POST_TIMEOUT,
-    )
-    data = r.json()
+    try:
+        r = await _http_client.post(
+            url,
+            json=payload,
+            headers={"x-goog-api-key": GEMINI_API_KEY},
+            timeout=_POST_TIMEOUT,
+        )
+    except httpx.TimeoutException:
+        raise RuntimeError("Gemini API 回應逾時(>60s)")
+    except httpx.RequestError as e:
+        raise RuntimeError(f"無法連線 Gemini API: {e.__class__.__name__}")
+
+    # Gemini sometimes returns a 4xx/5xx with a JSON body, sometimes
+    # with text. Try JSON first, fall back to status code + truncated
+    # body so the per-card error message tells us exactly what went
+    # wrong (e.g. "model not found", "quota exceeded", "API key
+    # invalid"). Without this we just see "API 500: HTTP 500" with
+    # zero context on the root cause.
+    try:
+        data = r.json()
+    except Exception:
+        snippet = (r.text or "")[:200]
+        raise RuntimeError(f"Gemini HTTP {r.status_code}: {snippet or '(empty body)'}")
+
     if "error" in data:
-        raise RuntimeError(data["error"].get("message", "Gemini error"))
+        msg = data["error"].get("message", "Gemini error") if isinstance(data["error"], dict) else str(data["error"])
+        raise RuntimeError(f"Gemini {r.status_code}: {msg} (model={GEMINI_MODEL})")
+    if r.status_code >= 400:
+        raise RuntimeError(f"Gemini HTTP {r.status_code}: {str(data)[:200]}")
+
     candidates = data.get("candidates") or []
     if not candidates:
-        raise RuntimeError("Gemini 回傳空結果")
+        # Sometimes happens on safety blocks — surface promptFeedback
+        # if Google included it.
+        feedback = data.get("promptFeedback") or {}
+        block_reason = feedback.get("blockReason") if isinstance(feedback, dict) else None
+        raise RuntimeError(
+            f"Gemini 回傳空結果(blockReason={block_reason or 'unknown'})"
+        )
     text = (
         candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
         if isinstance(candidates[0], dict)
         else ""
     )
     if not text:
-        raise RuntimeError("Gemini 回傳空文字")
+        finish = candidates[0].get("finishReason") if isinstance(candidates[0], dict) else None
+        raise RuntimeError(f"Gemini 回傳空文字(finishReason={finish or 'unknown'})")
     return text.strip()
 
 
@@ -5856,15 +5878,20 @@ async def run_optimization_agents(req: RunAgentsRequest):
     ONE quota use against the user's monthly `agent_advice_limit`.
 
     Quota:
-      - free  → 0 (always 403, prompts upgrade)
-      - basic → 1 / month
-      - plus  → 4 / month
+      - free  → 3 lifetime trial runs
+      - basic → 2 / month
+      - plus  → 6 / month
       - max   → unlimited
 
     Resilience: if at least one agent succeeds we record a row in
     `agent_advice_runs` (= quota consumed) and return a mixed
     success/error array. If ALL 5 fail we don't write the row, so a
     Gemini outage doesn't burn the user's monthly allowance.
+
+    The whole body runs inside a try/except that converts any
+    unhandled exception to a 502 with a useful message — without it
+    the frontend just sees "API 500: HTTP 500" and we have no way
+    to root-cause from outside the Zeabur logs.
     """
     if not req.fb_user_id:
         raise HTTPException(status_code=401, detail="Missing fb_user_id")
@@ -5873,7 +5900,14 @@ async def run_optimization_agents(req: RunAgentsRequest):
     if not req.campaigns:
         raise HTTPException(status_code=400, detail="目前沒有可分析的行銷活動")
 
-    limits = await _get_user_limits(req.fb_user_id)
+    try:
+        limits = await _get_user_limits(req.fb_user_id)
+    except Exception as exc:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=502,
+            detail=f"讀取方案配額失敗:{exc.__class__.__name__}: {exc}",
+        )
     cap = limits["agent_advice"]
     if cap == 0:
         raise _tier_limit_error(
@@ -5885,12 +5919,15 @@ async def run_optimization_agents(req: RunAgentsRequest):
     used = 0
     is_free = str(limits["tier"]).lower() == "free"
     if not _is_unlimited(cap):
-        used = await _count_advice_runs_for_quota(req.fb_user_id, limits["tier"])
+        try:
+            used = await _count_advice_runs_for_quota(req.fb_user_id, limits["tier"])
+        except Exception as exc:
+            traceback.print_exc()
+            raise HTTPException(
+                status_code=502,
+                detail=f"讀取使用次數失敗:{exc.__class__.__name__}: {exc}",
+            )
         if used >= cap:
-            # Wording differs by period: free tier exhausts a
-            # lifetime trial allowance, paid tiers exhaust a monthly
-            # reset. Both end up in the upgrade modal — the message
-            # is what differs.
             if is_free:
                 msg = f"免費試用 {cap} 次已用完,請升級方案以繼續使用 AI 幕僚"
             else:
@@ -5927,16 +5964,20 @@ async def run_optimization_agents(req: RunAgentsRequest):
             advice.append({"agent_id": meta["id"], "advice_md": r, "error": None})
             success_count += 1
 
-    # Don't penalise the user for a Gemini outage — only record the
-    # quota use when at least one agent came back with usable text.
     new_used = used
     if success_count > 0 and _db_pool is not None:
-        async with _db_pool.acquire() as conn:
-            await conn.execute(
-                "INSERT INTO agent_advice_runs (fb_user_id) VALUES ($1)",
-                req.fb_user_id,
-            )
-        new_used = used + 1
+        try:
+            async with _db_pool.acquire() as conn:
+                await conn.execute(
+                    "INSERT INTO agent_advice_runs (fb_user_id) VALUES ($1)",
+                    req.fb_user_id,
+                )
+            new_used = used + 1
+        except Exception as exc:
+            # Don't fail the whole response over a quota-log write —
+            # the user has the advice in hand. Just log it.
+            traceback.print_exc()
+            print(f"[agents] failed to record run: {exc}", flush=True)
 
     return {
         "data": {
