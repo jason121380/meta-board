@@ -726,6 +726,78 @@ export const api = {
      *  Cached indefinitely — only changes on a deploy. */
     agents: () =>
       request<{ data: AgentMeta[] }>("GET", "/api/optimization/agents"),
+    /** Streaming variant — emits NDJSON, one event per agent as it
+     *  completes (instead of blocking on the slowest of 5). Same
+     *  quota semantics as runAgents. The caller hands in two
+     *  callbacks: onAgent fires per agent, onDone fires once at
+     *  the end with the new quota state. Throws ApiError for any
+     *  pre-flight 4xx (auth, quota exhausted, no campaigns) so the
+     *  existing tier-limit modal flow keeps working — those don't
+     *  arrive through the stream. */
+    runAgentsStream: async (
+      input: { fbUserId: string; dateLabel: string; campaigns: AgentCampaignDigest[] },
+      callbacks: {
+        onAgent: (msg: { agent_id: string; advice_md: string | null; error: string | null }) => void;
+        onDone: (msg: { quota: { used_this_month: number; limit: number; tier: TierId } }) => void;
+        signal?: AbortSignal;
+      },
+    ): Promise<void> => {
+      const resp = await fetch("/api/optimization/run-agents-stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fb_user_id: input.fbUserId,
+          date_label: input.dateLabel,
+          campaigns: input.campaigns,
+        }),
+        signal: callbacks.signal,
+      });
+      if (!resp.ok) {
+        // Mirror request()'s ApiError shape so tierLimitFromError()
+        // (which reads err.body.code === "tier_limit_exceeded") still
+        // works on a 403 from the streaming endpoint.
+        let body: unknown = null;
+        try {
+          body = await resp.json();
+        } catch {
+          /* non-JSON */
+        }
+        const detail =
+          body && typeof body === "object" && "detail" in (body as Record<string, unknown>)
+            ? (body as { detail: unknown }).detail
+            : null;
+        const message =
+          typeof detail === "string"
+            ? detail
+            : detail && typeof detail === "object" && "message" in detail
+              ? String((detail as { message: unknown }).message)
+              : `HTTP ${resp.status}`;
+        throw new ApiError(resp.status, message, detail ?? body);
+      }
+      const reader = resp.body?.getReader();
+      if (!reader) throw new ApiError(0, "瀏覽器不支援串流回應");
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      // NDJSON: one JSON object per line. Buffer partial lines
+      // across reads; decoder is in stream mode so multibyte UTF-8
+      // chars don't get split mid-character.
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nlIdx = buffer.indexOf("\n");
+        while (nlIdx !== -1) {
+          const line = buffer.slice(0, nlIdx).trim();
+          buffer = buffer.slice(nlIdx + 1);
+          if (line) {
+            const msg = JSON.parse(line);
+            if (msg.type === "agent_done") callbacks.onAgent(msg);
+            else if (msg.type === "done") callbacks.onDone(msg);
+          }
+          nlIdx = buffer.indexOf("\n");
+        }
+      }
+    },
     /** Click-to-generate fan-out. Backend issues 5 parallel Gemini
      *  calls (one per expert) and returns them as one response.
      *  Counts as ONE quota use against `agent_advice_limit`. */
