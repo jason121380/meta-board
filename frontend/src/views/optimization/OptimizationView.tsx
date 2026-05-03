@@ -113,6 +113,7 @@ export function OptimizationView() {
   const quotaExhausted = !isUnlimited && remaining <= 0;
   const canGenerate = digests.length > 0 && !runMutation.isPending && !quotaExhausted;
   const isFirstRun = Object.keys(cards).length === 0;
+  const isLifetime = usage?.agent_advice_period === "lifetime";
 
   return (
     <>
@@ -149,6 +150,7 @@ export function OptimizationView() {
               adviceLimit={adviceLimit}
               adviceUsed={adviceUsed}
               isUnlimited={isUnlimited}
+              isLifetime={isLifetime}
               campaignsCount={digests.length}
               onGenerate={() => runMutation.mutate()}
             />
@@ -181,6 +183,9 @@ interface ActionBarProps {
   adviceLimit: number;
   adviceUsed: number;
   isUnlimited: boolean;
+  /** True for Free tier (lifetime trial). Drives "免費試用" label
+   *  instead of "本月". */
+  isLifetime: boolean;
   campaignsCount: number;
   onGenerate: () => void;
 }
@@ -194,12 +199,19 @@ function ActionBar({
   adviceLimit,
   adviceUsed,
   isUnlimited,
+  isLifetime,
   campaignsCount,
   onGenerate,
 }: ActionBarProps) {
   const quotaLabel = isUnlimited
-    ? "本月無限次"
-    : `本月已用 ${adviceUsed} / ${adviceLimit} 次`;
+    ? "無限次"
+    : isLifetime
+      ? `免費試用已用 ${adviceUsed} / ${adviceLimit} 次`
+      : `本月已用 ${adviceUsed} / ${adviceLimit} 次`;
+
+  // The wording when the user runs out shifts depending on whether
+  // the quota refills next month or never (free trial).
+  const exhaustedLabel = isLifetime ? "試用次數已用完" : "本月已用完";
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-border bg-white p-4 md:flex-row md:items-center md:justify-between md:p-5">
@@ -223,7 +235,7 @@ function ActionBar({
               : "text-[12px] text-gray-500"
           }
         >
-          {blockedByTier ? "Free 方案不含此功能" : quotaLabel}
+          {blockedByTier ? "目前方案不含此功能" : quotaLabel}
         </span>
         <Button
           variant="primary"
@@ -238,7 +250,7 @@ function ActionBar({
                 ? "升級以使用 →"
                 : "產生分析"
               : quotaExhausted
-                ? "本月已用完"
+                ? exhaustedLabel
                 : "重新產生"}
         </Button>
       </div>

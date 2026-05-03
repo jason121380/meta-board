@@ -140,15 +140,19 @@ function PlanCard({
 }) {
   const isCurrent = currentTier === tier.tier && currentStatus !== "canceled";
   const savings = tier.price_monthly_full - tier.price_monthly;
-  // AI 幕僚 quota — 0 means the tier doesn't include the feature at
-  // all (we render a blocked label instead of "0 次").
+  // AI 幕僚 quota copy. Free is a LIFETIME trial allowance ("試用 N
+  // 次"), paid tiers are monthly ("每月 N 次"), Max is unlimited.
+  // adviceLimit === 0 only happens if a tier was deliberately set
+  // to exclude the feature (shouldn't currently — Free starts at 3).
   const adviceLimit = tier.agent_advice_limit;
   const adviceLine =
     adviceLimit === -1
       ? "AI 幕僚:無限分析次數"
       : adviceLimit === 0
         ? "AI 幕僚:✗ 不包含"
-        : `AI 幕僚:每月 ${adviceLimit} 次分析`;
+        : tier.tier === "free"
+          ? `AI 幕僚:免費試用 ${adviceLimit} 次`
+          : `AI 幕僚:每月 ${adviceLimit} 次分析`;
 
   const features = [
     `${tier.ad_accounts_limit === -1 ? "無限" : tier.ad_accounts_limit} 個廣告帳戶`,
