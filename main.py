@@ -5560,6 +5560,218 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage]
     context: Optional[str] = None  # ad data summary from frontend
 
+# ── 成效優化中心 — 5-agent advisor board ─────────────────────────
+#
+# Each agent is a persona (system-prompt) borrowed from
+# msitarzewski/agency-agents under the paid-media + marketing +
+# support divisions. The persona body lives on disk under
+# agent_personas/ so it can be edited without redeploying code.
+# Loaded once at first /api/optimization/agents call into a module-
+# level cache.
+
+AGENT_META = [
+    {
+        "id": "social_strategist",
+        "name_zh": "社群策略專家",
+        "name_en": "Paid Social Strategist",
+        "role_zh": "Meta 跨平台策略 / 漏斗結構 / Audience 工程",
+        "emoji": "📱",
+        "color": "#3b82f6",
+        "filename": "social_strategist.md",
+    },
+    {
+        "id": "creative_strategist",
+        "name_zh": "素材策略專家",
+        "name_en": "Ad Creative Strategist",
+        "role_zh": "Hook-Body-CTA / A/B 測試 / 素材疲勞偵測",
+        "emoji": "✍️",
+        "color": "#f59e0b",
+        "filename": "creative_strategist.md",
+    },
+    {
+        "id": "auditor",
+        "name_zh": "稽核專家",
+        "name_en": "Paid Media Auditor",
+        "role_zh": "200+ checkpoint / Severity / 美金影響估算",
+        "emoji": "📋",
+        "color": "#a855f7",
+        "filename": "auditor.md",
+    },
+    {
+        "id": "growth_hacker",
+        "name_zh": "成長駭客",
+        "name_en": "Growth Hacker",
+        "role_zh": "漏斗 / LTV:CAC / A/B 實驗 / 病毒迴圈",
+        "emoji": "🚀",
+        "color": "#10b981",
+        "filename": "growth_hacker.md",
+    },
+    {
+        "id": "analytics_reporter",
+        "name_zh": "數據分析師",
+        "name_en": "Analytics Reporter",
+        "role_zh": "KPI / 統計顯著性 / 預測模型 / 數據說故事",
+        "emoji": "📊",
+        "color": "#0891b2",
+        "filename": "analytics_reporter.md",
+    },
+]
+
+_AGENT_PROMPTS_CACHE: Optional[dict] = None
+
+
+def _load_agent_prompts() -> dict:
+    """Read the 5 persona markdown files into memory once. Cached
+    at module level so every advice request after the first is a
+    pure dict lookup."""
+    global _AGENT_PROMPTS_CACHE
+    if _AGENT_PROMPTS_CACHE is not None:
+        return _AGENT_PROMPTS_CACHE
+    out: dict = {}
+    base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_personas")
+    for meta in AGENT_META:
+        path = os.path.join(base, meta["filename"])
+        try:
+            with open(path, encoding="utf-8") as f:
+                out[meta["id"]] = f.read()
+        except Exception as exc:
+            print(f"[agents] failed to load {meta['id']}: {exc}", flush=True)
+            out[meta["id"]] = ""
+    _AGENT_PROMPTS_CACHE = out
+    return out
+
+
+@app.get("/api/optimization/agents")
+async def list_optimization_agents():
+    """Return the 5 expert agents' display metadata (no system
+    prompts — those are server-side only)."""
+    return {"data": [{k: v for k, v in m.items() if k != "filename"} for m in AGENT_META]}
+
+
+class CampaignDigest(BaseModel):
+    """Compact snapshot of one campaign that the frontend ships up
+    with each agent-advice request. Keeps the prompt small enough
+    that the LLM can read 30+ campaigns in one pass."""
+
+    name: str
+    account_name: Optional[str] = None
+    objective: Optional[str] = None
+    status: Optional[str] = None
+    spend: float = 0
+    impressions: float = 0
+    clicks: float = 0
+    ctr: float = 0
+    cpc: float = 0
+    frequency: float = 0
+    msgs: int = 0
+    msg_cost: float = 0
+
+
+class AgentAdviceRequest(BaseModel):
+    agent_id: str
+    date_label: str
+    campaigns: List[CampaignDigest]
+
+
+def _format_campaigns_for_prompt(campaigns: List[CampaignDigest]) -> str:
+    """Render the campaigns as a markdown table that fits inside the
+    prompt context. Sort by spend so the model focuses on high-impact
+    campaigns first; cap at 30 rows so the prompt stays under ~3KB."""
+    sorted_campaigns = sorted(campaigns, key=lambda c: c.spend, reverse=True)[:30]
+    lines = [
+        "| 行銷活動 | 帳號 | 狀態 | 目標 | 花費 | 曝光 | 點擊 | CTR | CPC | 頻次 | 私訊 | 私訊成本 |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    for c in sorted_campaigns:
+        lines.append(
+            f"| {c.name} | {c.account_name or '-'} | {c.status or '-'} | {c.objective or '-'} "
+            f"| ${c.spend:,.0f} | {int(c.impressions):,} | {int(c.clicks):,} "
+            f"| {c.ctr:.2f}% | ${c.cpc:.2f} | {c.frequency:.2f} "
+            f"| {c.msgs} | {f'${c.msg_cost:.0f}' if c.msgs > 0 else '-'} |"
+        )
+    return "\n".join(lines)
+
+
+@app.post("/api/optimization/agent-advice")
+async def get_agent_advice(req: AgentAdviceRequest):
+    """Generate one expert agent's analysis of the user's currently
+    visible campaigns. The agent's persona markdown becomes the
+    Gemini system prompt; the user prompt is a markdown table of
+    the top 30 campaigns by spend.
+
+    Each agent runs independently — the frontend issues 5 parallel
+    requests so the columns stream in as each completes."""
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=503, detail="Gemini API key 未設定")
+    prompts = _load_agent_prompts()
+    persona = prompts.get(req.agent_id)
+    meta = next((m for m in AGENT_META if m["id"] == req.agent_id), None)
+    if not persona or not meta:
+        raise HTTPException(status_code=400, detail=f"Unknown agent: {req.agent_id}")
+    if not req.campaigns:
+        raise HTTPException(status_code=400, detail="No campaigns to analyse")
+
+    table = _format_campaigns_for_prompt(req.campaigns)
+    system_prompt = (
+        f"{persona}\n\n"
+        "---\n\n"
+        "以下是使用者的 Facebook 廣告活動資料,請以你的專業角度分析並給出建議。"
+        "全程使用繁體中文回答(專業術語可保留英文)。"
+        "回答格式要求:"
+        "\n1. 開頭一段 2-3 句的整體診斷"
+        "\n2. 接下來 3-5 條具體可執行的建議,每條用 `- **標題**: 內容` 的 markdown 條列"
+        "\n3. 每條建議盡量提到具體的活動名稱或帳號"
+        "\n4. 結尾用 1 句總結最該優先處理的事"
+        "\n5. 回答控制在 250 字以內,簡潔有力,避免廢話"
+    )
+    user_prompt = (
+        f"資料區間: {req.date_label}\n"
+        f"活動數: {len(req.campaigns)}(下表顯示花費 Top {min(30, len(req.campaigns))})\n\n"
+        f"{table}"
+    )
+
+    payload = {
+        "system_instruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+        "generationConfig": {"temperature": 0.6, "maxOutputTokens": 800},
+    }
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+    try:
+        r = await _http_client.post(
+            url,
+            json=payload,
+            headers={"x-goog-api-key": GEMINI_API_KEY},
+            timeout=_POST_TIMEOUT,
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Gemini API timeout")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"無法連線 Gemini: {e}")
+
+    try:
+        data = r.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail=f"Gemini returned non-JSON ({r.status_code})")
+    if "error" in data:
+        raise HTTPException(status_code=400, detail=data["error"].get("message", "Gemini error"))
+    candidates = data.get("candidates") or []
+    if not candidates:
+        raise HTTPException(status_code=502, detail="Gemini 回傳空結果")
+    text = (
+        candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        if isinstance(candidates[0], dict)
+        else ""
+    )
+    if not text:
+        raise HTTPException(status_code=502, detail="Gemini 回傳空文字")
+    return {
+        "data": {
+            "agent_id": req.agent_id,
+            "advice_md": text.strip(),
+        }
+    }
+
+
 @app.post("/api/ai/chat")
 async def ai_chat(req: ChatRequest):
     if not GEMINI_API_KEY:
