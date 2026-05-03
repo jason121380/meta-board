@@ -726,25 +726,34 @@ export const api = {
      *  Cached indefinitely — only changes on a deploy. */
     agents: () =>
       request<{ data: AgentMeta[] }>("GET", "/api/optimization/agents"),
-    /** Generate one expert's analysis of the current campaign set.
-     *  The response is markdown; render it with the lightweight
-     *  Markdown component bundled in OptimizationView. */
-    agentAdvice: (input: {
-      agentId: string;
+    /** Click-to-generate fan-out. Backend issues 5 parallel Gemini
+     *  calls (one per expert) and returns them as one response.
+     *  Counts as ONE quota use against `agent_advice_limit`. */
+    runAgents: (input: {
+      fbUserId: string;
       dateLabel: string;
       campaigns: AgentCampaignDigest[];
     }) =>
-      request<{ data: { agent_id: string; advice_md: string } }>(
-        "POST",
-        "/api/optimization/agent-advice",
-        {
-          body: {
-            agent_id: input.agentId,
-            date_label: input.dateLabel,
-            campaigns: input.campaigns,
-          },
+      request<{
+        data: {
+          advice: Array<{
+            agent_id: string;
+            advice_md: string | null;
+            error: string | null;
+          }>;
+          quota: {
+            used_this_month: number;
+            limit: number;
+            tier: TierId;
+          };
+        };
+      }>("POST", "/api/optimization/run-agents", {
+        body: {
+          fb_user_id: input.fbUserId,
+          date_label: input.dateLabel,
+          campaigns: input.campaigns,
         },
-      ),
+      }),
   },
 
   billing: {
@@ -773,7 +782,12 @@ export const api = {
   },
 };
 
-export type LimitResource = "ad_accounts" | "line_channels" | "line_groups" | "monthly_push";
+export type LimitResource =
+  | "ad_accounts"
+  | "line_channels"
+  | "line_groups"
+  | "monthly_push"
+  | "agent_advice";
 
 export interface BillingUsage {
   tier: TierId;
@@ -845,6 +859,9 @@ export interface PricingTier {
   line_channels_limit: number;
   line_groups_limit: number;
   monthly_push_limit: number;
+  /** AI 幕僚 monthly run quota. 0 = not included in this tier;
+   *  -1 = unlimited (Max). */
+  agent_advice_limit: number;
 }
 
 export interface PricingConfigResponse {

@@ -462,6 +462,24 @@ async def lifespan(app: FastAPI):
                 await conn.execute(
                     "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS over_limit_since TIMESTAMPTZ"
                 )
+                await conn.execute(
+                    "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS agent_advice_limit INT"
+                )
+                # Per-user log of "Generate" button clicks on the
+                # 成效優化中心 page. Each row = ONE quota use (one
+                # click fans out to all 5 agents in parallel).
+                await conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS agent_advice_runs (
+                        id BIGSERIAL PRIMARY KEY,
+                        fb_user_id TEXT NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+                await conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_agent_advice_runs_user_month ON agent_advice_runs (fb_user_id, created_at)"
+                )
                 # `billing_events`: webhook idempotency log + audit
                 # trail. Polar can re-deliver events; the unique
                 # constraint on polar_event_id makes ingest a no-op
@@ -1833,6 +1851,7 @@ TIER_CONFIGS: dict = {
         "line_channels_limit": 0,
         "line_groups_limit": 0,
         "monthly_push_limit": 0,
+        "agent_advice_limit": 0,
         "polar_product_id": "",
     },
     "basic": {
@@ -1844,6 +1863,7 @@ TIER_CONFIGS: dict = {
         "line_channels_limit": 1,
         "line_groups_limit": 3,
         "monthly_push_limit": 30,
+        "agent_advice_limit": 1,
         "polar_product_id": POLAR_PRODUCT_ID_BASIC,
     },
     "plus": {
@@ -1855,6 +1875,7 @@ TIER_CONFIGS: dict = {
         "line_channels_limit": 3,
         "line_groups_limit": 15,
         "monthly_push_limit": 100,
+        "agent_advice_limit": 4,
         "polar_product_id": POLAR_PRODUCT_ID_PLUS,
     },
     "max": {
@@ -1866,6 +1887,7 @@ TIER_CONFIGS: dict = {
         "line_channels_limit": -1,
         "line_groups_limit": -1,
         "monthly_push_limit": -1,
+        "agent_advice_limit": -1,
         "polar_product_id": POLAR_PRODUCT_ID_MAX,
     },
 }
@@ -1881,6 +1903,7 @@ def _free_tier_state() -> dict:
         "line_channels_limit": cfg["line_channels_limit"],
         "line_groups_limit": cfg["line_groups_limit"],
         "monthly_push_limit": cfg["monthly_push_limit"],
+        "agent_advice_limit": cfg["agent_advice_limit"],
         "trial_ends_at": None,
         "current_period_end": None,
         "cancel_at_period_end": False,
@@ -1936,6 +1959,7 @@ async def get_billing_me(fb_user_id: str = Query(...)):
         out["line_channels_limit"] = free["line_channels_limit"]
         out["line_groups_limit"] = free["line_groups_limit"]
         out["monthly_push_limit"] = free["monthly_push_limit"]
+        out["agent_advice_limit"] = free["agent_advice_limit"]
         out["trial_ends_at"] = None
         out["current_period_end"] = None
         out["cancel_at_period_end"] = False
@@ -1981,6 +2005,7 @@ async def _get_user_limits(fb_user_id: str) -> dict:
         "line_channels": free["line_channels_limit"],
         "line_groups": free["line_groups_limit"],
         "monthly_push": free["monthly_push_limit"],
+        "agent_advice": free["agent_advice_limit"],
     }
     if _db_pool is None or not fb_user_id:
         return free_limits
@@ -1989,7 +2014,8 @@ async def _get_user_limits(fb_user_id: str) -> dict:
             """
             SELECT tier, status,
                    ad_accounts_limit, line_channels_limit,
-                   line_groups_limit, monthly_push_limit
+                   line_groups_limit, monthly_push_limit,
+                   agent_advice_limit
             FROM subscriptions
             WHERE fb_user_id = $1
             """,
@@ -2007,7 +2033,27 @@ async def _get_user_limits(fb_user_id: str) -> dict:
             if row["monthly_push_limit"] is None
             else int(row["monthly_push_limit"])
         ),
+        # NULL in DB = unlimited (mirrors monthly_push); 0 = no access
+        # (free tier). When the column doesn't exist yet on legacy
+        # rows asyncpg returns None, which we map to unlimited only
+        # for paid tiers — free defaults to 0 above so this branch
+        # only fires for grandfathered paid subscriptions.
+        "agent_advice": (
+            _tier_default_agent_advice(row["tier"])
+            if row["agent_advice_limit"] is None
+            else int(row["agent_advice_limit"])
+        ),
     }
+
+
+def _tier_default_agent_advice(tier: Optional[str]) -> int:
+    """Resolve the agent_advice cap from the tier name when the
+    `agent_advice_limit` column is NULL on a row (typical for
+    rows written before this column existed). Avoids a destructive
+    backfill at deploy time."""
+    cfg = TIER_CONFIGS.get(str(tier or "free").lower()) or TIER_CONFIGS["free"]
+    raw = int(cfg["agent_advice_limit"])
+    return _UNLIMITED_SENTINEL if raw == -1 else raw
 
 
 async def _count_selected_accounts(fb_user_id: str) -> int:
@@ -2055,6 +2101,27 @@ async def _count_user_push_configs(fb_user_id: str) -> int:
             WHERE ch.owner_fb_user_id = $1
             """,
             fb_user_id,
+        )
+    return int(n or 0)
+
+
+async def _count_monthly_advice_runs(fb_user_id: str) -> int:
+    """Number of 成效優化中心 generation clicks this user has fired
+    so far this calendar month (UTC). One row in `agent_advice_runs`
+    = one click = one quota use (fans out to all 5 agents in
+    parallel on the backend)."""
+    if _db_pool is None or not fb_user_id:
+        return 0
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    async with _db_pool.acquire() as conn:
+        n = await conn.fetchval(
+            """
+            SELECT COUNT(*) FROM agent_advice_runs
+            WHERE fb_user_id = $1 AND created_at >= $2
+            """,
+            fb_user_id,
+            month_start,
         )
     return int(n or 0)
 
@@ -2238,7 +2305,13 @@ async def get_billing_usage(fb_user_id: str = Query(...)):
         "line_channels": await _count_line_channels(fb_user_id),
         "line_groups": await _count_user_push_configs(fb_user_id),
         "monthly_push": await _count_monthly_pushes(fb_user_id),
+        "agent_advice": await _count_monthly_advice_runs(fb_user_id),
     }
+    # Grace period only watches the three "stock" resources (the ones
+    # the user explicitly configured) — monthly_push and agent_advice
+    # are flow-based metrics that reset every month, so going over
+    # them just means the rest of the month is gated, not that the
+    # user has zombie data sitting around past their plan.
     over_since = await _refresh_over_limit_since(fb_user_id, usage, {
         "ad_accounts": limits["ad_accounts"],
         "line_channels": limits["line_channels"],
@@ -2258,6 +2331,7 @@ async def get_billing_usage(fb_user_id: str = Query(...)):
                 "line_channels": limits["line_channels"],
                 "line_groups": limits["line_groups"],
                 "monthly_push": limits["monthly_push"],
+                "agent_advice": limits["agent_advice"],
             },
             "usage": usage,
             "grace": {
@@ -2531,8 +2605,9 @@ async def _apply_subscription_event(payload: dict) -> Optional[str]:
                cancel_at_period_end,
                ad_accounts_limit, line_channels_limit,
                line_groups_limit, monthly_push_limit,
+               agent_advice_limit,
                updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
             ON CONFLICT (fb_user_id) DO UPDATE SET
               polar_customer_id = COALESCE(EXCLUDED.polar_customer_id, subscriptions.polar_customer_id),
               polar_subscription_id = COALESCE(EXCLUDED.polar_subscription_id, subscriptions.polar_subscription_id),
@@ -2545,6 +2620,7 @@ async def _apply_subscription_event(payload: dict) -> Optional[str]:
               line_channels_limit = EXCLUDED.line_channels_limit,
               line_groups_limit = EXCLUDED.line_groups_limit,
               monthly_push_limit = EXCLUDED.monthly_push_limit,
+              agent_advice_limit = EXCLUDED.agent_advice_limit,
               updated_at = NOW()
             """,
             fb_user_id,
@@ -2559,6 +2635,7 @@ async def _apply_subscription_event(payload: dict) -> Optional[str]:
             _limit(cfg["line_channels_limit"]),
             _limit(cfg["line_groups_limit"]),
             None if cfg["monthly_push_limit"] == -1 else int(cfg["monthly_push_limit"]),
+            None if cfg["agent_advice_limit"] == -1 else int(cfg["agent_advice_limit"]),
         )
     return fb_user_id
 
@@ -2583,8 +2660,9 @@ async def _apply_customer_event(payload: dict) -> Optional[str]:
             INSERT INTO subscriptions
               (fb_user_id, polar_customer_id, tier, status,
                ad_accounts_limit, line_channels_limit,
-               line_groups_limit, monthly_push_limit)
-            VALUES ($1, $2, 'free', 'free', 1, 0, 0, 0)
+               line_groups_limit, monthly_push_limit,
+               agent_advice_limit)
+            VALUES ($1, $2, 'free', 'free', 1, 0, 0, 0, 0)
             ON CONFLICT (fb_user_id) DO UPDATE SET
               polar_customer_id = COALESCE(subscriptions.polar_customer_id, EXCLUDED.polar_customer_id),
               updated_at = NOW()
@@ -5667,8 +5745,11 @@ class CampaignDigest(BaseModel):
     msg_cost: float = 0
 
 
-class AgentAdviceRequest(BaseModel):
-    agent_id: str
+class RunAgentsRequest(BaseModel):
+    """Single click on the 成效優化中心 「產生分析」 button.
+    Counts as one quota use against `agent_advice_limit`."""
+
+    fb_user_id: str
     date_label: str
     campaigns: List[CampaignDigest]
 
@@ -5692,26 +5773,22 @@ def _format_campaigns_for_prompt(campaigns: List[CampaignDigest]) -> str:
     return "\n".join(lines)
 
 
-@app.post("/api/optimization/agent-advice")
-async def get_agent_advice(req: AgentAdviceRequest):
-    """Generate one expert agent's analysis of the user's currently
-    visible campaigns. The agent's persona markdown becomes the
-    Gemini system prompt; the user prompt is a markdown table of
-    the top 30 campaigns by spend.
-
-    Each agent runs independently — the frontend issues 5 parallel
-    requests so the columns stream in as each completes."""
-    if not GEMINI_API_KEY:
-        raise HTTPException(status_code=503, detail="Gemini API key 未設定")
-    prompts = _load_agent_prompts()
-    persona = prompts.get(req.agent_id)
-    meta = next((m for m in AGENT_META if m["id"] == req.agent_id), None)
-    if not persona or not meta:
-        raise HTTPException(status_code=400, detail=f"Unknown agent: {req.agent_id}")
-    if not req.campaigns:
-        raise HTTPException(status_code=400, detail="No campaigns to analyse")
-
-    table = _format_campaigns_for_prompt(req.campaigns)
+async def _call_one_agent(
+    persona: str,
+    table: str,
+    date_label: str,
+    n_campaigns: int,
+) -> str:
+    """Issue one Gemini POST with the persona as the system prompt.
+    Caller wraps with asyncio.gather so all 5 agents run in
+    parallel — each Gemini call is ~5-10s, total wall time stays
+    near the slowest single agent."""
+    if not persona:
+        # Persona file missing on disk — bubble up so the per-card
+        # error displays "persona 載入失敗" instead of a misleading
+        # generic Gemini failure. Most likely cause: the
+        # agent_personas/ folder didn't ship in the deploy bundle.
+        raise RuntimeError("persona 內容空白(deploy 未包含 agent_personas 檔案?)")
     system_prompt = (
         f"{persona}\n\n"
         "---\n\n"
@@ -5725,49 +5802,126 @@ async def get_agent_advice(req: AgentAdviceRequest):
         "\n5. 回答控制在 250 字以內,簡潔有力,避免廢話"
     )
     user_prompt = (
-        f"資料區間: {req.date_label}\n"
-        f"活動數: {len(req.campaigns)}(下表顯示花費 Top {min(30, len(req.campaigns))})\n\n"
+        f"資料區間: {date_label}\n"
+        f"活動數: {n_campaigns}(下表顯示花費 Top {min(30, n_campaigns)})\n\n"
         f"{table}"
     )
-
     payload = {
         "system_instruction": {"parts": [{"text": system_prompt}]},
         "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
         "generationConfig": {"temperature": 0.6, "maxOutputTokens": 800},
     }
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-    try:
-        r = await _http_client.post(
-            url,
-            json=payload,
-            headers={"x-goog-api-key": GEMINI_API_KEY},
-            timeout=_POST_TIMEOUT,
-        )
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Gemini API timeout")
-    except httpx.RequestError as e:
-        raise HTTPException(status_code=502, detail=f"無法連線 Gemini: {e}")
-
-    try:
-        data = r.json()
-    except Exception:
-        raise HTTPException(status_code=502, detail=f"Gemini returned non-JSON ({r.status_code})")
+    r = await _http_client.post(
+        url,
+        json=payload,
+        headers={"x-goog-api-key": GEMINI_API_KEY},
+        timeout=_POST_TIMEOUT,
+    )
+    data = r.json()
     if "error" in data:
-        raise HTTPException(status_code=400, detail=data["error"].get("message", "Gemini error"))
+        raise RuntimeError(data["error"].get("message", "Gemini error"))
     candidates = data.get("candidates") or []
     if not candidates:
-        raise HTTPException(status_code=502, detail="Gemini 回傳空結果")
+        raise RuntimeError("Gemini 回傳空結果")
     text = (
         candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
         if isinstance(candidates[0], dict)
         else ""
     )
     if not text:
-        raise HTTPException(status_code=502, detail="Gemini 回傳空文字")
+        raise RuntimeError("Gemini 回傳空文字")
+    return text.strip()
+
+
+@app.post("/api/optimization/run-agents")
+async def run_optimization_agents(req: RunAgentsRequest):
+    """Fan out the user's currently visible campaigns to all 5
+    expert agents in parallel and return their advice. Counts as
+    ONE quota use against the user's monthly `agent_advice_limit`.
+
+    Quota:
+      - free  → 0 (always 403, prompts upgrade)
+      - basic → 1 / month
+      - plus  → 4 / month
+      - max   → unlimited
+
+    Resilience: if at least one agent succeeds we record a row in
+    `agent_advice_runs` (= quota consumed) and return a mixed
+    success/error array. If ALL 5 fail we don't write the row, so a
+    Gemini outage doesn't burn the user's monthly allowance.
+    """
+    if not req.fb_user_id:
+        raise HTTPException(status_code=401, detail="Missing fb_user_id")
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=503, detail="Gemini API key 未設定")
+    if not req.campaigns:
+        raise HTTPException(status_code=400, detail="目前沒有可分析的行銷活動")
+
+    limits = await _get_user_limits(req.fb_user_id)
+    cap = limits["agent_advice"]
+    if cap == 0:
+        raise _tier_limit_error(
+            "agent_advice",
+            0,
+            limits["tier"],
+            "Free 方案無法使用「成效優化中心 AI 分析」,請升級至 Basic 以上",
+        )
+    used = 0
+    if not _is_unlimited(cap):
+        used = await _count_monthly_advice_runs(req.fb_user_id)
+        if used >= cap:
+            raise _tier_limit_error(
+                "agent_advice",
+                cap,
+                limits["tier"],
+                f"本月 AI 分析配額已用完 ({used}/{cap}),請升級方案或下個月再試",
+            )
+
+    prompts = _load_agent_prompts()
+    table = _format_campaigns_for_prompt(req.campaigns)
+    n = len(req.campaigns)
+
+    tasks = [
+        _call_one_agent(prompts.get(meta["id"], ""), table, req.date_label, n)
+        for meta in AGENT_META
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    advice = []
+    success_count = 0
+    for meta, r in zip(AGENT_META, results):
+        if isinstance(r, BaseException):
+            advice.append(
+                {
+                    "agent_id": meta["id"],
+                    "advice_md": None,
+                    "error": str(r) or r.__class__.__name__,
+                }
+            )
+        else:
+            advice.append({"agent_id": meta["id"], "advice_md": r, "error": None})
+            success_count += 1
+
+    # Don't penalise the user for a Gemini outage — only record the
+    # quota use when at least one agent came back with usable text.
+    new_used = used
+    if success_count > 0 and _db_pool is not None:
+        async with _db_pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO agent_advice_runs (fb_user_id) VALUES ($1)",
+                req.fb_user_id,
+            )
+        new_used = used + 1
+
     return {
         "data": {
-            "agent_id": req.agent_id,
-            "advice_md": text.strip(),
+            "advice": advice,
+            "quota": {
+                "used_this_month": new_used,
+                "limit": cap,
+                "tier": limits["tier"],
+            },
         }
     }
 
