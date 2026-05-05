@@ -4546,11 +4546,11 @@ async def _build_flex_for_config(cfg: dict) -> dict:
             _fmt_money(cost_per_link_click_f) if cost_per_link_click_f > 0 else "—",
         ),
         "add_to_cart": (
-            "加購數",
+            "加入購物車",
             _fmt_int(atc_n) if atc_n > 0 else "—",
         ),
         "cost_per_add_to_cart": (
-            "加購成本",
+            "加入購物車成本",
             _fmt_money(cost_per_atc_f) if cost_per_atc_f > 0 else "—",
         ),
         "purchases": (
