@@ -28,6 +28,7 @@ export function ShareReportPage() {
     customTo,
     useSpendPlus,
     markupPercent,
+    showRecommendations,
   } = useMemo(() => parseUrl(), []);
 
   // When the LINE push sent us explicit `from` / `to` query params
@@ -91,6 +92,7 @@ export function ShareReportPage() {
               date={date}
               useSpendPlus={useSpendPlus}
               markupPercent={markupPercent}
+              showRecommendations={showRecommendations}
             />
           )}
         </div>
@@ -110,6 +112,10 @@ function parseUrl(): {
   customTo: string | null;
   useSpendPlus: boolean;
   markupPercent: number;
+  /** ?advice=0 explicitly hides the「優化建議」 block. Default true
+   *  so legacy share links and dashboard-modal links keep the
+   *  recommendations visible. */
+  showRecommendations: boolean;
 } {
   if (typeof window === "undefined") {
     return {
@@ -121,6 +127,7 @@ function parseUrl(): {
       customTo: null,
       useSpendPlus: false,
       markupPercent: 0,
+      showRecommendations: true,
     };
   }
   const path = window.location.pathname;
@@ -143,6 +150,8 @@ function parseUrl(): {
   const useSpendPlus = params.get("plus") === "1";
   const rawMkp = Number.parseFloat(params.get("mkp") ?? "");
   const markupPercent = Number.isFinite(rawMkp) && rawMkp > 0 ? rawMkp : 0;
+  // Default true — only an explicit `?advice=0` hides recommendations.
+  const showRecommendations = params.get("advice") !== "0";
   return {
     campaignId,
     accountId,
@@ -152,6 +161,7 @@ function parseUrl(): {
     customTo,
     useSpendPlus,
     markupPercent,
+    showRecommendations,
   };
 }
 

@@ -4481,6 +4481,7 @@ def _share_url_for_config(
     date_range: str,
     date_from: Any = None,
     date_to: Any = None,
+    include_recommendations: bool = True,
 ) -> Optional[str]:
     """Build the public /r/<campaign_id> share URL when PUBLIC_SITE_URL
     is configured. Returns None otherwise — the caller will simply omit
@@ -4508,6 +4509,13 @@ def _share_url_for_config(
         # preset behaviour so old links keep working.
         preset = _SHARE_DATE_PRESET.get(date_range, "this_month")
         params = {"acct": account_id, "date": preset}
+    # Mirror the push config's include_recommendations toggle to the
+    # share page so the「優化建議」block hides on the public report
+    # whenever the operator opted out of advice in the LINE flex.
+    # Only emit `advice=0` (explicit hide) — default true on the share
+    # page means legacy links keep showing recommendations.
+    if not include_recommendations:
+        params["advice"] = "0"
     qs = urlencode(params)
     return f"{PUBLIC_SITE_URL}/r/{quote(campaign_id, safe='')}?{qs}"
 
@@ -4786,8 +4794,17 @@ async def _build_flex_for_config(cfg: dict) -> dict:
     # Pass date_from / date_to so the share page lands on the same
     # reporting window as the push (custom / month_to_yesterday /
     # last_14d would otherwise be downgraded by _SHARE_DATE_PRESET).
+    # `include_recommendations` is mirrored so the share page hides
+    # the「優化建議」block whenever the LINE flex did.
     report_url = (
-        _share_url_for_config(account_id, campaign_id, date_range, date_from, date_to)
+        _share_url_for_config(
+            account_id,
+            campaign_id,
+            date_range,
+            date_from,
+            date_to,
+            include_recommendations=bool(cfg.get("include_recommendations")),
+        )
         if cfg.get("include_report_button")
         else None
     )
