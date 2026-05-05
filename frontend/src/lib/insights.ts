@@ -56,3 +56,60 @@ export function sumAction(item: FbBaseEntity, type: string): number {
 export function spendOf(item: FbBaseEntity): number {
   return Number(getIns(item).spend || 0);
 }
+
+const PURCHASE_TYPES = [
+  "omni_purchase",
+  "offsite_conversion.fb_pixel_purchase",
+  "purchase",
+] as const;
+
+const ATC_TYPES = [
+  "omni_add_to_cart",
+  "offsite_conversion.fb_pixel_add_to_cart",
+  "add_to_cart",
+] as const;
+
+/** Walk a priority list of action_types and return the first match's
+ * value as a number. Used for both counts (actions[]) and computed
+ * values (cost_per_action_type[], purchase_roas[]) which all share
+ * the {action_type, value} shape. */
+function firstActionValue(
+  items: { action_type: string; value: string }[] | undefined,
+  candidates: readonly string[],
+): number {
+  if (!items) return 0;
+  for (const type of candidates) {
+    const hit = items.find((a) => a.action_type === type);
+    if (hit) return Number(hit.value) || 0;
+  }
+  return 0;
+}
+
+export function getPurchaseCount(item: FbBaseEntity): number {
+  return firstActionValue(getIns(item).actions, PURCHASE_TYPES);
+}
+
+export function getAtcCount(item: FbBaseEntity): number {
+  return firstActionValue(getIns(item).actions, ATC_TYPES);
+}
+
+export function getCostPerPurchase(item: FbBaseEntity): number {
+  return firstActionValue(getIns(item).cost_per_action_type, PURCHASE_TYPES);
+}
+
+export function getCostPerAtc(item: FbBaseEntity): number {
+  return firstActionValue(getIns(item).cost_per_action_type, ATC_TYPES);
+}
+
+export function getLinkClicks(item: FbBaseEntity): number {
+  return Number(getIns(item).inline_link_clicks || 0);
+}
+
+export function getCostPerLinkClick(item: FbBaseEntity): number {
+  return Number(getIns(item).cost_per_inline_link_click || 0);
+}
+
+export function getRoas(item: FbBaseEntity): number {
+  const ins = getIns(item);
+  return firstActionValue(ins.purchase_roas ?? ins.website_purchase_roas, PURCHASE_TYPES);
+}

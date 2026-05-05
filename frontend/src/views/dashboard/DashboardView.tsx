@@ -14,6 +14,7 @@ import { useUiStore } from "@/stores/uiStore";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { AccountPanel } from "./AccountPanel";
 import type { BudgetModalTarget } from "./BudgetModal";
+import { ColumnPickerPopover } from "./ColumnPickerPopover";
 import { StatsGrid } from "./StatsGrid";
 import { TreeTable } from "./TreeTable";
 
@@ -201,6 +202,10 @@ export function DashboardView() {
             />
             只顯示有花費
           </label>
+          <span className="hidden md:inline">
+            <TopbarSeparator />
+          </span>
+          <ColumnPickerPopover />
         </div>
       </Topbar>
 

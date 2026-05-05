@@ -8,6 +8,7 @@ import { fM, fN, fP } from "@/lib/format";
 import { getIns, getMsgCount } from "@/lib/insights";
 import type { FbCreativeEntity, FbEntityStatus } from "@/types/fb";
 import { Suspense, lazy, memo, useEffect, useState } from "react";
+import { ExtraTreeCells } from "./ExtraTreeCells";
 
 // The preview modal pulls in <video>, usePostMedia, usePageInfo, and
 // FB-post-style header rendering — ~5KB of JS + its own query hooks.
@@ -38,9 +39,10 @@ export interface CreativeRowProps {
    *  root — undefined for flat views (素材比較) where there is no
    *  single parent campaign. */
   campaignName?: string;
+  extras: string[];
 }
 
-function CreativeRowInner({ creative, multiAcct, campaignName }: CreativeRowProps) {
+function CreativeRowInner({ creative, multiAcct, campaignName, extras }: CreativeRowProps) {
   const ins = getIns(creative);
   const msgs = getMsgCount(creative);
   const spend = Number(ins.spend) || 0;
@@ -127,6 +129,7 @@ function CreativeRowInner({ creative, multiAcct, campaignName }: CreativeRowProp
         <td className="num">{fM(ins.cpc)}</td>
         <td className="num">{msgs > 0 ? fN(msgs) : "—"}</td>
         <td className="num">{msgs > 0 ? `$${fM(spend / msgs)}` : "—"}</td>
+        <ExtraTreeCells entity={creative} extras={extras} />
         <td className="muted">—</td>
         <td onClick={(e) => e.stopPropagation()}>
           <Toggle

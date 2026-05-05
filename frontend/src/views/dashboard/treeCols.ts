@@ -1,4 +1,14 @@
-import { getIns, getMsgCount } from "@/lib/insights";
+import {
+  getAtcCount,
+  getCostPerAtc,
+  getCostPerLinkClick,
+  getCostPerPurchase,
+  getIns,
+  getLinkClicks,
+  getMsgCount,
+  getPurchaseCount,
+  getRoas,
+} from "@/lib/insights";
 import type { FbBaseEntity } from "@/types/fb";
 
 /**
@@ -65,6 +75,13 @@ export type TreeColKey =
   | "cpc"
   | "msg"
   | "msgcost"
+  | "link_clicks"
+  | "cost_per_link_click"
+  | "add_to_cart"
+  | "cost_per_add_to_cart"
+  | "purchases"
+  | "cost_per_purchase"
+  | "roas"
   | "budget"
   | "actions";
 
@@ -75,7 +92,39 @@ export interface TreeCol {
   sortKey?: (entity: FbBaseEntity) => number;
 }
 
-export function buildTreeCols(multiAcct: boolean): TreeCol[] {
+/** Optional e-commerce columns surfaced via the gear-icon picker.
+ * Order here = order they appear in the table when enabled.
+ * Default-off — empty extras list keeps the legacy 11-column layout. */
+export const EXTRA_TREE_COLS: { key: TreeColKey; label: string }[] = [
+  { key: "link_clicks", label: "連結點擊" },
+  { key: "cost_per_link_click", label: "連結點擊成本" },
+  { key: "add_to_cart", label: "加入購物車" },
+  { key: "cost_per_add_to_cart", label: "加入購物車成本" },
+  { key: "purchases", label: "購買數" },
+  { key: "cost_per_purchase", label: "購買成本" },
+  { key: "roas", label: "ROAS" },
+];
+
+const EXTRA_SORT_KEYS: Partial<Record<TreeColKey, (i: FbBaseEntity) => number>> = {
+  link_clicks: (i) => getLinkClicks(i),
+  cost_per_link_click: (i) => {
+    const v = getCostPerLinkClick(i);
+    return v > 0 ? v : Number.POSITIVE_INFINITY;
+  },
+  add_to_cart: (i) => getAtcCount(i),
+  cost_per_add_to_cart: (i) => {
+    const v = getCostPerAtc(i);
+    return v > 0 ? v : Number.POSITIVE_INFINITY;
+  },
+  purchases: (i) => getPurchaseCount(i),
+  cost_per_purchase: (i) => {
+    const v = getCostPerPurchase(i);
+    return v > 0 ? v : Number.POSITIVE_INFINITY;
+  },
+  roas: (i) => getRoas(i),
+};
+
+export function buildTreeCols(multiAcct: boolean, extras: string[] = []): TreeCol[] {
   const cols: TreeCol[] = [
     { key: "no", label: "No." },
     { key: "name", label: "名稱", sortKey: (i) => nameRank(i.name) },
@@ -100,8 +149,19 @@ export function buildTreeCols(multiAcct: boolean): TreeCol[] {
         return (Number(getIns(i).spend) || 0) / m;
       },
     },
-    { key: "budget", label: "預算" },
-    { key: "actions", label: "" },
   );
+  // Insert opt-in extras AFTER msgcost, BEFORE budget/actions, in the
+  // order defined by EXTRA_TREE_COLS (so the picker order is stable
+  // regardless of the order the user clicked checkboxes).
+  const enabled = new Set(extras);
+  for (const extra of EXTRA_TREE_COLS) {
+    if (!enabled.has(extra.key)) continue;
+    cols.push({
+      key: extra.key,
+      label: extra.label,
+      sortKey: EXTRA_SORT_KEYS[extra.key],
+    });
+  }
+  cols.push({ key: "budget", label: "預算" }, { key: "actions", label: "" });
   return cols;
 }

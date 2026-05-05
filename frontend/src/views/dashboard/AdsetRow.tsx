@@ -13,6 +13,7 @@ import type { FbAdset, FbEntityStatus } from "@/types/fb";
 import { memo, useEffect, useState } from "react";
 import type { BudgetModalTarget } from "./BudgetModal";
 import { CreativeRow } from "./CreativeRow";
+import { ExtraTreeCells } from "./ExtraTreeCells";
 
 export interface AdsetRowProps {
   adset: FbAdset;
@@ -23,6 +24,7 @@ export interface AdsetRowProps {
   /** Forwarded down to each CreativeRow → CreativePreviewModal so
    *  downloaded files inherit the parent campaign's name. */
   campaignName?: string;
+  extras: string[];
 }
 
 /**
@@ -45,6 +47,7 @@ function AdsetRowInner({
   date,
   onOpenBudget,
   campaignName,
+  extras,
 }: AdsetRowProps) {
   const expanded = useUiStore((s) => s.expandedAdsets.includes(adset.id));
   const toggleAdset = useUiStore((s) => s.toggleAdset);
@@ -117,6 +120,7 @@ function AdsetRowInner({
         <td className="num">{fM(ins.cpc)}</td>
         <td className="num">{msgs > 0 ? fN(msgs) : "—"}</td>
         <td className="num">{msgs > 0 ? `$${fM(spend / msgs)}` : "—"}</td>
+        <ExtraTreeCells entity={adset} extras={extras} />
         <td className="num whitespace-nowrap">{budgetText}</td>
         <td onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center gap-1.5">
@@ -158,6 +162,7 @@ function AdsetRowInner({
           colCount={colCount}
           multiAcct={multiAcct}
           campaignName={campaignName}
+          extras={extras}
         />
       )}
     </>
@@ -171,11 +176,13 @@ function AdsetCreatives({
   colCount,
   multiAcct,
   campaignName,
+  extras,
 }: {
   query: ReturnType<typeof useCreatives>;
   colCount: number;
   multiAcct: boolean;
   campaignName?: string;
+  extras: string[];
 }) {
   if (query.isLoading || query.isPending) {
     return (
@@ -219,6 +226,7 @@ function AdsetCreatives({
           creative={creative}
           multiAcct={multiAcct}
           campaignName={campaignName}
+          extras={extras}
         />
       ))}
     </>
