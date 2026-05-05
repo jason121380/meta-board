@@ -57,6 +57,13 @@ export interface ReportContentProps {
    *  finance_row_markups[campaignId] or finance_default_markup at the
    *  time the modal/share-link was created. */
   markupPercent?: number;
+  /** When false the「優化建議」block is hidden. Mirrors the LINE
+   *  push config's `include_recommendations` so a share link sent
+   *  from a config that opted out doesn't surface advice the
+   *  operator deliberately suppressed. Default true preserves the
+   *  legacy share-page behaviour for links generated outside the
+   *  push flow (dashboard report modal). */
+  showRecommendations?: boolean;
 }
 
 export function ReportContent({
@@ -69,6 +76,7 @@ export function ReportContent({
   date,
   useSpendPlus = false,
   markupPercent = 0,
+  showRecommendations = true,
 }: ReportContentProps) {
   const ins = getIns(campaign);
   const msgs = getMsgCount(campaign);
@@ -158,7 +166,7 @@ export function ReportContent({
       </div>
 
       {/* Recommendations narrative */}
-      {recommendations.length > 0 && (
+      {showRecommendations && recommendations.length > 0 && (
         <div className="rounded-xl border border-orange/30 bg-orange-bg/40 px-4 py-3.5">
           <div className="mb-2 text-[13px] font-bold text-orange">優化建議</div>
           <ul className="flex flex-col gap-1.5">
