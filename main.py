@@ -57,6 +57,67 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 # simultaneous requests and routinely triggers 429 rate-limiting.
 _fb_semaphore: asyncio.Semaphore = asyncio.Semaphore(40)
 
+# Per-ad-account in-flight limiter. FB's 80004 throttle is computed
+# per-ad-account, so even when the global _fb_semaphore is well below
+# its 40-cap, 30 calls hitting the SAME account simultaneously can
+# trip the throttle. 4 in-flight per account keeps us under the
+# per-account ceiling on a Limited Access tier and effectively
+# unlimited on Full Access. Only paths that start with `act_<id>`
+# pass through this gate; single-entity by-id calls (campaigns /
+# adsets / ads) bypass since the path doesn't reveal which account
+# owns them and they're rarely the burst culprit.
+_PER_ACCOUNT_CONCURRENCY = 4
+_per_account_semaphores: dict[str, asyncio.Semaphore] = {}
+
+
+class _NullAsyncContext:
+    """No-op async context manager used in place of the per-account
+    semaphore for paths that don't carry an ad-account id. Keeps the
+    `async with (sem if sem else _NULL_CTX)` site free of branching."""
+
+    async def __aenter__(self) -> None:
+        return None
+
+    async def __aexit__(self, *_exc: object) -> None:
+        return None
+
+
+_NULL_CTX = _NullAsyncContext()
+
+
+def _extract_account_id_from_path(path: str) -> Optional[str]:
+    """Pull `act_<id>` from a Graph API path. Returns None when the
+    path doesn't start with an account prefix (e.g. /me, /<page_id>,
+    /<campaign_id>/adsets — the parent account isn't directly
+    addressable from the path)."""
+    if not path or not path.startswith("act_"):
+        return None
+    head = path.split("/", 1)[0]
+    return head if head.startswith("act_") else None
+
+
+def _account_semaphore(account_id: str) -> asyncio.Semaphore:
+    sem = _per_account_semaphores.get(account_id)
+    if sem is None:
+        sem = asyncio.Semaphore(_PER_ACCOUNT_CONCURRENCY)
+        _per_account_semaphores[account_id] = sem
+    return sem
+
+
+# Tracks which (account_id, kind, date_preset, time_range) tuples
+# have been fetched recently. The cache-warm loop reads this to pick
+# entries to refresh just before they expire so user-facing reads
+# always land on warm cache. Entries older than 10 min are skipped
+# (cold accounts don't get re-warmed; this keeps background FB usage
+# bounded by what's actually being looked at).
+_warm_targets: dict[tuple[str, str, str, Optional[str]], float] = {}
+
+# Set whenever we observe an 80004 throttle response. The warm loop
+# checks this and backs off for 10 minutes — the absolute last thing
+# we want is the warm loop poking the throttled account again and
+# extending the lockout.
+_last_ads_throttle_at: float = 0.0
+
 # ── LINE push scheduler ─────────────────────────────────────────────
 # `_scheduler_task` holds the background asyncio task started in
 # lifespan so we can cancel it cleanly on shutdown. The loop ticks
@@ -64,6 +125,7 @@ _fb_semaphore: asyncio.Semaphore = asyncio.Semaphore(40)
 # next_run_at has passed. 3 failures in a row flips `enabled=false`
 # so a broken token doesn't spam the log forever.
 _scheduler_task: Optional[asyncio.Task] = None
+_warm_task: Optional[asyncio.Task] = None
 # Background fire-and-forget tasks (e.g. one-shot LINE group name
 # backfill on startup). We hold strong refs so asyncio doesn't gc
 # them mid-run. Tasks self-discard via `add_done_callback`.
@@ -647,7 +709,7 @@ async def lifespan(app: FastAPI):
 
     # Start the LINE push scheduler loop only when the DB is available.
     # Without DB there's nothing to schedule off, so skip silently.
-    global _scheduler_task
+    global _scheduler_task, _warm_task
     if _db_pool is not None:
         _scheduler_task = asyncio.create_task(_scheduler_loop())
         print(
@@ -664,6 +726,15 @@ async def lifespan(app: FastAPI):
     else:
         print("[startup] scheduler: SKIPPED (no DB)", flush=True)
 
+    # Cache warm-refresh loop runs regardless of DB — it operates on
+    # the in-memory _warm_targets set, no PG state required.
+    _warm_task = asyncio.create_task(_cache_warm_loop())
+    print(
+        f"[startup] cache-warm: running, tick={_WARM_TICK_SECONDS}s,"
+        f" max={_WARM_MAX_PER_TICK}/tick",
+        flush=True,
+    )
+
     yield
 
     if _scheduler_task is not None:
@@ -673,6 +744,13 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
         _scheduler_task = None
+    if _warm_task is not None:
+        _warm_task.cancel()
+        try:
+            await _warm_task
+        except asyncio.CancelledError:
+            pass
+        _warm_task = None
     await _http_client.aclose()
     _http_client = None
     if _db_pool is not None:
@@ -823,8 +901,18 @@ print(
 # In-memory response cache for FB Graph API GETs. The same user
 # typically hits the same (account_id, date_preset) combination across
 # multiple views (Dashboard → Analytics → Finance → Alerts), and FB API
-# calls take 1-3s each. A 60-second TTL turns those repeat hits into
-# instant local lookups while keeping data fresh enough to feel live.
+# calls take 1-3s each. A 5-minute TTL turns repeat hits into instant
+# local lookups while still feeling live for normal interactive use —
+# FB's own insights aggregation only runs hourly on their side, so
+# anything shorter than that buys staleness without buying freshness.
+# This is the dominant lever against the 80004 ad-account throttle:
+# the LINE-push share-button workflow opens a campaign report whose
+# fan-out (campaign + N adsets + N×4 breakdowns + N×ads) totals
+# 40-60+ FB calls; the second open within 5 min hits 0.
+#
+# Mutations (status toggles, budget edits) call _cache_invalidate
+# scoped to the affected account, so freshness for the account being
+# mutated is preserved while unrelated accounts keep their cache.
 #
 # Cache scope is per-token: the key includes a hash of the access token
 # so different users (or token rotations) never see each other's data.
@@ -833,7 +921,7 @@ import json as _json
 import re
 import time
 
-_CACHE_TTL_SECONDS = 60.0
+_CACHE_TTL_SECONDS = 300.0
 # Accounts list changes very rarely (new ad accounts are onboarded
 # manually); keep it cached for 10 minutes to stay well within FB's
 # per-ad-account rate limits (80004). This is the single biggest
@@ -1221,19 +1309,27 @@ async def _fb_fetch_and_cache(
     ``cache_key`` is provided.
     """
     url = f"{BASE_URL}/{path}"
-    async with _fb_semaphore:
-        try:
-            if method == "GET":
-                params = {"access_token": token, **params}
-                r = await _http_client.get(url, params=params, timeout=get_timeout)
-            else:
-                data_payload = {"access_token": token, **data_payload}
-                r = await _http_client.post(url, data=data_payload, timeout=_POST_TIMEOUT)
-        except httpx.TimeoutException as e:
-            raise HTTPException(status_code=504, detail=f"Facebook API timeout: {e}")
-        except httpx.RequestError as e:
-            # Includes ConnectError, ProxyError, NetworkError, etc.
-            raise HTTPException(status_code=502, detail=f"Cannot reach Facebook API: {type(e).__name__}: {e}")
+    # Two-layer throttle: per-account first (cap 4 same-account
+    # in-flight, FB's 80004 ceiling), then global (cap 40 total). Order
+    # matters — we want to BLOCK on the account gate before consuming
+    # a global slot, otherwise a hot account would starve the global
+    # pool. Bypass per-account when path doesn't carry act_*.
+    account_id = _extract_account_id_from_path(path)
+    acct_sem = _account_semaphore(account_id) if account_id else None
+    async with (acct_sem if acct_sem else _NULL_CTX):
+        async with _fb_semaphore:
+            try:
+                if method == "GET":
+                    params = {"access_token": token, **params}
+                    r = await _http_client.get(url, params=params, timeout=get_timeout)
+                else:
+                    data_payload = {"access_token": token, **data_payload}
+                    r = await _http_client.post(url, data=data_payload, timeout=_POST_TIMEOUT)
+            except httpx.TimeoutException as e:
+                raise HTTPException(status_code=504, detail=f"Facebook API timeout: {e}")
+            except httpx.RequestError as e:
+                # Includes ConnectError, ProxyError, NetworkError, etc.
+                raise HTTPException(status_code=502, detail=f"Cannot reach Facebook API: {type(e).__name__}: {e}")
     # Record rate-limit usage regardless of success/error — the header
     # is present on error responses too and is how we know when it's
     # safe to retry.
@@ -1252,6 +1348,12 @@ async def _fb_fetch_and_cache(
         code = err.get("code")
         sub = err.get("error_subcode")
         detail = f"{msg} [code={code}{f' subcode={sub}' if sub else ''}]" if code else msg
+        # Ads-account throttle (80000-80014) — flag globally so the
+        # cache-warm loop backs off and the next 10 minutes of
+        # background activity doesn't extend the lockout.
+        if isinstance(code, int) and 80000 <= code <= 80014:
+            global _last_ads_throttle_at
+            _last_ads_throttle_at = time.monotonic()
         raise HTTPException(status_code=400, detail=detail)
     # Cache successful GET responses
     if cache_key is not None:
@@ -1392,6 +1494,8 @@ async def _fb_get_paginated_fetch(
                     detail = f"{msg} [code={code}]" if code else msg
                     if is_ads_throttle:
                         no_retry = True
+                        global _last_ads_throttle_at
+                        _last_ads_throttle_at = time.monotonic()
                         wait_min = _peak_regain_minutes()
                         if wait_min:
                             detail = f"{detail} [retry_after_minutes={wait_min}]"
@@ -3139,6 +3243,12 @@ async def _fetch_campaigns_for_account(
     decide whether to surface the error or swallow it for a
     partial-success response.
     """
+    # Register as a warm target so the cache-warm loop refreshes this
+    # entry just before TTL expires. Lite-mode reads (skeleton) are
+    # NOT registered — they're cheap and already happen pre-paint, no
+    # need to keep them warm in the background.
+    if not lite:
+        _warm_targets[(account_id, "campaigns", date_preset, time_range)] = time.monotonic()
     ins = _insights_clause(
         "spend,impressions,clicks,ctr,cpc,cpm,frequency,reach,actions,"
         "inline_link_clicks,cost_per_inline_link_click,"
@@ -3599,6 +3709,7 @@ async def _fetch_account_insights(
     takes 10-15s before returning, which was pushing the old 10s
     GET timeout into "sometimes works, sometimes doesn't" territory.
     """
+    _warm_targets[(account_id, "insights", date_preset, time_range)] = time.monotonic()
     params = {
         "fields": "spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions",
     }
@@ -5884,8 +5995,22 @@ async def _scheduler_tick() -> None:
     # same tick.
     _grace_cache: dict[str, Optional[set]] = {}
 
+    # Track the previous config's account so we can spread out
+    # consecutive same-account pushes. FB's 80004 throttle is
+    # per-ad-account; 50 due configs at 09:00 Friday with several
+    # belonging to the same big-client account would otherwise hammer
+    # that account back-to-back. 250ms between same-account pushes
+    # turns "10 calls in 200ms" into "10 calls in 2.5s" — well below
+    # the per-account ceiling without adding meaningful latency to
+    # the user-facing schedule.
+    _last_account_id: Optional[str] = None
+
     for row in due:
         cfg = _config_row_to_dict(row)
+        # Spread out consecutive pushes targeting the same ad account.
+        if _last_account_id and cfg.get("account_id") == _last_account_id:
+            await asyncio.sleep(0.25)
+        _last_account_id = cfg.get("account_id")
         # Tier limit gate: skip the push when the owning user has
         # already used up this calendar month's quota. We log the
         # skip + bump next_run_at so the row doesn't get re-grabbed
@@ -6059,6 +6184,86 @@ async def _scheduler_loop() -> None:
             await asyncio.sleep(SCHEDULER_TICK_SECONDS)
     except asyncio.CancelledError:
         print("[scheduler] stopped", flush=True)
+        raise
+
+
+# ── Cache warm-refresh loop ───────────────────────────────────
+#
+# Refreshes (account, kind, date) tuples that have been accessed in
+# the last 10 minutes AND are within the last 90s of their cache TTL.
+# Goal: keep the working set of accounts users actually look at "always
+# warm" — first dashboard / share-page open lands on a hit instead of
+# paying the FB round-trip latency. The loop is bounded so we never
+# add more than 5 background FB calls per minute, and backs off
+# entirely for 10 minutes after seeing any 80004 throttle response.
+
+_WARM_TICK_SECONDS = 60
+_WARM_RECENT_ACCESS_S = 600  # only refresh entries seen in last 10min
+_WARM_REFRESH_WINDOW_S = 90  # refresh when ≤90s of TTL remains
+_WARM_MAX_PER_TICK = 5
+_WARM_THROTTLE_BACKOFF_S = 600
+
+
+async def _cache_warm_tick() -> None:
+    if get_token() == "":
+        return
+    now = time.monotonic()
+    if _last_ads_throttle_at and (now - _last_ads_throttle_at) < _WARM_THROTTLE_BACKOFF_S:
+        return
+
+    # Pick up to _WARM_MAX_PER_TICK candidates: most-recently-accessed
+    # entries that are entering the last _WARM_REFRESH_WINDOW_S of
+    # their TTL. Older-than-_WARM_RECENT_ACCESS_S entries are dropped
+    # from the warm set to prevent unbounded growth on accounts
+    # nobody's looking at any more.
+    candidates: list[tuple[float, tuple[str, str, str, Optional[str]]]] = []
+    expired_targets: list[tuple[str, str, str, Optional[str]]] = []
+    for key, last_seen in list(_warm_targets.items()):
+        if (now - last_seen) > _WARM_RECENT_ACCESS_S:
+            expired_targets.append(key)
+            continue
+        candidates.append((last_seen, key))
+    for key in expired_targets:
+        _warm_targets.pop(key, None)
+
+    candidates.sort(reverse=True)  # most recent first
+    refreshed = 0
+    for _, (account_id, kind, date_preset, time_range) in candidates:
+        if refreshed >= _WARM_MAX_PER_TICK:
+            break
+        try:
+            if kind == "insights":
+                await _fetch_account_insights(account_id, date_preset, time_range)
+            elif kind == "campaigns":
+                await _fetch_campaigns_for_account(
+                    account_id, date_preset, time_range, include_archived=False, lite=False
+                )
+            refreshed += 1
+        except Exception:
+            # Any failure (incl. fresh 80004) — bail and let the next
+            # tick retry. _last_ads_throttle_at gets set inside the
+            # FB error handler so the next tick's backoff guard fires.
+            return
+        # Spread out the refreshes a little so bursts of warm-loop
+        # activity don't themselves contribute to throttle.
+        await asyncio.sleep(0.5)
+
+
+async def _cache_warm_loop() -> None:
+    """Periodic background cache refresh. Kept lean and conservative —
+    if it ever causes problems it's safe to disable by leaving the
+    task uninstalled."""
+    try:
+        while True:
+            try:
+                await _cache_warm_tick()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                print(f"[warm] tick error: {e}", flush=True)
+            await asyncio.sleep(_WARM_TICK_SECONDS)
+    except asyncio.CancelledError:
+        print("[warm] stopped", flush=True)
         raise
 
 

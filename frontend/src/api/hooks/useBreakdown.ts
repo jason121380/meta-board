@@ -42,6 +42,10 @@ export function useBreakdown(
       return (await api.breakdown.list(level, id, dim, date)).data;
     },
     enabled: enabled && !!id,
-    staleTime: 60_000,
+    // 5 min cache window. Breakdown data updates with the rest of FB
+    // insights (~hourly server-side); a longer window cuts repeat
+    // share-page opens to zero FB calls and keeps us well under the
+    // 80004 per-account throttle.
+    staleTime: 5 * 60_000,
   });
 }

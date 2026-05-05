@@ -16,7 +16,7 @@ import {
 } from "@/lib/insights";
 import { buildCampaignRecommendations, isTrafficObjective } from "@/lib/recommendations";
 import type { FbAdset, FbBaseEntity, FbCampaign, FbCreativeEntity } from "@/types/fb";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { BreakdownInsightStrip } from "./BreakdownInsightStrip";
 
 /**
@@ -332,47 +332,131 @@ export function ReportContent({
         </div>
       )}
 
-      {/* Adsets — auto-expanded. Hide zero-spend ones (paused or
-          never delivered) since their entire row would be a wall of
-          em-dashes that adds noise without insight. */}
-      <div className="flex flex-col gap-3">
+      {/* Adsets — top 3 by spend auto-expand to keep the first paint
+          insight-rich; the rest collapse to a header-only row that
+          can be expanded on demand. Hides FB-call burst by default
+          since each expanded adset fires a breakdown strip + ads
+          list (~5 calls per adset). */}
+      <AdsetSection
+        adsets={adsets}
+        adsetsLoading={adsetsLoading}
+        adsetsError={adsetsError}
+        date={date}
+        hideMoney={hideMoney}
+        money={money}
+        spendMoney={spendMoney}
+        spendLabel={spendLabel}
+        trafficMode={trafficMode}
+        campaignName={campaign.name}
+        applyMarkup={applyMarkup}
+        selectedFields={selectedFields}
+      />
+    </div>
+  );
+}
+
+const DEFAULT_EXPAND_TOP_N = 3;
+
+function AdsetSection({
+  adsets,
+  adsetsLoading,
+  adsetsError,
+  date,
+  hideMoney,
+  money,
+  spendMoney,
+  spendLabel,
+  trafficMode,
+  campaignName,
+  applyMarkup,
+  selectedFields,
+}: {
+  adsets: FbAdset[] | null;
+  adsetsLoading?: boolean;
+  adsetsError?: string | null;
+  date: DateConfig;
+  hideMoney: boolean;
+  money: (v: number | string | null | undefined) => string;
+  spendMoney: (v: number | string | null | undefined) => string;
+  spendLabel: string;
+  trafficMode: boolean;
+  campaignName: string;
+  applyMarkup: (n: number) => number;
+  selectedFields: string[] | null;
+}) {
+  // Sort by spend desc so the top spenders surface first; default-
+  // expand the top N because that's where the operator's eye lands
+  // first and which adsets they'll usually need details on.
+  const visible = (adsets ?? [])
+    .filter((a) => num(getIns(a).spend) > 0)
+    .sort((a, b) => num(getIns(b).spend) - num(getIns(a).spend));
+  const defaultExpandedIds = new Set(
+    visible.slice(0, DEFAULT_EXPAND_TOP_N).map((a) => a.id),
+  );
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(defaultExpandedIds);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rebuild the default set when the visible adsets list itself changes (e.g. date toggle re-fetches a different set)
+  useEffect(() => {
+    setExpandedIds(new Set(visible.slice(0, DEFAULT_EXPAND_TOP_N).map((a) => a.id)));
+  }, [adsets]);
+
+  const toggle = (id: string) =>
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const expandAll = () => setExpandedIds(new Set(visible.map((a) => a.id)));
+  const collapseAll = () => setExpandedIds(new Set());
+
+  const hiddenCount = visible.length - expandedIds.size;
+  const allExpanded = hiddenCount === 0 && visible.length > 0;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-[15px] font-bold text-ink">廣告組合表現</div>
-        {adsetsLoading ? (
-          <div className="rounded-xl border border-border bg-white px-3 py-4 text-[13px] text-gray-300">
-            載入中...
-          </div>
-        ) : adsetsError ? (
-          <div className="rounded-xl border border-border bg-white px-3 py-4 text-[13px] text-red">
-            載入失敗:{adsetsError}
-          </div>
-        ) : (
-          (() => {
-            const visible = (adsets ?? []).filter((a) => num(getIns(a).spend) > 0);
-            if (visible.length === 0) {
-              return (
-                <div className="rounded-xl border border-border bg-white px-3 py-4 text-[13px] text-gray-300">
-                  此區間無花費的廣告組合
-                </div>
-              );
-            }
-            return visible.map((a) => (
-              <AdsetCard
-                key={a.id}
-                adset={a}
-                date={date}
-                hideMoney={hideMoney}
-                money={money}
-                spendMoney={spendMoney}
-                spendLabel={spendLabel}
-                trafficMode={trafficMode}
-                campaignName={campaign.name}
-                applyMarkup={applyMarkup}
-                selectedFields={selectedFields}
-              />
-            ));
-          })()
+        {visible.length > DEFAULT_EXPAND_TOP_N && (
+          <button
+            type="button"
+            onClick={allExpanded ? collapseAll : expandAll}
+            className="text-[12px] text-orange hover:underline"
+          >
+            {allExpanded ? "收合全部" : `展開全部 (${visible.length})`}
+          </button>
         )}
       </div>
+      {adsetsLoading ? (
+        <div className="rounded-xl border border-border bg-white px-3 py-4 text-[13px] text-gray-300">
+          載入中...
+        </div>
+      ) : adsetsError ? (
+        <div className="rounded-xl border border-border bg-white px-3 py-4 text-[13px] text-red">
+          載入失敗:{adsetsError}
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="rounded-xl border border-border bg-white px-3 py-4 text-[13px] text-gray-300">
+          此區間無花費的廣告組合
+        </div>
+      ) : (
+        visible.map((a) => (
+          <AdsetCard
+            key={a.id}
+            adset={a}
+            date={date}
+            hideMoney={hideMoney}
+            money={money}
+            spendMoney={spendMoney}
+            spendLabel={spendLabel}
+            trafficMode={trafficMode}
+            campaignName={campaignName}
+            applyMarkup={applyMarkup}
+            selectedFields={selectedFields}
+            expanded={expandedIds.has(a.id)}
+            onToggle={() => toggle(a.id)}
+          />
+        ))
+      )}
     </div>
   );
 }
@@ -388,6 +472,8 @@ function AdsetCard({
   campaignName,
   applyMarkup,
   selectedFields,
+  expanded,
+  onToggle,
 }: {
   adset: FbAdset;
   date: DateConfig;
@@ -399,6 +485,8 @@ function AdsetCard({
   campaignName: string;
   applyMarkup: (n: number) => number;
   selectedFields: string[] | null;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
   const ai = getIns(adset);
   const am = getMsgCount(adset);
@@ -411,9 +499,22 @@ function AdsetCard({
 
   return (
     <section className="rounded-xl border border-border bg-white p-4 md:p-5">
-      {/* Adset header + mini KPIs */}
-      <div className="mb-4 flex flex-col gap-1.5">
+      {/* Adset header + mini KPIs — clickable to toggle expansion.
+          Collapsed = header only (no breakdown / ads fetch fires);
+          expanded = full insight panel below. */}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className={`-m-1 flex w-[calc(100%+8px)] flex-col gap-1.5 rounded-lg p-1 text-left transition-colors hover:bg-bg ${expanded ? "mb-3" : ""}`}
+      >
         <div className="flex items-center gap-2">
+          <span
+            className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-[10px] text-gray-500"
+            aria-hidden="true"
+          >
+            {expanded ? "▼" : "▶"}
+          </span>
           <Badge status={adset.status} />
           <span className="truncate text-[16px] font-bold text-ink" title={adset.name}>
             {adset.name}
@@ -449,33 +550,37 @@ function AdsetCard({
             </>
           )}
         </div>
-      </div>
+      </button>
 
-      {/* 4-dim audience insight strip */}
-      <div className="mb-4">
-        <div className="mb-2 text-[12px] font-semibold text-gray-500">受眾洞察</div>
-        <BreakdownInsightStrip
-          level="adset"
-          id={adset.id}
-          date={date}
-          hideMoney={hideMoney}
-          ignoreMsgs={trafficMode}
-        />
-      </div>
+      {expanded && (
+        <>
+          {/* 4-dim audience insight strip */}
+          <div className="mb-4">
+            <div className="mb-2 text-[12px] font-semibold text-gray-500">受眾洞察</div>
+            <BreakdownInsightStrip
+              level="adset"
+              id={adset.id}
+              date={date}
+              hideMoney={hideMoney}
+              ignoreMsgs={trafficMode}
+            />
+          </div>
 
-      {/* Ads list */}
-      <AdCards
-        adsetId={adset.id}
-        date={date}
-        money={money}
-        spendMoney={spendMoney}
-        spendLabel={spendLabel}
-        trafficMode={trafficMode}
-        campaignName={campaignName}
-        hideMoney={hideMoney}
-        applyMarkup={applyMarkup}
-        selectedFields={selectedFields}
-      />
+          {/* Ads list */}
+          <AdCards
+            adsetId={adset.id}
+            date={date}
+            money={money}
+            spendMoney={spendMoney}
+            spendLabel={spendLabel}
+            trafficMode={trafficMode}
+            campaignName={campaignName}
+            hideMoney={hideMoney}
+            applyMarkup={applyMarkup}
+            selectedFields={selectedFields}
+          />
+        </>
+      )}
     </section>
   );
 }
