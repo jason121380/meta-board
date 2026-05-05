@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional, List
 from zoneinfo import ZoneInfo
 import asyncio
@@ -4040,28 +4040,48 @@ def _date_range_concrete(
     """Concrete `M/D - M/D` (or single `M/D`) string for the given range,
     in SCHEDULER_TZ. Used for the LINE flex report header subtitle so
     recipients see the exact reporting window."""
+    bounds = _date_range_iso_bounds(date_range, date_from, date_to)
+    if bounds is None:
+        return ""
+    s, u = bounds
+    if s == u:
+        return f"{s.month}/{s.day}"
+    return f"{s.month}/{s.day} - {u.month}/{u.day}"
+
+
+def _date_range_iso_bounds(
+    date_range: str,
+    date_from: Any = None,
+    date_to: Any = None,
+) -> Optional[tuple[date, date]]:
+    """Return concrete (since, until) date objects in SCHEDULER_TZ for any
+    date_range value the LINE push UI can produce. Used both by the
+    Chinese-label helper above and by the share-URL builder so the
+    public `/r/<campaign_id>` page receives the exact reporting window
+    the push covered (instead of a lossy preset like
+    month_to_yesterday → this_month, which silently shifts the cutoff
+    and confuses recipients)."""
     tz = _scheduler_tz()
     today = datetime.now(tz).date()
     if date_range == "yesterday":
         d = today - timedelta(days=1)
-        return f"{d.month}/{d.day}"
+        return (d, d)
     if date_range == "this_month":
-        since = today.replace(day=1)
-        return f"{since.month}/{since.day} - {today.month}/{today.day}"
+        return (today.replace(day=1), today)
     if date_range == "month_to_yesterday":
-        since, until = _month_to_yesterday_bounds()
-        return f"{since.month}/{since.day} - {until.month}/{until.day}"
+        return _month_to_yesterday_bounds()
     if date_range == "custom":
         s = _coerce_date(date_from)
         u = _coerce_date(date_to)
         if s and u:
-            return f"{s.month}/{s.day} - {u.month}/{u.day}"
+            return (s, u)
+        return None
     days = {"last_7d": 7, "last_14d": 14, "last_30d": 30}.get(date_range)
     if days is not None:
         since = today - timedelta(days=days)
         until = today - timedelta(days=1)
-        return f"{since.month}/{since.day} - {until.month}/{until.day}"
-    return ""
+        return (since, until)
+    return None
 
 
 # ── LINE channel helpers (multi-OA) ───────────────────────────
@@ -4455,16 +4475,40 @@ _SHARE_DATE_PRESET = {
 PUBLIC_SITE_URL = os.getenv("PUBLIC_SITE_URL", "").rstrip("/")
 
 
-def _share_url_for_config(account_id: str, campaign_id: str, date_range: str) -> Optional[str]:
+def _share_url_for_config(
+    account_id: str,
+    campaign_id: str,
+    date_range: str,
+    date_from: Any = None,
+    date_to: Any = None,
+) -> Optional[str]:
     """Build the public /r/<campaign_id> share URL when PUBLIC_SITE_URL
     is configured. Returns None otherwise — the caller will simply omit
-    the "查看完整報告" footer button."""
+    the「查看完整報告」 footer button.
+
+    The viewer must see the SAME reporting window as the LINE push that
+    delivered the link. Since the share page only natively supports the
+    7 standard FB presets (today / yesterday / last_7d / last_30d /
+    last_90d / this_month / last_month), date_ranges like
+    `month_to_yesterday`, `last_14d`, or `custom` would otherwise be
+    silently downgraded to `this_month` / `last_30d` and shift the
+    numbers under recipients' eyes. We sidestep that by always
+    concretizing to ISO from/to dates and passing them as `from` /
+    `to` query params, which the share page reads as a custom range."""
     if not PUBLIC_SITE_URL:
         return None
-    preset = _SHARE_DATE_PRESET.get(date_range, "this_month")
     from urllib.parse import quote, urlencode
 
-    qs = urlencode({"acct": account_id, "date": preset})
+    bounds = _date_range_iso_bounds(date_range, date_from, date_to)
+    if bounds is not None:
+        s, u = bounds
+        params = {"acct": account_id, "from": s.isoformat(), "to": u.isoformat()}
+    else:
+        # Fallback for unknown date_range values — preserves the legacy
+        # preset behaviour so old links keep working.
+        preset = _SHARE_DATE_PRESET.get(date_range, "this_month")
+        params = {"acct": account_id, "date": preset}
+    qs = urlencode(params)
     return f"{PUBLIC_SITE_URL}/r/{quote(campaign_id, safe='')}?{qs}"
 
 
@@ -4739,8 +4783,11 @@ async def _build_flex_for_config(cfg: dict) -> dict:
             pass
 
     # Footer button is opt-in per config (column added 2026-04-29).
+    # Pass date_from / date_to so the share page lands on the same
+    # reporting window as the push (custom / month_to_yesterday /
+    # last_14d would otherwise be downgraded by _SHARE_DATE_PRESET).
     report_url = (
-        _share_url_for_config(account_id, campaign_id, date_range)
+        _share_url_for_config(account_id, campaign_id, date_range, date_from, date_to)
         if cfg.get("include_report_button")
         else None
     )

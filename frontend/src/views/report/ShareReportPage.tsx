@@ -19,14 +19,27 @@ import { useMemo } from "react";
  * viewer only sees the report card.
  */
 export function ShareReportPage() {
-  const { campaignId, accountId, initialHide, datePreset, useSpendPlus, markupPercent } = useMemo(
-    () => parseUrl(),
-    [],
-  );
+  const {
+    campaignId,
+    accountId,
+    initialHide,
+    datePreset,
+    customFrom,
+    customTo,
+    useSpendPlus,
+    markupPercent,
+  } = useMemo(() => parseUrl(), []);
 
+  // When the LINE push sent us explicit `from` / `to` query params
+  // (the new behaviour as of 2026-05-05) we render the exact custom
+  // range the push covered. Otherwise fall back to the legacy
+  // `?date=preset` form so existing share links keep working.
   const date: DateConfig = useMemo(
-    () => ({ preset: datePreset, from: null, to: null }),
-    [datePreset],
+    () =>
+      customFrom && customTo
+        ? { preset: "custom", from: customFrom, to: customTo }
+        : { preset: datePreset, from: null, to: null },
+    [datePreset, customFrom, customTo],
   );
 
   // `hideMoney` is now read-only from the URL (?hide=1) — the in-page
@@ -91,6 +104,10 @@ function parseUrl(): {
   accountId: string | null;
   initialHide: boolean;
   datePreset: DatePreset;
+  /** ISO YYYY-MM-DD when the link includes an explicit ?from=. */
+  customFrom: string | null;
+  /** ISO YYYY-MM-DD when the link includes an explicit ?to=. */
+  customTo: string | null;
   useSpendPlus: boolean;
   markupPercent: number;
 } {
@@ -100,6 +117,8 @@ function parseUrl(): {
       accountId: null,
       initialHide: true,
       datePreset: "this_month",
+      customFrom: null,
+      customTo: null,
       useSpendPlus: false,
       markupPercent: 0,
     };
@@ -112,11 +131,32 @@ function parseUrl(): {
   const initialHide = params.get("hide") === "1";
   const rawDate = params.get("date") ?? "this_month";
   const datePreset = isValidPreset(rawDate) ? rawDate : "this_month";
+  // Explicit custom range — take precedence over `date=preset` so the
+  // exact reporting window from the LINE push is preserved end-to-end.
+  // Both must be valid ISO YYYY-MM-DD; if either is malformed we
+  // ignore both and fall back to the preset.
+  const rawFrom = params.get("from");
+  const rawTo = params.get("to");
+  const customFrom = isValidIsoDate(rawFrom) ? rawFrom : null;
+  const customTo = isValidIsoDate(rawTo) ? rawTo : null;
   // 花費 / 花費+% — 由產生連結的操作者決定,接收者看到同一份視圖。
   const useSpendPlus = params.get("plus") === "1";
   const rawMkp = Number.parseFloat(params.get("mkp") ?? "");
   const markupPercent = Number.isFinite(rawMkp) && rawMkp > 0 ? rawMkp : 0;
-  return { campaignId, accountId, initialHide, datePreset, useSpendPlus, markupPercent };
+  return {
+    campaignId,
+    accountId,
+    initialHide,
+    datePreset,
+    customFrom,
+    customTo,
+    useSpendPlus,
+    markupPercent,
+  };
+}
+
+function isValidIsoDate(s: string | null): s is string {
+  return !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
 }
 
 function isValidPreset(s: string): s is DatePreset {
