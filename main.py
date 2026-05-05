@@ -3965,6 +3965,35 @@ def _extract_msg_count(actions: Any) -> int:
     return 0
 
 
+def _extract_action_value(items: Any, candidate_types: tuple[str, ...]) -> float:
+    """Pick the first matching action_type from an actions[]-shaped list
+    and return its .value as float. Works for `actions` (counts),
+    `cost_per_action_type` (per-action cost), and `purchase_roas` /
+    `website_purchase_roas` (ratio). Returns 0.0 when nothing matches."""
+    if not isinstance(items, list):
+        return 0.0
+    for k in candidate_types:
+        for a in items:
+            if isinstance(a, dict) and a.get("action_type") == k:
+                try:
+                    return float(a.get("value", 0))
+                except (TypeError, ValueError):
+                    return 0.0
+    return 0.0
+
+
+_PURCHASE_ACTION_TYPES = (
+    "omni_purchase",
+    "offsite_conversion.fb_pixel_purchase",
+    "purchase",
+)
+_ATC_ACTION_TYPES = (
+    "omni_add_to_cart",
+    "offsite_conversion.fb_pixel_add_to_cart",
+    "add_to_cart",
+)
+
+
 def _fmt_money(v: Any) -> str:
     try:
         n = float(v or 0)
@@ -4420,7 +4449,9 @@ async def _build_flex_for_config(cfg: dict) -> dict:
     date_preset, time_range = _date_range_to_preset(date_range, date_from, date_to)
 
     ins_clause = _insights_clause(
-        "spend,impressions,clicks,ctr,cpc,cpm,frequency,reach,actions",
+        "spend,impressions,clicks,ctr,cpc,cpm,frequency,reach,actions,"
+        "inline_link_clicks,cost_per_inline_link_click,"
+        "cost_per_action_type,purchase_roas,website_purchase_roas",
         date_preset,
         time_range,
     )
@@ -4455,6 +4486,28 @@ async def _build_flex_for_config(cfg: dict) -> dict:
     msgs = _extract_msg_count(ins.get("actions"))
     msg_cost_f = (spend_f / msgs) if msgs > 0 else 0.0
 
+    # E-commerce KPIs. Action-type lookups walk a priority list:
+    # omni_* (cross-platform aggregate) is preferred when present,
+    # falling back to pixel-only or generic. ROAS lives in its own
+    # array shape, with website_purchase_roas as the secondary source
+    # for accounts that only run web pixel conversions.
+    actions_arr = ins.get("actions") or []
+    cost_per_action_arr = ins.get("cost_per_action_type") or []
+    purchases_n = int(_extract_action_value(actions_arr, _PURCHASE_ACTION_TYPES))
+    atc_n = int(_extract_action_value(actions_arr, _ATC_ACTION_TYPES))
+    cost_per_purchase_f = _extract_action_value(cost_per_action_arr, _PURCHASE_ACTION_TYPES)
+    cost_per_atc_f = _extract_action_value(cost_per_action_arr, _ATC_ACTION_TYPES)
+    try:
+        link_clicks_n = int(float(ins.get("inline_link_clicks") or 0))
+    except (TypeError, ValueError):
+        link_clicks_n = 0
+    try:
+        cost_per_link_click_f = float(ins.get("cost_per_inline_link_click") or 0)
+    except (TypeError, ValueError):
+        cost_per_link_click_f = 0.0
+    roas_arr = ins.get("purchase_roas") or ins.get("website_purchase_roas") or []
+    roas_f = _extract_action_value(roas_arr, _PURCHASE_ACTION_TYPES)
+
     objective = camp.get("objective")
     traffic_mode = _is_traffic_objective(objective)
     objective_label = _translate_objective(objective)
@@ -4484,6 +4537,34 @@ async def _build_flex_for_config(cfg: dict) -> dict:
         "reach": ("觸及", _fmt_int(ins.get("reach"))),
         "msgs": ("私訊數", msgs_str),
         "msg_cost": ("私訊成本", msg_cost_str),
+        "link_clicks": (
+            "連結點擊",
+            _fmt_int(link_clicks_n) if link_clicks_n > 0 else "—",
+        ),
+        "cost_per_link_click": (
+            "連結點擊成本",
+            _fmt_money(cost_per_link_click_f) if cost_per_link_click_f > 0 else "—",
+        ),
+        "add_to_cart": (
+            "加購數",
+            _fmt_int(atc_n) if atc_n > 0 else "—",
+        ),
+        "cost_per_add_to_cart": (
+            "加購成本",
+            _fmt_money(cost_per_atc_f) if cost_per_atc_f > 0 else "—",
+        ),
+        "purchases": (
+            "購買數",
+            _fmt_int(purchases_n) if purchases_n > 0 else "—",
+        ),
+        "cost_per_purchase": (
+            "購買成本",
+            _fmt_money(cost_per_purchase_f) if cost_per_purchase_f > 0 else "—",
+        ),
+        "roas": (
+            "ROAS",
+            f"{roas_f:.2f}" if roas_f > 0 else "—",
+        ),
     }
 
     selected = list(cfg.get("report_fields") or [])
