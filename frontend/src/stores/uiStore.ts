@@ -49,6 +49,12 @@ export interface UiState {
    * itself gets the full vertical space. */
   statsCollapsed: boolean;
 
+  /** Codes of optionally-visible tree-table columns the user has
+   * enabled via the gear-icon picker (e-commerce KPIs:
+   * link_clicks / cost_per_link_click / add_to_cart / etc). Default
+   * is empty — new columns are opt-in. Persisted to localStorage. */
+  extraTreeCols: string[];
+
   /** Set by SettingsProvider when the PG hydration completes. Views
    * use this to suppress the "從上方選擇廣告帳戶" empty state during
    * the brief moment between FB account list resolving and the
@@ -75,6 +81,8 @@ export interface UiState {
   toggleStatsCollapsed: () => void;
   setStatsCollapsed: (v: boolean) => void;
 
+  setExtraTreeCols: (codes: string[]) => void;
+
   setSettingsReady: (v: boolean) => void;
 
   /** Reset all ephemeral state — used on logout. */
@@ -91,6 +99,7 @@ const initial = {
   storeSelectedAcctIds: [] as string[],
   acctSidebarCollapsed: false,
   statsCollapsed: false,
+  extraTreeCols: [] as string[],
   settingsReady: false,
 };
 
@@ -145,6 +154,8 @@ export const useUiStore = create<UiState>((set) => ({
   toggleStatsCollapsed: () => set((state) => ({ statsCollapsed: !state.statsCollapsed })),
   setStatsCollapsed: (v) => set({ statsCollapsed: v }),
 
+  setExtraTreeCols: (codes) => set({ extraTreeCols: codes }),
+
   setSettingsReady: (v) => set({ settingsReady: v }),
 
   reset: () => set(initial),
@@ -153,6 +164,7 @@ export const useUiStore = create<UiState>((set) => ({
 const K_SIDEBAR_COLLAPSED = "ui_acct_sidebar_collapsed";
 const K_STATS_COLLAPSED = "ui_stats_collapsed";
 const K_STORE_SELECTED = "store_selected_accounts";
+const K_EXTRA_TREE_COLS = "ui_extra_tree_cols";
 
 /** Hydrate the persisted UI bits (sidebar / stats collapse) from
  * localStorage so the user's preferred layout survives reloads. */
@@ -169,6 +181,13 @@ export function hydrateUiFromStorage(): void {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.every((v) => typeof v === "string")) {
         useUiStore.setState({ storeSelectedAcctIds: parsed });
+      }
+    }
+    const rawExtra = localStorage.getItem(K_EXTRA_TREE_COLS);
+    if (rawExtra) {
+      const parsed = JSON.parse(rawExtra);
+      if (Array.isArray(parsed) && parsed.every((v) => typeof v === "string")) {
+        useUiStore.setState({ extraTreeCols: parsed });
       }
     }
   } catch {
@@ -196,6 +215,13 @@ export function installUiStorageSync(): () => void {
     if (state.storeSelectedAcctIds !== prev.storeSelectedAcctIds) {
       try {
         localStorage.setItem(K_STORE_SELECTED, JSON.stringify(state.storeSelectedAcctIds));
+      } catch {
+        /* quota */
+      }
+    }
+    if (state.extraTreeCols !== prev.extraTreeCols) {
+      try {
+        localStorage.setItem(K_EXTRA_TREE_COLS, JSON.stringify(state.extraTreeCols));
       } catch {
         /* quota */
       }

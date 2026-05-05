@@ -41,7 +41,11 @@ export function ComparisonTable({ multiAcct, date, searchTerm }: ComparisonTable
   const treeSort = useUiStore((s) => s.treeSort);
   const setTreeSort = useUiStore((s) => s.setTreeSort);
 
-  const cols = useMemo(() => buildTreeCols(multiAcct), [multiAcct]);
+  const extraTreeCols = useUiStore((s) => s.extraTreeCols);
+  const cols = useMemo(
+    () => buildTreeCols(multiAcct, extraTreeCols),
+    [multiAcct, extraTreeCols],
+  );
 
   // Subscribe to the adsets queries for every currently-expanded
   // campaign. Purely read-only from this view's perspective — the
@@ -184,7 +188,12 @@ export function ComparisonTable({ multiAcct, date, searchTerm }: ComparisonTable
       </thead>
       <tbody>
         {sorted.map((creative) => (
-          <CreativeRow key={creative.id} creative={creative} multiAcct={multiAcct} />
+          <CreativeRow
+            key={creative.id}
+            creative={creative}
+            multiAcct={multiAcct}
+            extras={extraTreeCols}
+          />
         ))}
         <tr className="border-t border-border bg-bg">
           <td colSpan={multiAcct ? 3 : 2} className="px-3.5 py-2.5 text-[13px] font-bold text-ink">

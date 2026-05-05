@@ -1,7 +1,13 @@
 import { cn } from "@/lib/cn";
 import type { DateConfig } from "@/lib/datePicker";
 import { fM, fN } from "@/lib/format";
-import { getIns, getMsgCount } from "@/lib/insights";
+import {
+  getAtcCount,
+  getIns,
+  getLinkClicks,
+  getMsgCount,
+  getPurchaseCount,
+} from "@/lib/insights";
 import { useUiStore } from "@/stores/uiStore";
 import type { FbCampaign } from "@/types/fb";
 import { useMemo } from "react";
@@ -37,8 +43,12 @@ export function TreeTable({
 }: TreeTableProps) {
   const treeSort = useUiStore((s) => s.treeSort);
   const setTreeSort = useUiStore((s) => s.setTreeSort);
+  const extraTreeCols = useUiStore((s) => s.extraTreeCols);
 
-  const cols = useMemo(() => buildTreeCols(multiAcct), [multiAcct]);
+  const cols = useMemo(
+    () => buildTreeCols(multiAcct, extraTreeCols),
+    [multiAcct, extraTreeCols],
+  );
 
   const filtered = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -70,6 +80,9 @@ export function TreeTable({
   const totalMsgSpend = sorted
     .filter((c) => getMsgCount(c) > 0)
     .reduce((s, c) => s + (Number(getIns(c).spend) || 0), 0);
+  const totalLinkClicks = sorted.reduce((s, c) => s + getLinkClicks(c), 0);
+  const totalAtc = sorted.reduce((s, c) => s + getAtcCount(c), 0);
+  const totalPurchases = sorted.reduce((s, c) => s + getPurchaseCount(c), 0);
 
   return (
     <table className="tree w-full border-collapse text-[13px]">
@@ -90,6 +103,7 @@ export function TreeTable({
             colCount={cols.length}
             date={date}
             onOpenBudget={onOpenBudget}
+            extras={extraTreeCols}
           />
         ))}
         {/* Totals row */}
@@ -107,11 +121,35 @@ export function TreeTable({
           <td className="num text-[13px] font-bold">
             {totalMsgs > 0 ? `$${fM(totalMsgSpend / totalMsgs)}` : "—"}
           </td>
+          {extraTreeCols.map((code) => (
+            <td key={code} className="num text-[13px] font-bold">
+              {totalsCellFor(code, { totalLinkClicks, totalAtc, totalPurchases })}
+            </td>
+          ))}
           <td colSpan={2} />
         </tr>
       </tbody>
     </table>
   );
+}
+
+function totalsCellFor(
+  code: string,
+  totals: { totalLinkClicks: number; totalAtc: number; totalPurchases: number },
+): string {
+  // Aggregate count-based extras only. Per-action costs and ROAS
+  // depend on per-row spend / value relationships that don't sum
+  // meaningfully across campaigns — leave those blank.
+  switch (code) {
+    case "link_clicks":
+      return totals.totalLinkClicks > 0 ? fN(totals.totalLinkClicks) : "—";
+    case "add_to_cart":
+      return totals.totalAtc > 0 ? fN(totals.totalAtc) : "—";
+    case "purchases":
+      return totals.totalPurchases > 0 ? fN(totals.totalPurchases) : "—";
+    default:
+      return "—";
+  }
 }
 
 function TreeHeaderCell({

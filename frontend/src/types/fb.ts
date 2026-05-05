@@ -24,6 +24,11 @@ export interface FbInsights {
   reach?: string;
   frequency?: string;
   actions?: FbAction[];
+  inline_link_clicks?: string;
+  cost_per_inline_link_click?: string;
+  cost_per_action_type?: FbAction[];
+  purchase_roas?: FbAction[];
+  website_purchase_roas?: FbAction[];
 }
 
 export interface FbInsightsEnvelope {

@@ -15,6 +15,7 @@ import type { FbCampaign, FbEntityStatus } from "@/types/fb";
 import { memo, useEffect, useState } from "react";
 import { AdsetRow } from "./AdsetRow";
 import type { BudgetModalTarget } from "./BudgetModal";
+import { ExtraTreeCells } from "./ExtraTreeCells";
 import { ReportModal } from "./ReportModal";
 
 export interface CampaignRowProps {
@@ -24,6 +25,7 @@ export interface CampaignRowProps {
   colCount: number;
   date: DateConfig;
   onOpenBudget: (target: BudgetModalTarget) => void;
+  extras: string[];
 }
 
 /**
@@ -48,6 +50,7 @@ function CampaignRowInner({
   colCount,
   date,
   onOpenBudget,
+  extras,
 }: CampaignRowProps) {
   const expanded = useUiStore((s) => s.expandedCamps.includes(campaign.id));
   const toggleCamp = useUiStore((s) => s.toggleCamp);
@@ -136,6 +139,7 @@ function CampaignRowInner({
         <td className="num">{fM(ins.cpc)}</td>
         <td className="num">{msgs > 0 ? fN(msgs) : "—"}</td>
         <td className="num">{msgs > 0 ? `$${fM(spend / msgs)}` : "—"}</td>
+        <ExtraTreeCells entity={campaign} extras={extras} />
         <td className="num whitespace-nowrap">
           {budgetText ?? <span className="text-[11px] text-orange-muted">廣告組合預算</span>}
         </td>
@@ -209,6 +213,7 @@ function CampaignRowInner({
           date={date}
           onOpenBudget={onOpenBudget}
           campaignName={campaign.name}
+          extras={extras}
         />
       )}
     </>
@@ -224,6 +229,7 @@ function CampaignAdsets({
   date,
   onOpenBudget,
   campaignName,
+  extras,
 }: {
   query: ReturnType<typeof useAdsets>;
   colCount: number;
@@ -231,6 +237,7 @@ function CampaignAdsets({
   date: DateConfig;
   onOpenBudget: (target: BudgetModalTarget) => void;
   campaignName: string;
+  extras: string[];
 }) {
   if (query.isLoading || query.isPending) {
     return (
@@ -275,6 +282,7 @@ function CampaignAdsets({
           date={date}
           onOpenBudget={onOpenBudget}
           campaignName={campaignName}
+          extras={extras}
         />
       ))}
     </>

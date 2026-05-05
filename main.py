@@ -3140,7 +3140,9 @@ async def _fetch_campaigns_for_account(
     partial-success response.
     """
     ins = _insights_clause(
-        "spend,impressions,clicks,ctr,cpc,cpm,frequency,reach,actions",
+        "spend,impressions,clicks,ctr,cpc,cpm,frequency,reach,actions,"
+        "inline_link_clicks,cost_per_inline_link_click,"
+        "cost_per_action_type,purchase_roas,website_purchase_roas",
         date_preset,
         time_range,
     )
@@ -3223,7 +3225,13 @@ async def update_campaign_budget(campaign_id: str, daily_budget: int = Query(Non
 
 @app.get("/api/campaigns/{campaign_id}/adsets")
 async def get_adsets(campaign_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None):
-    ins = _insights_clause("spend,impressions,clicks,ctr,cpc,cpm,frequency,actions", date_preset, time_range)
+    ins = _insights_clause(
+        "spend,impressions,clicks,ctr,cpc,cpm,frequency,actions,"
+        "inline_link_clicks,cost_per_inline_link_click,"
+        "cost_per_action_type,purchase_roas,website_purchase_roas",
+        date_preset,
+        time_range,
+    )
     try:
         data = await fb_get(f"{campaign_id}/adsets", {
             "fields": f"id,name,status,daily_budget,lifetime_budget,{ins}",
@@ -3255,7 +3263,13 @@ async def update_adset_budget(adset_id: str, daily_budget: int = Query(None)):
 
 @app.get("/api/adsets/{adset_id}/ads")
 async def get_ads(adset_id: str, date_preset: str = "last_30d", time_range: Optional[str] = None):
-    ins = _insights_clause("spend,impressions,clicks,ctr,cpc,cpm,actions", date_preset, time_range)
+    ins = _insights_clause(
+        "spend,impressions,clicks,ctr,cpc,cpm,actions,"
+        "inline_link_clicks,cost_per_inline_link_click,"
+        "cost_per_action_type,purchase_roas,website_purchase_roas",
+        date_preset,
+        time_range,
+    )
     last_error: Optional[HTTPException] = None
     # Progressive fallback so a partial failure (e.g. account lacks
     # creative permission) still returns something usable.
@@ -4259,6 +4273,18 @@ def _is_traffic_objective(raw: Optional[str]) -> bool:
     return raw is not None and raw in _TRAFFIC_OBJECTIVES
 
 
+# Field-family classifications used to gate recommendation blocks.
+# Mirrors the codes in `frontend/src/lib/reportFields.ts`. When the
+# user has explicitly selected a set of report_fields for a LINE push,
+# we ONLY run rule blocks whose family intersects that selection — so
+# an e-commerce-focused report doesn't get bombarded with messaging
+# advice that's irrelevant to the recipient.
+_MSG_FIELDS = {"msgs", "msg_cost"}
+_PURCHASE_FIELDS = {"purchases", "cost_per_purchase", "roas"}
+_ATC_FIELDS = {"add_to_cart", "cost_per_add_to_cart"}
+_TRAFFIC_FIELDS = {"link_clicks", "cost_per_link_click"}
+
+
 def _evaluate_alert_recommendations(
     *,
     spend: float,
@@ -4267,46 +4293,73 @@ def _evaluate_alert_recommendations(
     cpc: float,
     frequency: float,
     objective: Optional[str] = None,
-) -> list[str]:
-    """產生 LINE flex 報告的優化建議。私訊優先,CPC/頻次依私訊狀態調整。
+    purchases: int = 0,
+    cost_per_purchase: float = 0.0,
+    roas: float = 0.0,
+    add_to_cart: int = 0,
+    cost_per_add_to_cart: float = 0.0,
+    link_clicks: int = 0,
+    cost_per_link_click: float = 0.0,
+    selected_fields: Optional[List[str]] = None,
+) -> List[str]:
+    """產生 LINE flex 報告的優化建議。建議內容依使用者勾選的 report_fields
+    動態調整 — 訊息類報告就給訊息建議,電商類就給購買/ATC 建議,流量類
+    就給連結點擊建議。沒選 → 視同 legacy 私訊主軸的全套規則。
 
-    私訊成本分段:
+    私訊成本分段(只在 msgs / msg_cost 被選 OR 沒指定時觸發):
         < $100  非常好(以私訊為主軸,忽略 CPC)
         100~200 平均值,維持現狀
         200~300 偏高,待觀察
-        > $300  太高,需優化(連同 CPC 對比評論,忽略頻次)
+        > $300  太高(連同 CPC 對比評論,忽略頻次)
 
-    CPC 分段(只在沒有私訊資料,或私訊成本太高時引用):
-        ≤ $4    好,不評論
-        4~5     偏高,待觀察
-        5~6     可以優化
-        > $6    太高,需調整
+    購買 / ROAS 分段(purchases / cost_per_purchase / roas 被選):
+        ROAS > 4 + 購買 > 0     表現亮眼,擴大預算測試承載
+        ROAS 2~4               平均水準,維持現狀
+        ROAS 1~2               偏低,檢視出價或加價策略
+        ROAS < 1 + 購買 > 0     虧損中,立即優化
+        購買 == 0 + 加購 > 5    結帳/運費勸退,需檢查
+        購買 == 0 + spend>$1k  Pixel 未觸發或受眾不對
 
-    頻次警示:
-        > 5 + spend > $1000  過高
-        > 4 + spend >  $500  偏高
-        但私訊成本 > $300 時整段略過,訊息聚焦私訊問題本身。
+    加購分段(add_to_cart / cost_per_add_to_cart 被選):
+        加購 == 0 + spend > $500  目前無加購訊號,檢查 Pixel/落地頁
+        加購成本 > $200            加購成本偏高,優化前端漏斗
 
-    流量類目標 (objective in _TRAFFIC_OBJECTIVES) 完全跳過私訊邏輯,
-    因為這些 campaign 不是私訊優化的,msgCost 是雜訊。
+    連結點擊分段(link_clicks / cost_per_link_click 被選):
+        cost_per_link_click > $6    太高,需調整素材
+        cost_per_link_click 4~6     可以優化
+        cost_per_link_click 3~4     偏高,待觀察
+
+    CPC + 頻次:msg/purchase 區塊都未觸發時才評論,避免重複建議。
+    流量類目標 (objective in _TRAFFIC_OBJECTIVES) 跳過私訊邏輯,因為
+    這些 campaign 不是私訊優化的,msgCost 是雜訊。
     """
-    out: list[str] = []
+    out: List[str] = []
     traffic_mode = _is_traffic_objective(objective)
-    has_msg = (not traffic_mode) and msgs > 0
+    selected = set(selected_fields or [])
+
+    # Decide which rule families to run. When user hasn't picked any
+    # fields (legacy default config) OR explicitly picked msg fields,
+    # the msg block is on. When user picked NO msg fields but DID
+    # pick e-commerce/traffic fields, suppress msg to keep the report
+    # tightly focused on what they asked for.
+    msg_picked = bool(selected & _MSG_FIELDS)
+    purchase_picked = bool(selected & _PURCHASE_FIELDS)
+    atc_picked = bool(selected & _ATC_FIELDS)
+    traffic_picked = bool(selected & _TRAFFIC_FIELDS)
+    has_explicit_non_msg = purchase_picked or atc_picked or traffic_picked
+    show_msg = (not selected) or msg_picked or (not has_explicit_non_msg)
+
+    has_msg = show_msg and (not traffic_mode) and msgs > 0
     skip_frequency = False
 
     if has_msg:
         if msg_cost < 100:
-            # 非常好 → 以私訊為主,不評論 CPC
             out.append(f"私訊成本 ${msg_cost:.0f} 非常好,持續以私訊轉換為主軸")
         elif msg_cost <= 200:
-            # 100~200 平均值 → 維持現狀提示
             out.append(f"私訊成本 ${msg_cost:.0f} 為平均值,維持現狀即可")
         elif msg_cost <= 300:
-            # 200~300 偏高待觀察
             out.append(f"私訊成本 ${msg_cost:.0f} 偏高,待觀察")
         else:
-            # > 300 太高需要優化 → 先看 CPC 是否不錯再評論;忽略頻次
             skip_frequency = True
             if cpc <= 4:
                 out.append(
@@ -4318,15 +4371,63 @@ def _evaluate_alert_recommendations(
                     f"私訊成本 ${msg_cost:.0f} 太高、CPC ${cpc:.2f} 也偏高,"
                     "建議從受眾與素材整體優化"
                 )
-    else:
-        # 沒有私訊資料才獨立評論 CPC
+
+    # Purchase / ROAS block.
+    if purchase_picked:
+        if purchases > 0:
+            if roas > 4:
+                out.append(f"ROAS {roas:.2f} 表現亮眼,可考慮擴大預算測試承載量")
+            elif roas >= 2:
+                out.append(f"ROAS {roas:.2f} 為平均水準,維持現狀觀察")
+            elif roas >= 1:
+                out.append(f"ROAS {roas:.2f} 偏低,檢視出價策略或產品加價空間")
+            elif roas > 0:
+                out.append(f"ROAS {roas:.2f} 低於 1 處於虧損,需立即優化或暫停")
+            elif cost_per_purchase > 0:
+                out.append(
+                    f"購買成本 ${cost_per_purchase:.0f},無 ROAS 資料,"
+                    "建議確認購買價值是否有上傳"
+                )
+        else:
+            # 沒有購買 → 視 ATC / spend 給線索
+            if add_to_cart >= 5:
+                out.append(
+                    f"有 {add_to_cart} 次加購但 0 購買,結帳流程或運費可能勸退顧客"
+                )
+            elif spend > 1000:
+                out.append("尚未產生購買,先檢查 Pixel 觸發或受眾是否吻合")
+
+    # ATC block — independent of purchase block, so e.g. user who
+    # only picked ATC fields still gets ATC-specific advice.
+    if atc_picked and not purchase_picked:
+        if add_to_cart == 0 and spend > 500:
+            out.append("目前無加購訊號,建議檢查 Pixel 設定與落地頁吸引力")
+        elif cost_per_add_to_cart > 200 and add_to_cart > 0:
+            out.append(
+                f"加購成本 ${cost_per_add_to_cart:.0f} 偏高,優化前端轉換漏斗"
+            )
+
+    # Traffic block — only run when no msg/purchase block fired
+    # (otherwise the link-click advice is noise alongside actual
+    # conversion advice).
+    if traffic_picked and not has_msg and not purchase_picked:
+        if cost_per_link_click > 6:
+            out.append(f"連結點擊成本 ${cost_per_link_click:.0f} 太高,需調整素材或受眾")
+        elif cost_per_link_click > 4:
+            out.append(f"連結點擊成本 ${cost_per_link_click:.0f} 可以優化")
+        elif cost_per_link_click > 3:
+            out.append(f"連結點擊成本 ${cost_per_link_click:.0f} 偏高,待觀察")
+
+    # CPC fallback — only when no msg block fired AND no e-commerce
+    # block hit (avoid stacking generic CPC advice on top of more
+    # specific recommendations).
+    if not has_msg and not purchase_picked and not traffic_picked:
         if cpc > 6:
             out.append(f"CPC ${cpc:.2f} 太高,需要調整")
         elif cpc > 5:
             out.append(f"CPC ${cpc:.2f} 可以優化")
         elif cpc > 4:
             out.append(f"CPC ${cpc:.2f} 偏高,待觀察")
-        # ≤ 4 不評論
 
     if not skip_frequency:
         if frequency > 5 and spend > 1000:
@@ -4334,8 +4435,6 @@ def _evaluate_alert_recommendations(
         elif frequency > 4 and spend > 500:
             out.append(f"頻次 {frequency:.1f} 偏高,需留意素材疲勞")
 
-    # 規則皆未觸發但 campaign 有花費 → 給正面評語,避免「優化建議」區
-    # 整段空白看起來像是建議引擎壞掉。
     if not out and spend > 0:
         out.append("整體表現穩定,持續觀察素材成效")
     return out
@@ -4586,6 +4685,14 @@ async def _build_flex_for_config(cfg: dict) -> dict:
             cpc=cpc_f,
             frequency=freq_f,
             objective=objective,
+            purchases=purchases_n,
+            cost_per_purchase=cost_per_purchase_f,
+            roas=roas_f,
+            add_to_cart=atc_n,
+            cost_per_add_to_cart=cost_per_atc_f,
+            link_clicks=link_clicks_n,
+            cost_per_link_click=cost_per_link_click_f,
+            selected_fields=list(cfg.get("report_fields") or []),
         )
         if cfg.get("include_recommendations")
         else None
