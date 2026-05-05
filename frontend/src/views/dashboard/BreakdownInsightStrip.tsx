@@ -26,11 +26,12 @@ interface Props {
 }
 
 /**
- * Compact "winner per dimension" insight strip — fires all four
- * breakdown queries in parallel and shows a single best-bucket card
- * per dimension. Used when the report auto-expands every adset so
- * the viewer can see the optimal audience without clicking through
- * tabs.
+ * Compact "winner per dimension" insight strip — fires the four
+ * breakdown queries in cascade (each waits for the previous to settle)
+ * to keep the per-adset request burst at 1 in-flight at a time. With
+ * 10 auto-expanded adsets that's 10 simultaneous calls instead of 40,
+ * which is the difference between staying under and tripping FB's
+ * 80004 ad-account throttle on a busy account.
  *
  * Picks the winner by:
  *   - msgs > 0 anywhere → lowest cost-per-message bucket
@@ -39,45 +40,54 @@ interface Props {
  *     money/eyeballs are going" fallback)
  */
 export function BreakdownInsightStrip({ level, id, date, hideMoney, ignoreMsgs = false }: Props) {
+  // Hook order is fixed (rules of hooks); cascade enable via the
+  // `previous.isFetched` chain so dim N only fires once dim N-1 has
+  // settled (success or error). This is hot-path safe because
+  // useQuery's enabled flag flipping does NOT re-mount — it just
+  // unblocks the queryFn.
+  const placement = useBreakdown(level, id, "publisher_platform", date, true);
+  const gender = useBreakdown(level, id, "gender", date, placement.isFetched);
+  const age = useBreakdown(level, id, "age", date, gender.isFetched);
+  const region = useBreakdown(level, id, "region", date, age.isFetched);
+
+  const queries = { publisher_platform: placement, gender, age, region };
+
   return (
     <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-      {DIMS.map((dim) => (
-        <DimCard
-          key={dim}
-          level={level}
-          id={id}
-          dim={dim}
-          date={date}
-          hideMoney={hideMoney}
-          ignoreMsgs={ignoreMsgs}
-        />
-      ))}
+      {DIMS.map((dim) => {
+        const q = queries[dim];
+        return (
+          <DimCard
+            key={dim}
+            dim={dim}
+            rows={q.data ?? []}
+            isLoading={!q.isFetched}
+            hideMoney={hideMoney}
+            ignoreMsgs={ignoreMsgs}
+          />
+        );
+      })}
     </div>
   );
 }
 
 function DimCard({
-  level,
-  id,
   dim,
-  date,
+  rows,
+  isLoading,
   hideMoney,
   ignoreMsgs,
 }: {
-  level: BreakdownLevel;
-  id: string;
   dim: BreakdownDim;
-  date: DateConfig;
+  rows: BreakdownRow[];
+  isLoading: boolean;
   hideMoney: boolean;
   ignoreMsgs: boolean;
 }) {
-  const query = useBreakdown(level, id, dim, date, true);
-  const rows = query.data ?? [];
-
   const winner = pickWinner(rows, { ignoreMsgs });
   const label = BREAKDOWN_DIM_LABELS[dim];
 
-  if (query.isLoading) {
+  if (isLoading) {
     return <PlaceholderCard label={label} text="載入中..." />;
   }
   if (!winner) {

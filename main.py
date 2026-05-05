@@ -823,8 +823,18 @@ print(
 # In-memory response cache for FB Graph API GETs. The same user
 # typically hits the same (account_id, date_preset) combination across
 # multiple views (Dashboard → Analytics → Finance → Alerts), and FB API
-# calls take 1-3s each. A 60-second TTL turns those repeat hits into
-# instant local lookups while keeping data fresh enough to feel live.
+# calls take 1-3s each. A 5-minute TTL turns repeat hits into instant
+# local lookups while still feeling live for normal interactive use —
+# FB's own insights aggregation only runs hourly on their side, so
+# anything shorter than that buys staleness without buying freshness.
+# This is the dominant lever against the 80004 ad-account throttle:
+# the LINE-push share-button workflow opens a campaign report whose
+# fan-out (campaign + N adsets + N×4 breakdowns + N×ads) totals
+# 40-60+ FB calls; the second open within 5 min hits 0.
+#
+# Mutations (status toggles, budget edits) call _cache_invalidate
+# scoped to the affected account, so freshness for the account being
+# mutated is preserved while unrelated accounts keep their cache.
 #
 # Cache scope is per-token: the key includes a hash of the access token
 # so different users (or token rotations) never see each other's data.
@@ -833,7 +843,7 @@ import json as _json
 import re
 import time
 
-_CACHE_TTL_SECONDS = 60.0
+_CACHE_TTL_SECONDS = 300.0
 # Accounts list changes very rarely (new ad accounts are onboarded
 # manually); keep it cached for 10 minutes to stay well within FB's
 # per-ad-account rate limits (80004). This is the single biggest

@@ -13,7 +13,7 @@ export function useReportAds(adsetId: string | null, date: DateConfig, enabled: 
       return (await api.adsets.creatives(adsetId, date)).data ?? [];
     },
     enabled: enabled && !!adsetId,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -40,7 +40,7 @@ export function useReportCampaign(
       return resp.data?.find((c) => c.id === campaignId) ?? null;
     },
     enabled,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
 
   const adsetsQuery = useQuery({
@@ -51,7 +51,7 @@ export function useReportCampaign(
       return resp.data ?? [];
     },
     enabled,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
   });
 
   return { campaignQuery, adsetsQuery };
