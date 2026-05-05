@@ -23,6 +23,13 @@ export const REPORT_FIELDS: ReportFieldDef[] = [
   { code: "reach", label: "觸及" },
   { code: "msgs", label: "私訊數" },
   { code: "msg_cost", label: "私訊成本" },
+  { code: "link_clicks", label: "連結點擊" },
+  { code: "cost_per_link_click", label: "連結點擊成本" },
+  { code: "add_to_cart", label: "加購數" },
+  { code: "cost_per_add_to_cart", label: "加購成本" },
+  { code: "purchases", label: "購買數" },
+  { code: "cost_per_purchase", label: "購買成本" },
+  { code: "roas", label: "ROAS" },
 ];
 
 /** 互斥群組 — 同一陣列內的 code 在 multi-select 內只能擇一。
