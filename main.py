@@ -4484,6 +4484,7 @@ def _share_url_for_config(
     include_recommendations: bool = True,
     use_spend_plus: bool = False,
     markup_pct: float = 0.0,
+    selected_fields: Optional[List[str]] = None,
 ) -> Optional[str]:
     """Build the public /r/<campaign_id> share URL when PUBLIC_SITE_URL
     is configured. Returns None otherwise — the caller will simply omit
@@ -4526,6 +4527,12 @@ def _share_url_for_config(
     if use_spend_plus and markup_pct > 0:
         params["plus"] = "1"
         params["mkp"] = f"{markup_pct:g}"
+    # Mirror the report_fields selection so the share page's KPI grid
+    # only renders the cells the LINE flex showed (in the same order).
+    # Empty / None → omit the param so the share page falls back to
+    # its legacy "show everything" layout for non-push share links.
+    if selected_fields:
+        params["fields"] = ",".join(selected_fields)
     qs = urlencode(params)
     return f"{PUBLIC_SITE_URL}/r/{quote(campaign_id, safe='')}?{qs}"
 
@@ -4811,6 +4818,16 @@ async def _build_flex_for_config(cfg: dict) -> dict:
     # that appeared on the LINE flex (`花費*`).
     selected_codes = list(cfg.get("report_fields") or [])
     use_spend_plus = "spend_plus" in selected_codes
+    # Mirror the flex builder's default-fallback so an unconfigured
+    # config (empty report_fields) sends the same KPI set to the share
+    # page as it shows in the LINE card. Keeps the two surfaces in
+    # lock-step without forcing the operator to manually pick fields.
+    if selected_codes:
+        share_fields = selected_codes
+    else:
+        share_fields = ["spend", "impressions", "clicks", "ctr", "cpc"]
+        if not traffic_mode:
+            share_fields += ["msgs", "msg_cost"]
     report_url = (
         _share_url_for_config(
             account_id,
@@ -4821,6 +4838,7 @@ async def _build_flex_for_config(cfg: dict) -> dict:
             include_recommendations=bool(cfg.get("include_recommendations")),
             use_spend_plus=use_spend_plus,
             markup_pct=markup_pct,
+            selected_fields=share_fields,
         )
         if cfg.get("include_report_button")
         else None

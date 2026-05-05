@@ -3,9 +3,19 @@ import { Badge } from "@/components/Badge";
 import { CreativePreviewModal } from "@/components/CreativePreviewModal";
 import { type DateConfig, resolveRange } from "@/lib/datePicker";
 import { fF, fM, fN, fP } from "@/lib/format";
-import { getIns, getMsgCount } from "@/lib/insights";
+import {
+  getAtcCount,
+  getCostPerAtc,
+  getCostPerLinkClick,
+  getCostPerPurchase,
+  getIns,
+  getLinkClicks,
+  getMsgCount,
+  getPurchaseCount,
+  getRoas,
+} from "@/lib/insights";
 import { buildCampaignRecommendations, isTrafficObjective } from "@/lib/recommendations";
-import type { FbAdset, FbCampaign, FbCreativeEntity } from "@/types/fb";
+import type { FbAdset, FbBaseEntity, FbCampaign, FbCreativeEntity } from "@/types/fb";
 import { type ReactNode, useState } from "react";
 import { BreakdownInsightStrip } from "./BreakdownInsightStrip";
 
@@ -38,6 +48,121 @@ const num = (v: string | number | null | undefined): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+/**
+ * Per-cell descriptor used by the campaign / adset / ad KPI layouts.
+ * `value` is already formatted (with hideMoney / markup applied) so
+ * the renderer just drops it into a Stat / Cell / inline span.
+ */
+interface KpiCell {
+  code: string;
+  label: string;
+  value: string;
+  highlight?: boolean;
+}
+
+interface KpiOpts {
+  hideMoney: boolean;
+  spendLabel: string;
+  applyMarkup: (n: number) => number;
+  trafficMode: boolean;
+}
+
+/**
+ * Build the full superset of KPI cells for an entity (campaign / adset
+ * / ad). The campaign / adset / ad renderers each pick a subset of
+ * this list:
+ *   - With `selectedFields`, render only those codes in that order.
+ *   - Without, use the legacy hard-coded order at each level.
+ *
+ * `spend_plus` is treated as an alias for `spend` since the cell's
+ * value already reflects useSpendPlus / markup; the LINE push config's
+ * mutex pair means at most one of them appears in selectedFields.
+ */
+function buildKpiCells(entity: FbBaseEntity, opts: KpiOpts): KpiCell[] {
+  const ins = getIns(entity);
+  const msgs = getMsgCount(entity);
+  const spend = num(ins.spend);
+  const msgCost = msgs > 0 ? spend / msgs : 0;
+  const linkClicks = getLinkClicks(entity);
+  const cplc = getCostPerLinkClick(entity);
+  const atc = getAtcCount(entity);
+  const cpAtc = getCostPerAtc(entity);
+  const purchases = getPurchaseCount(entity);
+  const cpPurchase = getCostPerPurchase(entity);
+  const roas = getRoas(entity);
+
+  const money = (v: number | string | null | undefined): string =>
+    opts.hideMoney ? "—" : v !== null && v !== undefined && v !== "" ? `$${fM(v)}` : "—";
+  const spendValue = (() => {
+    const raw = num(ins.spend);
+    if (!Number.isFinite(raw) || raw === 0) return money(ins.spend);
+    return money(opts.applyMarkup(raw));
+  })();
+
+  return [
+    { code: "spend", label: opts.spendLabel, value: spendValue, highlight: true },
+    // Mutex alias — backend ships either "spend" or "spend_plus" in
+    // selectedFields; useSpendPlus already drives the label/value.
+    { code: "spend_plus", label: opts.spendLabel, value: spendValue, highlight: true },
+    { code: "impressions", label: "曝光", value: fN(ins.impressions) },
+    { code: "clicks", label: "點擊", value: fN(ins.clicks) },
+    { code: "ctr", label: "CTR", value: fP(ins.ctr), highlight: opts.trafficMode },
+    { code: "cpc", label: "CPC", value: money(ins.cpc), highlight: opts.trafficMode },
+    { code: "cpm", label: "CPM", value: money(ins.cpm) },
+    { code: "frequency", label: "頻次", value: fF(ins.frequency) },
+    { code: "reach", label: "觸及", value: fN(ins.reach) },
+    {
+      code: "msgs",
+      label: "私訊數",
+      value: msgs > 0 ? fN(msgs) : "—",
+      highlight: msgs > 0,
+    },
+    {
+      code: "msg_cost",
+      label: "私訊成本",
+      value: msgs > 0 ? money(msgCost) : "—",
+      highlight: msgs > 0,
+    },
+    {
+      code: "link_clicks",
+      label: "連結點擊",
+      value: linkClicks > 0 ? fN(linkClicks) : "—",
+    },
+    {
+      code: "cost_per_link_click",
+      label: "連結點擊成本",
+      value: cplc > 0 ? money(cplc) : "—",
+    },
+    { code: "add_to_cart", label: "加入購物車", value: atc > 0 ? fN(atc) : "—" },
+    {
+      code: "cost_per_add_to_cart",
+      label: "加入購物車成本",
+      value: cpAtc > 0 ? money(cpAtc) : "—",
+    },
+    { code: "purchases", label: "購買數", value: purchases > 0 ? fN(purchases) : "—" },
+    {
+      code: "cost_per_purchase",
+      label: "購買成本",
+      value: cpPurchase > 0 ? money(cpPurchase) : "—",
+    },
+    { code: "roas", label: "ROAS", value: roas > 0 ? roas.toFixed(2) : "—" },
+  ];
+}
+
+/** Filter and reorder cells to match selectedFields (when supplied).
+ * Returns the input untouched when selectedFields is null/undefined,
+ * preserving the existing layout for legacy share links. */
+function pickCells(all: KpiCell[], selectedFields: string[] | null | undefined): KpiCell[] {
+  if (!selectedFields?.length) return all;
+  const map = new Map(all.map((c) => [c.code, c] as const));
+  const out: KpiCell[] = [];
+  for (const code of selectedFields) {
+    const cell = map.get(code);
+    if (cell) out.push(cell);
+  }
+  return out;
+}
+
 export interface ReportContentProps {
   campaign: FbCampaign;
   adsets: FbAdset[] | null;
@@ -64,6 +189,13 @@ export interface ReportContentProps {
    *  legacy share-page behaviour for links generated outside the
    *  push flow (dashboard report modal). */
   showRecommendations?: boolean;
+  /** KPI codes (e.g. ["spend", "msgs", "msg_cost"]) the LINE push
+   *  config picked. When provided the campaign / adset / ad KPI
+   *  layouts only render those cells, in the supplied order, so the
+   *  share page mirrors exactly what the LINE flex showed. null /
+   *  undefined → fall back to the legacy 12-cell layout (preserves
+   *  the dashboard report-modal share flow). */
+  selectedFields?: string[] | null;
 }
 
 export function ReportContent({
@@ -77,6 +209,7 @@ export function ReportContent({
   useSpendPlus = false,
   markupPercent = 0,
   showRecommendations = true,
+  selectedFields = null,
 }: ReportContentProps) {
   const ins = getIns(campaign);
   const msgs = getMsgCount(campaign);
@@ -137,32 +270,47 @@ export function ReportContent({
 
       {/* Campaign-wide KPIs */}
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
-        <Stat label={spendLabel} value={spendMoney(ins.spend)} highlight />
-        <Stat label="曝光" value={fN(ins.impressions)} />
-        <Stat label="點擊" value={fN(ins.clicks)} />
-        <Stat label="CTR" value={fP(ins.ctr)} highlight={trafficMode} />
-        <Stat label="CPC" value={money(ins.cpc)} highlight={trafficMode} />
-        <Stat label="CPM" value={money(ins.cpm)} />
-        <Stat label="頻次" value={fF(ins.frequency)} />
-        <Stat label="觸及" value={fN(ins.reach)} />
-        {!trafficMode && (
+        {selectedFields?.length ? (
+          pickCells(
+            buildKpiCells(campaign, { hideMoney, spendLabel, applyMarkup, trafficMode }),
+            selectedFields,
+          ).map((c) => (
+            <Stat key={c.code} label={c.label} value={c.value} highlight={c.highlight} />
+          ))
+        ) : (
           <>
-            <Stat label="私訊數" value={msgs > 0 ? fN(msgs) : "—"} highlight={msgs > 0} />
-            <Stat label="私訊成本" value={msgs > 0 ? money(msgCost) : "—"} highlight={msgs > 0} />
+            <Stat label={spendLabel} value={spendMoney(ins.spend)} highlight />
+            <Stat label="曝光" value={fN(ins.impressions)} />
+            <Stat label="點擊" value={fN(ins.clicks)} />
+            <Stat label="CTR" value={fP(ins.ctr)} highlight={trafficMode} />
+            <Stat label="CPC" value={money(ins.cpc)} highlight={trafficMode} />
+            <Stat label="CPM" value={money(ins.cpm)} />
+            <Stat label="頻次" value={fF(ins.frequency)} />
+            <Stat label="觸及" value={fN(ins.reach)} />
+            {!trafficMode && (
+              <>
+                <Stat label="私訊數" value={msgs > 0 ? fN(msgs) : "—"} highlight={msgs > 0} />
+                <Stat
+                  label="私訊成本"
+                  value={msgs > 0 ? money(msgCost) : "—"}
+                  highlight={msgs > 0}
+                />
+              </>
+            )}
+            <Stat
+              label="預算"
+              value={
+                hideMoney
+                  ? "—"
+                  : campaign.daily_budget
+                    ? `日 $${fM(campaign.daily_budget)}`
+                    : campaign.lifetime_budget
+                      ? `總 $${fM(campaign.lifetime_budget)}`
+                      : "組合層級"
+              }
+            />
           </>
         )}
-        <Stat
-          label="預算"
-          value={
-            hideMoney
-              ? "—"
-              : campaign.daily_budget
-                ? `日 $${fM(campaign.daily_budget)}`
-                : campaign.lifetime_budget
-                  ? `總 $${fM(campaign.lifetime_budget)}`
-                  : "組合層級"
-          }
-        />
       </div>
 
       {/* Recommendations narrative */}
@@ -218,6 +366,8 @@ export function ReportContent({
                 spendLabel={spendLabel}
                 trafficMode={trafficMode}
                 campaignName={campaign.name}
+                applyMarkup={applyMarkup}
+                selectedFields={selectedFields}
               />
             ));
           })()
@@ -236,6 +386,8 @@ function AdsetCard({
   spendLabel,
   trafficMode,
   campaignName,
+  applyMarkup,
+  selectedFields,
 }: {
   adset: FbAdset;
   date: DateConfig;
@@ -245,9 +397,17 @@ function AdsetCard({
   spendLabel: string;
   trafficMode: boolean;
   campaignName: string;
+  applyMarkup: (n: number) => number;
+  selectedFields: string[] | null;
 }) {
   const ai = getIns(adset);
   const am = getMsgCount(adset);
+  const adsetCells = selectedFields?.length
+    ? pickCells(
+        buildKpiCells(adset, { hideMoney, spendLabel, applyMarkup, trafficMode }),
+        selectedFields,
+      )
+    : null;
 
   return (
     <section className="rounded-xl border border-border bg-white p-4 md:p-5">
@@ -260,22 +420,33 @@ function AdsetCard({
           </span>
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-gray-500">
-          <span>
-            {spendLabel} <span className="font-semibold text-ink">{spendMoney(ai.spend)}</span>
-          </span>
-          <span>
-            曝光 <span className="font-semibold text-ink">{fN(ai.impressions)}</span>
-          </span>
-          <span>
-            CTR <span className="font-semibold text-ink">{fP(ai.ctr)}</span>
-          </span>
-          <span>
-            CPC <span className="font-semibold text-ink">{money(ai.cpc)}</span>
-          </span>
-          {!trafficMode && am > 0 && (
-            <span>
-              私訊 <span className="font-semibold text-ink">{fN(am)}</span>
-            </span>
+          {adsetCells ? (
+            adsetCells.map((c) => (
+              <span key={c.code}>
+                {c.label} <span className="font-semibold text-ink">{c.value}</span>
+              </span>
+            ))
+          ) : (
+            <>
+              <span>
+                {spendLabel}{" "}
+                <span className="font-semibold text-ink">{spendMoney(ai.spend)}</span>
+              </span>
+              <span>
+                曝光 <span className="font-semibold text-ink">{fN(ai.impressions)}</span>
+              </span>
+              <span>
+                CTR <span className="font-semibold text-ink">{fP(ai.ctr)}</span>
+              </span>
+              <span>
+                CPC <span className="font-semibold text-ink">{money(ai.cpc)}</span>
+              </span>
+              {!trafficMode && am > 0 && (
+                <span>
+                  私訊 <span className="font-semibold text-ink">{fN(am)}</span>
+                </span>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -301,6 +472,9 @@ function AdsetCard({
         spendLabel={spendLabel}
         trafficMode={trafficMode}
         campaignName={campaignName}
+        hideMoney={hideMoney}
+        applyMarkup={applyMarkup}
+        selectedFields={selectedFields}
       />
     </section>
   );
@@ -322,6 +496,9 @@ function AdCards({
   spendLabel,
   trafficMode,
   campaignName,
+  hideMoney,
+  applyMarkup,
+  selectedFields,
 }: {
   adsetId: string;
   date: DateConfig;
@@ -330,6 +507,9 @@ function AdCards({
   spendLabel: string;
   trafficMode: boolean;
   campaignName: string;
+  hideMoney: boolean;
+  applyMarkup: (n: number) => number;
+  selectedFields: string[] | null;
 }) {
   const adsQuery = useReportAds(adsetId, date, true);
   const ads = adsQuery.data ?? [];
@@ -395,6 +575,9 @@ function AdCards({
               spendLabel={spendLabel}
               trafficMode={trafficMode}
               campaignName={campaignName}
+              hideMoney={hideMoney}
+              applyMarkup={applyMarkup}
+              selectedFields={selectedFields}
             />
           ))}
         </div>
@@ -411,6 +594,9 @@ function AdCard({
   spendLabel,
   trafficMode,
   campaignName,
+  hideMoney,
+  applyMarkup,
+  selectedFields,
 }: {
   ad: FbCreativeEntity;
   isBest: boolean;
@@ -419,6 +605,9 @@ function AdCard({
   spendLabel: string;
   trafficMode: boolean;
   campaignName: string;
+  hideMoney: boolean;
+  applyMarkup: (n: number) => number;
+  selectedFields: string[] | null;
 }) {
   const ai = getIns(ad);
   const m = getMsgCount(ad);
@@ -427,6 +616,12 @@ function AdCard({
   const thumb = ad.creative?.thumbnail_url;
   const [previewOpen, setPreviewOpen] = useState(false);
   const showMsg = !trafficMode && m > 0;
+  const adCells = selectedFields?.length
+    ? pickCells(
+        buildKpiCells(ad, { hideMoney, spendLabel, applyMarkup, trafficMode }),
+        selectedFields,
+      )
+    : null;
   const canPreview = Boolean(thumb);
   const openPreview = () => {
     if (canPreview) setPreviewOpen(true);
@@ -474,12 +669,18 @@ function AdCard({
             {ad.name}
           </div>
           <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[12px] text-gray-500">
-            <Cell label={spendLabel} value={spendMoney(ai.spend)} />
-            <Cell label="曝光" value={fN(ai.impressions)} />
-            <Cell label="CTR" value={fP(ai.ctr)} />
-            <Cell label="CPC" value={money(ai.cpc)} />
-            {showMsg && <Cell label="私訊" value={fN(m)} />}
-            {showMsg && msgCost !== null && <Cell label="私訊成本" value={money(msgCost)} />}
+            {adCells ? (
+              adCells.map((c) => <Cell key={c.code} label={c.label} value={c.value} />)
+            ) : (
+              <>
+                <Cell label={spendLabel} value={spendMoney(ai.spend)} />
+                <Cell label="曝光" value={fN(ai.impressions)} />
+                <Cell label="CTR" value={fP(ai.ctr)} />
+                <Cell label="CPC" value={money(ai.cpc)} />
+                {showMsg && <Cell label="私訊" value={fN(m)} />}
+                {showMsg && msgCost !== null && <Cell label="私訊成本" value={money(msgCost)} />}
+              </>
+            )}
           </div>
         </div>
       </div>

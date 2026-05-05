@@ -29,6 +29,7 @@ export function ShareReportPage() {
     useSpendPlus,
     markupPercent,
     showRecommendations,
+    selectedFields,
   } = useMemo(() => parseUrl(), []);
 
   // When the LINE push sent us explicit `from` / `to` query params
@@ -93,6 +94,7 @@ export function ShareReportPage() {
               useSpendPlus={useSpendPlus}
               markupPercent={markupPercent}
               showRecommendations={showRecommendations}
+              selectedFields={selectedFields}
             />
           )}
         </div>
@@ -116,6 +118,10 @@ function parseUrl(): {
    *  so legacy share links and dashboard-modal links keep the
    *  recommendations visible. */
   showRecommendations: boolean;
+  /** Comma-separated KPI codes from `?fields=`. null = no filter
+   *  (legacy share-link / dashboard-modal links keep their full
+   *  12-cell layout). */
+  selectedFields: string[] | null;
 } {
   if (typeof window === "undefined") {
     return {
@@ -128,6 +134,7 @@ function parseUrl(): {
       useSpendPlus: false,
       markupPercent: 0,
       showRecommendations: true,
+      selectedFields: null,
     };
   }
   const path = window.location.pathname;
@@ -152,6 +159,13 @@ function parseUrl(): {
   const markupPercent = Number.isFinite(rawMkp) && rawMkp > 0 ? rawMkp : 0;
   // Default true — only an explicit `?advice=0` hides recommendations.
   const showRecommendations = params.get("advice") !== "0";
+  const rawFields = params.get("fields");
+  const selectedFields = rawFields
+    ? rawFields
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : null;
   return {
     campaignId,
     accountId,
@@ -162,6 +176,7 @@ function parseUrl(): {
     useSpendPlus,
     markupPercent,
     showRecommendations,
+    selectedFields,
   };
 }
 
