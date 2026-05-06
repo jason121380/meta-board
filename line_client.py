@@ -29,6 +29,8 @@ import httpx
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 LINE_GROUP_SUMMARY_URL = "https://api.line.me/v2/bot/group/{group_id}/summary"
+LINE_QUOTA_URL = "https://api.line.me/v2/bot/message/quota"
+LINE_QUOTA_CONSUMPTION_URL = "https://api.line.me/v2/bot/message/quota/consumption"
 
 
 def _mock_enabled() -> bool:
@@ -124,6 +126,64 @@ async def line_push(
             detail = resp.text[:600]
         print(f"[line_push] {resp.status_code} {detail}", flush=True)
         raise LinePushError(resp.status_code, detail)
+
+
+async def get_quota(
+    client: httpx.AsyncClient,
+    *,
+    access_token: str,
+) -> dict:
+    """Fetch the LINE Official Account's monthly push quota plus the
+    real-time consumption count. Surfaces what the LINE Manager
+    overview-page numbers refresh to "the next morning"  immediately,
+    so operators can see actual usage instead of a 24-hour-stale
+    snapshot.
+
+    LINE message counting gotcha: a push to a group with N members
+    counts as N separate messages, not 1. The「used」 figure here
+    reflects that, which is usually MUCH higher than what operators
+    intuitively expect from「我推了幾則」.
+
+    Returns:
+        {
+          "type": "limited" | "none",  # "none" means unlimited (paid plan with no cap)
+          "limit": int | None,           # null when type == "none"
+          "used": int,                    # this month so far
+          "remaining": int | None,        # null when type == "none"
+        }
+
+    Raises LinePushError on non-2xx so caller can route through the
+    same friendly_message machinery as line_push().
+    """
+    if _mock_enabled():
+        return {"type": "limited", "limit": 200, "used": 0, "remaining": 200}
+    if not access_token:
+        raise LinePushError(0, "LINE channel access_token is empty")
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+    quota_resp = await client.get(LINE_QUOTA_URL, headers=headers, timeout=10)
+    if quota_resp.status_code >= 300:
+        raise LinePushError(quota_resp.status_code, quota_resp.text[:300])
+    consumption_resp = await client.get(
+        LINE_QUOTA_CONSUMPTION_URL, headers=headers, timeout=10
+    )
+    if consumption_resp.status_code >= 300:
+        raise LinePushError(consumption_resp.status_code, consumption_resp.text[:300])
+
+    quota = quota_resp.json() or {}
+    consumption = consumption_resp.json() or {}
+    plan_type = str(quota.get("type") or "limited")
+    raw_limit = quota.get("value")
+    try:
+        limit = int(raw_limit) if raw_limit is not None and plan_type != "none" else None
+    except (TypeError, ValueError):
+        limit = None
+    try:
+        used = int(consumption.get("totalUsage") or 0)
+    except (TypeError, ValueError):
+        used = 0
+    remaining = (limit - used) if limit is not None else None
+    return {"type": plan_type, "limit": limit, "used": used, "remaining": remaining}
 
 
 async def get_group_summary(

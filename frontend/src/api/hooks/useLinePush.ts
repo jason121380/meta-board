@@ -90,6 +90,23 @@ export function useClaimLineChannel() {
   });
 }
 
+/** Real-time quota / consumption query for one channel. Disabled by
+ *  default so we don't burn LINE API calls on every page load —
+ *  callers `refetch()` on click. 2 min staleTime so a quick second
+ *  click within the window gets the cached value. */
+export function useLineChannelQuota(channelId: string) {
+  const { user } = useFbAuth();
+  const uid = user?.id ?? "";
+  return useQuery({
+    queryKey: ["lineChannelQuota", uid, channelId] as const,
+    queryFn: () => api.lineChannels.quota(uid, channelId),
+    enabled: false,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    retry: false,
+  });
+}
+
 export function useLineGroups() {
   const { user } = useFbAuth();
   const uid = user?.id ?? "";
