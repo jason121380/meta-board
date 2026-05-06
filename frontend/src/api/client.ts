@@ -625,6 +625,18 @@ export const api = {
       request<{ ok: boolean }>("POST", `/api/line-channels/${encodeURIComponent(id)}/claim`, {
         query: { fb_user_id: fbUserId },
       }),
+    /** Real-time quota + consumption for a single LINE OA channel.
+     *  Hits LINE's API directly so the result reflects current usage,
+     *  not the daily-stale snapshot in LINE Manager. */
+    quota: (fbUserId: string, id: string) =>
+      request<{
+        type: "limited" | "none";
+        limit: number | null;
+        used: number;
+        remaining: number | null;
+      }>("GET", `/api/line-channels/${encodeURIComponent(id)}/quota`, {
+        query: { fb_user_id: fbUserId },
+      }),
   },
 
   linePush: {

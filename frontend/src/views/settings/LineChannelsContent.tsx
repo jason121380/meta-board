@@ -2,6 +2,7 @@ import {
   useClaimLineChannel,
   useCreateLineChannel,
   useDeleteLineChannel,
+  useLineChannelQuota,
   useLineChannels,
   useUpdateLineChannel,
 } from "@/api/hooks/useLinePush";
@@ -126,6 +127,15 @@ export function LineChannelsContent() {
 function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => void }) {
   const deleteMutation = useDeleteLineChannel();
   const claimMutation = useClaimLineChannel();
+  const quotaQuery = useLineChannelQuota(channel.id);
+
+  const onCheckQuota = async () => {
+    try {
+      await quotaQuery.refetch({ throwOnError: true });
+    } catch (e) {
+      toast(`查詢失敗:${e instanceof Error ? e.message : String(e)}`, "error", 5000);
+    }
+  };
 
   const onCopyWebhook = async () => {
     try {
@@ -218,6 +228,15 @@ function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => vo
             <>
               <button
                 type="button"
+                onClick={onCheckQuota}
+                disabled={quotaQuery.isFetching}
+                title="向 LINE 即時查詢本月推播用量(LINE Manager 畫面隔天才更新)"
+                className="rounded border border-border px-1.5 py-0.5 text-[10px] text-gray-500 hover:border-orange hover:text-orange disabled:opacity-50"
+              >
+                {quotaQuery.isFetching ? "查詢中..." : "本月用量"}
+              </button>
+              <button
+                type="button"
                 onClick={onEdit}
                 className="rounded border border-border px-1.5 py-0.5 text-[10px] text-gray-500 hover:border-orange hover:text-orange"
               >
@@ -245,6 +264,46 @@ function ChannelRow({ channel, onEdit }: { channel: ChannelRow; onEdit: () => vo
           )}
         </div>
       </div>
+
+      {/* Quota row — only rendered after the user clicks 「本月用量」.
+          Shows real-time LINE quota; the 「N 人群組計 N 則」 hint is
+          repeated here so operators don't get fooled by 「我才推幾次
+          怎麼會吃這麼多」 again. */}
+      {quotaQuery.data && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded bg-orange-bg/40 px-2 py-1 text-[11px]">
+          <span className="font-semibold text-orange">本月用量</span>
+          {quotaQuery.data.type === "none" ? (
+            <span className="text-ink">{quotaQuery.data.used.toLocaleString()} 則(無上限)</span>
+          ) : (
+            <>
+              <span className="text-ink">
+                <span className="font-bold tabular-nums">
+                  {quotaQuery.data.used.toLocaleString()}
+                </span>
+                {" / "}
+                <span className="tabular-nums">
+                  {(quotaQuery.data.limit ?? 0).toLocaleString()}
+                </span>
+              </span>
+              <span
+                className={cn(
+                  "tabular-nums",
+                  (quotaQuery.data.remaining ?? 0) <= 0
+                    ? "font-semibold text-red"
+                    : (quotaQuery.data.remaining ?? 0) < 50
+                      ? "font-semibold text-orange"
+                      : "text-gray-500",
+                )}
+              >
+                剩 {Math.max(0, quotaQuery.data.remaining ?? 0).toLocaleString()} 則
+              </span>
+            </>
+          )}
+          <span className="text-gray-300">
+            (LINE 計費:推 N 人群組 = N 則,非 1 則)
+          </span>
+        </div>
+      )}
 
       {/* Webhook URL row — truncate, with copy button */}
       <div className="flex items-center gap-1.5">

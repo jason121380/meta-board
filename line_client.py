@@ -29,6 +29,8 @@ import httpx
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 LINE_GROUP_SUMMARY_URL = "https://api.line.me/v2/bot/group/{group_id}/summary"
+LINE_QUOTA_URL = "https://api.line.me/v2/bot/message/quota"
+LINE_QUOTA_CONSUMPTION_URL = "https://api.line.me/v2/bot/message/quota/consumption"
 
 
 def _mock_enabled() -> bool:
@@ -42,6 +44,37 @@ class LinePushError(RuntimeError):
         super().__init__(f"LINE push failed: {status} {detail}")
         self.status = status
         self.detail = detail
+        self.friendly_message = _translate_line_error(status, detail)
+
+
+def _translate_line_error(status: int, detail: str) -> str:
+    """Map LINE's API error responses to actionable zh-TW operator
+    messages. The raw text from LINE is in English and operators have
+    been confused by 「monthly limit」 (which is LINE's quota, not
+    LURE's tier limit). Falls back to the raw detail when we don't
+    recognise the shape."""
+    text = (detail or "").lower()
+    if status == 429 and "monthly limit" in text:
+        return (
+            "LINE 官方帳號本月推播額度已用完。"
+            "提醒:LINE 計費規則是「推到 N 人群組計 N 則」,"
+            "並非 1 次推播 = 1 則。"
+            "請至 LINE Official Account Manager (manager.line.biz) "
+            "升級「中用量」(NT$800/月,5,000 則)以上方案,或等下月 1 日重置。"
+            "此額度由 LINE 計算,與 LURE 方案無關。"
+        )
+    if status == 429:
+        return f"LINE 已限流(請稍後再試):{detail}"
+    if status == 401:
+        return f"LINE channel access token 失效或不正確:{detail}"
+    if status == 403:
+        return (
+            "LINE channel 對該群組沒有推播權限,可能是 bot 已被踢出群組:"
+            f"{detail}"
+        )
+    if status == 400 and ("invalid" in text or "missing" in text):
+        return f"LINE 訊息格式錯誤(請聯絡技術人員):{detail}"
+    return f"LINE 推播失敗({status}):{detail}"
 
 
 async def line_push(
@@ -93,6 +126,64 @@ async def line_push(
             detail = resp.text[:600]
         print(f"[line_push] {resp.status_code} {detail}", flush=True)
         raise LinePushError(resp.status_code, detail)
+
+
+async def get_quota(
+    client: httpx.AsyncClient,
+    *,
+    access_token: str,
+) -> dict:
+    """Fetch the LINE Official Account's monthly push quota plus the
+    real-time consumption count. Surfaces what the LINE Manager
+    overview-page numbers refresh to "the next morning"  immediately,
+    so operators can see actual usage instead of a 24-hour-stale
+    snapshot.
+
+    LINE message counting gotcha: a push to a group with N members
+    counts as N separate messages, not 1. The「used」 figure here
+    reflects that, which is usually MUCH higher than what operators
+    intuitively expect from「我推了幾則」.
+
+    Returns:
+        {
+          "type": "limited" | "none",  # "none" means unlimited (paid plan with no cap)
+          "limit": int | None,           # null when type == "none"
+          "used": int,                    # this month so far
+          "remaining": int | None,        # null when type == "none"
+        }
+
+    Raises LinePushError on non-2xx so caller can route through the
+    same friendly_message machinery as line_push().
+    """
+    if _mock_enabled():
+        return {"type": "limited", "limit": 200, "used": 0, "remaining": 200}
+    if not access_token:
+        raise LinePushError(0, "LINE channel access_token is empty")
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+    quota_resp = await client.get(LINE_QUOTA_URL, headers=headers, timeout=10)
+    if quota_resp.status_code >= 300:
+        raise LinePushError(quota_resp.status_code, quota_resp.text[:300])
+    consumption_resp = await client.get(
+        LINE_QUOTA_CONSUMPTION_URL, headers=headers, timeout=10
+    )
+    if consumption_resp.status_code >= 300:
+        raise LinePushError(consumption_resp.status_code, consumption_resp.text[:300])
+
+    quota = quota_resp.json() or {}
+    consumption = consumption_resp.json() or {}
+    plan_type = str(quota.get("type") or "limited")
+    raw_limit = quota.get("value")
+    try:
+        limit = int(raw_limit) if raw_limit is not None and plan_type != "none" else None
+    except (TypeError, ValueError):
+        limit = None
+    try:
+        used = int(consumption.get("totalUsage") or 0)
+    except (TypeError, ValueError):
+        used = 0
+    remaining = (limit - used) if limit is not None else None
+    return {"type": plan_type, "limit": limit, "used": used, "remaining": remaining}
 
 
 async def get_group_summary(

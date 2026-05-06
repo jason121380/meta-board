@@ -5366,6 +5366,37 @@ async def delete_line_channel(channel_id: str, fb_user_id: Optional[str] = None)
     return {"ok": True}
 
 
+@app.get("/api/line-channels/{channel_id}/quota")
+async def get_line_channel_quota(channel_id: str, fb_user_id: Optional[str] = None):
+    """Real-time LINE Official Account monthly push quota / consumption
+    for one channel. The LINE Manager UI updates only daily, which
+    confused operators on the「為什麼測試失敗 monthly limit」 thread —
+    this endpoint hits LINE's quota API directly so the UI can show
+    actual current usage.
+
+    Auth: requires fb_user_id and channel ownership (same rule as
+    channel mutation endpoints).
+    """
+    pool = _require_db()
+    uid = (fb_user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=401, detail="fb_user_id 必填")
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT access_token, owner_fb_user_id FROM line_channels "
+            "WHERE id = $1::uuid AND enabled",
+            channel_id,
+        )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    if row["owner_fb_user_id"] not in (None, uid):
+        raise HTTPException(status_code=403, detail="無權限查詢此官方帳號用量")
+    try:
+        return await line_client.get_quota(_http_client, access_token=row["access_token"])
+    except line_client.LinePushError as e:
+        raise HTTPException(status_code=502, detail=e.friendly_message)
+
+
 # ── LINE group management ─────────────────────────────────────
 
 
@@ -5893,6 +5924,20 @@ async def test_push_config(config_id: str, fb_user_id: Optional[str] = None):
                 (flex.get("altText") or "")[:200],
             )
         return {"ok": True}
+    except line_client.LinePushError as e:
+        # LINE-specific error → use friendly translated message so the
+        # operator sees actionable Chinese instead of raw 「LINE push
+        # failed: 429 You have reached your monthly limit」.
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO line_push_logs (config_id, success, error)
+                VALUES ($1::uuid, FALSE, $2)
+                """,
+                config_id,
+                e.friendly_message[:500],
+            )
+        raise HTTPException(status_code=502, detail=e.friendly_message)
     except Exception as e:
         async with pool.acquire() as conn:
             await conn.execute(
@@ -6136,6 +6181,15 @@ async def _scheduler_tick() -> None:
                 flush=True,
             )
         except Exception as e:
+            # Use the LinePushError friendly message when available so
+            # the「last_error」 column shows actionable Chinese (e.g.
+            # 「LINE 官方帳號本月推播額度已用完 ...」 instead of the
+            # raw English 「You have reached your monthly limit」.
+            err_text = (
+                e.friendly_message
+                if isinstance(e, line_client.LinePushError)
+                else str(e)
+            )[:500]
             fail_count = int(cfg.get("fail_count") or 0) + 1
             auto_disable = fail_count >= SCHEDULER_FAIL_THRESHOLD
             async with _db_pool.acquire() as conn:
@@ -6148,7 +6202,7 @@ async def _scheduler_tick() -> None:
                     WHERE id = $4::uuid
                     """,
                     fail_count,
-                    str(e)[:500],
+                    err_text,
                     auto_disable,
                     cfg["id"],
                 )
@@ -6158,7 +6212,7 @@ async def _scheduler_tick() -> None:
                     VALUES ($1::uuid, FALSE, $2)
                     """,
                     cfg["id"],
-                    str(e)[:500],
+                    err_text,
                 )
             print(
                 f"[scheduler] push FAILED cfg={cfg['id']} err={e}"
