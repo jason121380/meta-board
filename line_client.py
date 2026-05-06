@@ -42,6 +42,37 @@ class LinePushError(RuntimeError):
         super().__init__(f"LINE push failed: {status} {detail}")
         self.status = status
         self.detail = detail
+        self.friendly_message = _translate_line_error(status, detail)
+
+
+def _translate_line_error(status: int, detail: str) -> str:
+    """Map LINE's API error responses to actionable zh-TW operator
+    messages. The raw text from LINE is in English and operators have
+    been confused by 「monthly limit」 (which is LINE's quota, not
+    LURE's tier limit). Falls back to the raw detail when we don't
+    recognise the shape."""
+    text = (detail or "").lower()
+    if status == 429 and "monthly limit" in text:
+        return (
+            "LINE 官方帳號本月推播額度已用完。"
+            "提醒:LINE 計費規則是「推到 N 人群組計 N 則」,"
+            "並非 1 次推播 = 1 則。"
+            "請至 LINE Official Account Manager (manager.line.biz) "
+            "升級「中用量」(NT$800/月,5,000 則)以上方案,或等下月 1 日重置。"
+            "此額度由 LINE 計算,與 LURE 方案無關。"
+        )
+    if status == 429:
+        return f"LINE 已限流(請稍後再試):{detail}"
+    if status == 401:
+        return f"LINE channel access token 失效或不正確:{detail}"
+    if status == 403:
+        return (
+            "LINE channel 對該群組沒有推播權限,可能是 bot 已被踢出群組:"
+            f"{detail}"
+        )
+    if status == 400 and ("invalid" in text or "missing" in text):
+        return f"LINE 訊息格式錯誤(請聯絡技術人員):{detail}"
+    return f"LINE 推播失敗({status}):{detail}"
 
 
 async def line_push(

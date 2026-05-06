@@ -5893,6 +5893,20 @@ async def test_push_config(config_id: str, fb_user_id: Optional[str] = None):
                 (flex.get("altText") or "")[:200],
             )
         return {"ok": True}
+    except line_client.LinePushError as e:
+        # LINE-specific error → use friendly translated message so the
+        # operator sees actionable Chinese instead of raw 「LINE push
+        # failed: 429 You have reached your monthly limit」.
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO line_push_logs (config_id, success, error)
+                VALUES ($1::uuid, FALSE, $2)
+                """,
+                config_id,
+                e.friendly_message[:500],
+            )
+        raise HTTPException(status_code=502, detail=e.friendly_message)
     except Exception as e:
         async with pool.acquire() as conn:
             await conn.execute(
@@ -6136,6 +6150,15 @@ async def _scheduler_tick() -> None:
                 flush=True,
             )
         except Exception as e:
+            # Use the LinePushError friendly message when available so
+            # the「last_error」 column shows actionable Chinese (e.g.
+            # 「LINE 官方帳號本月推播額度已用完 ...」 instead of the
+            # raw English 「You have reached your monthly limit」.
+            err_text = (
+                e.friendly_message
+                if isinstance(e, line_client.LinePushError)
+                else str(e)
+            )[:500]
             fail_count = int(cfg.get("fail_count") or 0) + 1
             auto_disable = fail_count >= SCHEDULER_FAIL_THRESHOLD
             async with _db_pool.acquire() as conn:
@@ -6148,7 +6171,7 @@ async def _scheduler_tick() -> None:
                     WHERE id = $4::uuid
                     """,
                     fail_count,
-                    str(e)[:500],
+                    err_text,
                     auto_disable,
                     cfg["id"],
                 )
@@ -6158,7 +6181,7 @@ async def _scheduler_tick() -> None:
                     VALUES ($1::uuid, FALSE, $2)
                     """,
                     cfg["id"],
-                    str(e)[:500],
+                    err_text,
                 )
             print(
                 f"[scheduler] push FAILED cfg={cfg['id']} err={e}"
